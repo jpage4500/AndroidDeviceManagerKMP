@@ -1,0 +1,2 @@
+09/06
+- list connected devices and mirror one, on desktop, Android and iOS
