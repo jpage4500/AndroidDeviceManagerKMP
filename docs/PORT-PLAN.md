@@ -51,6 +51,7 @@ Corrections carried over from jadb, each one already paid for:
 | Mirroring | `manager/MirrorSource.kt` | Tier II — `screencap` poll plus `input` events |
 | Multiple windows | `manager/WindowManager.kt` + `desktopMain/main.kt` | Ported from FileExplorerKMP |
 | UI | `ui/` | One device list and one mirror view; `compact` picks phone or desktop layout |
+| Settings, files, logs, http | `util/`, `manager/` | Ported from DashboardWeatherKMP — see [APP-SERVICES.md](APP-SERVICES.md) |
 
 `RemoteHttpTransport` speaks the **existing** Swing app's API — `/api/devices`, `/api/execute`,
 `/api/properties`, `/api/files/list`, `/api/screenshot` with bearer auth. So the phone app can be
@@ -58,16 +59,19 @@ pointed at today's app and work before any more of it is ported.
 
 ## Next, roughly in order
 
-1. **A connection picker.** Nothing sets a transport yet — it defaults to `127.0.0.1:5037`. The phone
-   builds need a screen to enter a host, a port and a token, and somewhere to keep them.
-2. **Settings persistence.** The Swing app uses Java `Preferences`; this needs an `expect`/`actual`
-   store (`NSUserDefaults`, `SharedPreferences`, a properties file).
-3. **The device table.** Column choice, sorting, custom properties and nicknames — the desktop app's
-   main screen is a table, and this is a list.
-4. **File explorer.** `AdbSync` already lists, stats, pulls and pushes; nothing has a UI on it.
-5. **Log viewer.** `logcat` over `exec:`, plus the filter syntax in the Swing app's `LOGS.md`.
-6. **Native menus, drag and drop, file dialogs.** See [WINDOWS.md](WINDOWS.md).
-7. **Direct-to-`adbd` transport**, if the phone should work without a desktop at all. The hard part is
+The screen-by-screen detail is in [UI-PORT.md](UI-PORT.md) — this is the summary.
+
+1. **The device screen.** The desktop's main screen is a sortable, resizable, configurable table and
+   this is a two-pane list. Compose has no table, so a reusable one gets written here and the file
+   explorer and log viewer both reuse it.
+2. **A connection picker.** Nothing sets a transport yet — it defaults to `127.0.0.1:5037`. The phone
+   builds need a screen to enter a host, a port and a token; `AppPref` already has the four prefs to
+   keep them in (`ADB_SERVER_HOST`, `ADB_SERVER_PORT`, `REMOTE_URL`, `REMOTE_TOKEN`) and nothing
+   reads them yet.
+3. **File explorer.** `AdbSync` already lists, stats, pulls and pushes; nothing has a UI on it.
+4. **Log viewer.** `logcat` over `exec:`, plus the filter syntax in the Swing app's `LOGS.md`.
+5. **Native menus, drag and drop, file dialogs.** See [WINDOWS.md](WINDOWS.md).
+6. **Direct-to-`adbd` transport**, if the phone should work without a desktop at all. The hard part is
    pairing, not framing — see [ADB-TRANSPORTS.md](ADB-TRANSPORTS.md).
 
 ## Staying behind
@@ -82,4 +86,6 @@ pointed at today's app and work before any more of it is ported.
 - **`RemoteHttpServer` / `RemoteServerManager` (the server half).** This app is a client of that API
   for now. Serving it is only worth writing if a KMP instance should host devices for another one.
 - **Swing-specific everything** — `BaseScreen`, the table models, cell renderers, row sorters,
-  `PreferenceUtils`. Compose has its own answers and they aren't shaped the same.
+  `PreferenceUtils`. Compose has its own answers and they aren't shaped the same. `PreferenceUtils`
+  in particular is replaced by `SettingsManager` + `AppPref`, which came from DashboardWeatherKMP
+  rather than from here.

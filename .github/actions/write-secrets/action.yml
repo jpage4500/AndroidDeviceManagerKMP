@@ -1,0 +1,39 @@
+name: Write secrets to gradle.properties
+description: >
+  Append every Actions secret to ~/.gradle/gradle.properties so a CI build resolves keys the same
+  way a local build does. composeApp's getValue(), androidApp's findProperty() and the helper
+  scripts' getProperty() all already read that file, so a key needs naming only where the build
+  actually uses it — not in each workflow's env: block as well.
+
+inputs:
+  secrets_json:
+    description: >
+      the caller's secrets context, passed as toJSON(secrets). The secrets context is not readable
+      from inside a composite action, so the workflow has to hand it over.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Write secrets to gradle.properties
+      shell: bash
+      env:
+        SECRETS_JSON: ${{ inputs.secrets_json }}
+      run: |
+        # $HOME/.gradle is both Gradle's default and the path the helper scripts grep, so the two
+        # stay in sync as long as no step overrides GRADLE_USER_HOME
+        PROPS="$HOME/.gradle/gradle.properties"
+        mkdir -p "$(dirname "$PROPS")"
+
+        # append rather than overwrite — setup-gradle writes this file too. escape backslashes and
+        # newlines: Gradle parses it with java.util.Properties, where a bare '\' is an escape
+        # character. github_token is the runner's own token, not one of ours
+        echo "$SECRETS_JSON" | jq -r '
+          to_entries | .[]
+          | select(.key != "github_token")
+          | "\(.key)=\(.value | gsub("\\\\"; "\\\\") | gsub("\n"; "\\n"))"
+        ' >> "$PROPS"
+
+        # names only, never values
+        echo "wrote to $PROPS: $(echo "$SECRETS_JSON" | jq -r '
+          [to_entries[] | select(.key != "github_token") | .key] | sort | join(" ")')"

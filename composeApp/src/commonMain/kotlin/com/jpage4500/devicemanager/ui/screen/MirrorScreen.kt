@@ -13,11 +13,13 @@ import androidx.compose.ui.platform.*
 import androidx.compose.ui.unit.*
 import kotlin.math.*
 import com.jpage4500.devicemanager.manager.*
+import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.transport.*
 import com.jpage4500.devicemanager.ui.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.theme.*
 import kotlinx.coroutines.*
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * a device's screen, with taps sent back to it.
@@ -44,7 +46,7 @@ fun MirrorScreen(
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when {
                 image != null -> MirrorImage(image) { x, y -> scope.launch { source.tap(x, y) } }
-                error != null -> EmptyState("Can't mirror this device", error ?: "")
+                error != null -> EmptyState(stringResource(Res.string.mirror_failed), error ?: "")
                 else -> CircularProgressIndicator()
             }
         }
@@ -73,7 +75,7 @@ private fun MirrorImage(image: ImageBitmap, onTap: (Int, Int) -> Unit) {
 
         Image(
             bitmap = image,
-            contentDescription = "device screen",
+            contentDescription = stringResource(Res.string.device_screen),
             modifier = Modifier
                 .size(
                     with(density) { drawnWidth.toDp() },
@@ -99,9 +101,9 @@ private fun MirrorButtons(onKey: (Int) -> Unit) {
         Modifier.fillMaxWidth().padding(Dimens.gap),
         horizontalArrangement = Arrangement.spacedBy(Dimens.gap, Alignment.CenterHorizontally),
     ) {
-        TextButton(onClick = { onKey(DeviceInput.KEY_BACK) }) { Text("Back") }
-        TextButton(onClick = { onKey(DeviceInput.KEY_HOME) }) { Text("Home") }
-        TextButton(onClick = { onKey(DeviceInput.KEY_APP_SWITCH) }) { Text("Recents") }
-        TextButton(onClick = { onKey(DeviceInput.KEY_POWER) }) { Text("Power") }
+        TextButton(onClick = { onKey(DeviceInput.KEY_BACK) }) { Text(stringResource(Res.string.key_back)) }
+        TextButton(onClick = { onKey(DeviceInput.KEY_HOME) }) { Text(stringResource(Res.string.key_home)) }
+        TextButton(onClick = { onKey(DeviceInput.KEY_APP_SWITCH) }) { Text(stringResource(Res.string.key_app_switch)) }
+        TextButton(onClick = { onKey(DeviceInput.KEY_POWER) }) { Text(stringResource(Res.string.key_power)) }
     }
 }

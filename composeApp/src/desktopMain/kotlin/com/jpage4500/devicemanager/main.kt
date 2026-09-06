@@ -7,11 +7,13 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.*
 import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.manager.*
+import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.*
 import com.jpage4500.devicemanager.ui.screen.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.flow.*
+import org.jetbrains.compose.resources.stringResource
 
 private val log = LoggerConfig.createLogger("MainKt")
 
@@ -23,6 +25,8 @@ private val log = LoggerConfig.createLogger("MainKt")
  * change rather than a special case. Ported from FileExplorerKMP.
  */
 fun main() {
+    initApp()
+
     if (isMac()) {
         // the app name in the macOS menu bar — without this it reads "MainKt"
         runCatching { System.setProperty("apple.awt.application.name", Branding.appName) }
@@ -121,18 +125,18 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
 @Composable
 private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
     MenuBar {
-        Menu("File", mnemonic = 'F') {
-            Item("New Window", shortcut = KeyShortcut(Key.N, meta = isMac(), ctrl = !isMac())) {
+        Menu(stringResource(Res.string.menu_file), mnemonic = 'F') {
+            Item(stringResource(Res.string.menu_new_window), shortcut = KeyShortcut(Key.N, meta = isMac(), ctrl = !isMac())) {
                 WindowManager.openWindow(
                     WindowContent.DeviceList,
                     WindowManager.boundsOf(appWindow.id)?.copy(),
                 )
             }
-            Item("Mirror Selected Device", shortcut = KeyShortcut(Key.M, meta = isMac(), ctrl = !isMac())) {
+            Item(stringResource(Res.string.menu_mirror_device), shortcut = KeyShortcut(Key.M, meta = isMac(), ctrl = !isMac())) {
                 DeviceManager.selectedSerial.value?.let { WindowManager.openMirror(it, appWindow.id) }
             }
             Separator()
-            Item("Close Window", shortcut = KeyShortcut(Key.W, meta = isMac(), ctrl = !isMac())) {
+            Item(stringResource(Res.string.menu_close_window), shortcut = KeyShortcut(Key.W, meta = isMac(), ctrl = !isMac())) {
                 WindowManager.close(appWindow.id)
             }
         }

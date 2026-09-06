@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  every string the user reads. nothing user-facing is written inline in a composable — a string
+  that lives in two places is a string that will drift, and this is the file a translation starts
+  from. names are grouped by where they appear, then alphabetical within the group.
+-->
+<resources>
+    <!-- device list -->
+    <string name="devices">Devices</string>
+    <string name="devices_attached">%1$d attached</string>
+    <string name="no_devices">No devices</string>
+    <string name="no_devices_msg">Attach a device over USB, or start an adb server for this app to read.\nNothing here starts one for you.</string>
+    <string name="nothing_selected">Nothing selected</string>
+    <string name="nothing_selected_msg">Pick a device on the left to mirror it.</string>
+
+    <string name="device_total">total: %1$d</string>
+    <string name="connect_device">Connect a device</string>
+    <string name="connect_device_msg">Enter an IP address and port, or start an adb server this app can read.</string>
+
+    <!-- toolbar -->
+    <string name="action_adb">ADB</string>
+    <string name="action_browse">Browse</string>
+    <string name="action_connect">Connect</string>
+    <string name="action_input">Input</string>
+    <string name="action_install">Install</string>
+    <string name="action_mirror">Mirror</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_screenshot">Screenshot</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_share">Share</string>
+    <string name="action_stats">Stats</string>
+    <string name="action_view_logs">View Logs</string>
+
+    <!-- column header menu -->
+    <string name="hide_column">Hide %1$s</string>
+    <string name="reset_columns">Reset Columns</string>
+    <string name="show_column">Show %1$s</string>
+
+    <!-- mirror -->
+    <string name="mirror_failed">Can\'t mirror this device</string>
+    <string name="key_app_switch">Recents</string>
+    <string name="key_back">Back</string>
+    <string name="key_home">Home</string>
+    <string name="key_power">Power</string>
+    <string name="device_screen">device screen</string>
+
+    <!-- desktop menu bar -->
+    <string name="menu_close_window">Close Window</string>
+    <string name="menu_file">File</string>
+    <string name="menu_mirror_device">Mirror Selected Device</string>
+    <string name="menu_new_window">New Window</string>
+
+    <!-- navigation -->
+    <string name="back">Back</string>
+
+    <!-- logs and crash reporting -->
+    <string name="log_upload_failed">Couldn\'t send the logs</string>
+    <string name="log_upload_not_configured">Logging isn\'t configured in this build</string>
+    <string name="log_upload_ok">Logs sent</string>
+    <string name="reporting_crash">Reporting a crash from last time</string>
+</resources>

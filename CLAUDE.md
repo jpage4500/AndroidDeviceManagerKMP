@@ -67,10 +67,13 @@ the desktop app is built by `compose.desktop.application` inside `composeApp` wi
 - `transport/` — `DeviceTransport` and its implementations. **The seam the whole port turns on**: add
   a way of reaching devices here, and every screen gets it for free.
 - `manager/` — `DeviceManager` (the device list and the current transport), `MirrorSource`,
-  `WindowManager`.
+  `WindowManager`, plus the http layer: `NetworkManager`, `HttpClientFactory`, `HttpLog`, `LogManager`.
 - `ui/` — `App` (root, `compact` picks the phone or desktop layout), `theme/`, `components/`,
   `screen/`.
-- `util/` — `LoggerConfig`, `TextUtils`, `Utils`, and the `ioDispatcher` `expect`.
+- `util/` — the services under the app: `SettingsManager`, `StorageManager`/`FileIO`, `LoggerConfig`
+  /`AppLogWriter`, `PlatformUtils`, `ToastManager`, plus `DateUtils`, `JsonUtils`, `TextUtils`,
+  `Utils`, `Timer`, `LruCache` and the `ioDispatcher` `expect`. See
+  [docs/APP-SERVICES.md](docs/APP-SERVICES.md).
 
 ## Rules that apply everywhere
 
@@ -112,4 +115,7 @@ Carried over from the Swing app and FileExplorerKMP, so all three read the same.
   a branch exists because something was measured, the comment is the place that measurement lives.
 - **Imports** — wildcard imports; no fully-qualified class names in code.
 - **Colors and sizes** — `Colors` and `Dimens` in `ui/theme/`, never inline.
+- **End-user strings** — `commonMain/composeResources/values/strings.xml`, reached as
+  `Res.string.*`; never a literal in a composable.
+- **Settings** — a new one is a constant in `AppPref`, read through `SettingsManager`.
 - **Re-read before editing** — files may have changed since the last read.

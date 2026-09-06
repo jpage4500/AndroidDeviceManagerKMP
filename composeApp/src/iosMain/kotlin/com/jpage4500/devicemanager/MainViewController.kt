@@ -10,4 +10,7 @@ import com.jpage4500.devicemanager.ui.*
  * It reaches them over the network — there is no USB host access on iOS, ever — which means an adb
  * server or a Device Manager instance on the LAN. See docs/ADB-TRANSPORTS.md.
  */
-fun MainViewController() = ComposeUIViewController { App(compact = true) }
+fun MainViewController() = ComposeUIViewController {
+    initApp()
+    App(compact = true)
+}

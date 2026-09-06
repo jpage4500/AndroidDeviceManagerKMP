@@ -4,44 +4,57 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.unit.*
 import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.manager.*
+import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.screen.*
 import com.jpage4500.devicemanager.ui.theme.*
+import com.jpage4500.devicemanager.util.*
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * the root of every platform.
  *
- * One composable and one layout decision: wide enough for two panes and the list sits beside the
- * device; narrower than that and the list *is* the screen, with the device pushed on top of it. The
- * phone app is the second case and nothing else about it differs.
+ * One layout decision, and the two sides of it are genuinely different screens rather than one
+ * screen at two widths — see docs/UI-PORT.md. The desktop gets [DeviceScreen]: a toolbar, a table of
+ * every device, a status bar, and mirroring in a window of its own. The phone gets a list it taps
+ * into, because it has one column of width and no fleet.
  */
 @Composable
 fun App(compact: Boolean = false) {
     AppTheme {
-        val devices by DeviceManager.devices.collectAsState()
-        val selected by DeviceManager.selectedSerial.collectAsState()
-
         LaunchedEffect(Unit) { DeviceManager.start() }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            if (compact) CompactLayout(devices, selected) else WideLayout(devices, selected)
+            if (compact) CompactLayout() else DeviceScreen()
         }
+        // one host for the whole app: a toast is raised from managers that have no composable of
+        // their own — a failed command, a crash report going up
+        ToastHost()
     }
 }
 
-/** phone: one pane at a time. */
+/** phone: the list, or the one device that was tapped. */
 @Composable
-private fun CompactLayout(devices: List<Device>, selected: String?) {
+private fun CompactLayout() {
+    val devices by DeviceManager.devices.collectAsState()
+    val selected by DeviceManager.selectedSerial.collectAsState()
     val device = devices.firstOrNull { it.serial == selected }
+
     if (device == null) {
         Column {
-            AppBar(title = "Devices", subtitle = "${devices.size} attached")
-            DeviceListScreen(devices, selected, compact = true, onSelect = {
-                DeviceManager.select(it.serial)
-            })
+            AppBar(
+                title = stringResource(Res.string.devices),
+                subtitle = stringResource(Res.string.devices_attached, devices.size),
+            )
+            DeviceListScreen(
+                devices = devices,
+                selectedSerial = selected,
+                onSelect = { DeviceManager.select(it.serial) },
+                // nothing to open yet — the connect sheet is the next phase, see docs/UI-PORT.md
+                onConnect = null,
+            )
         }
     } else {
         Column {
@@ -51,31 +64,6 @@ private fun CompactLayout(devices: List<Device>, selected: String?) {
                 onBack = { DeviceManager.select(null) },
             )
             MirrorScreen(device.serial)
-        }
-    }
-}
-
-/** desktop: the list on the left, whatever is selected on the right. */
-@Composable
-private fun WideLayout(devices: List<Device>, selected: String?) {
-    Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(340.dp)) {
-            AppBar(title = "Devices", subtitle = "${devices.size} attached")
-            DeviceListScreen(devices, selected, compact = false, onSelect = {
-                DeviceManager.select(it.serial)
-            })
-        }
-        VerticalDivider()
-        Box(Modifier.weight(1f).fillMaxHeight()) {
-            val device = devices.firstOrNull { it.serial == selected }
-            if (device == null) {
-                EmptyState(
-                    "Nothing selected",
-                    "Pick a device on the left to mirror it.",
-                )
-            } else {
-                MirrorScreen(device.serial)
-            }
         }
     }
 }
@@ -90,7 +78,7 @@ private fun AppBar(title: String, subtitle: String, onBack: (() -> Unit)? = null
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onBack != null) {
-            TextButton(onClick = onBack) { Text("Back") }
+            TextButton(onClick = onBack) { Text(stringResource(Res.string.back)) }
             Spacer(Modifier.width(Dimens.gap))
         }
         Column {

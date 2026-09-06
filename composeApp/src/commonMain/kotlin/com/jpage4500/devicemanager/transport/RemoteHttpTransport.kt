@@ -1,6 +1,7 @@
 package com.jpage4500.devicemanager.transport
 
 import com.jpage4500.devicemanager.data.*
+import com.jpage4500.devicemanager.manager.*
 import com.jpage4500.devicemanager.util.*
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -32,7 +33,10 @@ class RemoteHttpTransport(
 
     private val log = LoggerConfig.createLogger("RemoteHttpTransport")
 
-    private val client = HttpClient()
+    // the app's client rather than a bare HttpClient(): it accepts the self-signed certificate a
+    // Device Manager instance on the LAN will be serving, and its traffic shows up under the
+    // "HttpLog" tag with the token redacted out of the URL. see docs/APP-SERVICES.md
+    private val client = createHttpClient(useCookies = false)
 
     override val label: String get() = baseUrl.removePrefix("http://").removePrefix("https://")
 

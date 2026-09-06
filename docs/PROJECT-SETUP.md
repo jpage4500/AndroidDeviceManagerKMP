@@ -28,11 +28,20 @@ commonMain      every target: data, adb, transport, manager, ui
 
 `jvmCommonMain` is hand-wired, which is why `gradle.properties` sets
 `kotlin.mpp.applyDefaultHierarchyTemplate=false` — the default template has no node shared by
-android and desktop but not iOS. Right now only `ioDispatcher` lives there; anything reaching for
-`java.io` or `java.net` belongs there too rather than being written twice.
+android and desktop but not iOS. `ioDispatcher`, `JvmFileIO`, the OkHttp `createHttpClient()` and the
+JVM crash handler all live there; anything reaching for `java.io` or `java.net` belongs there too
+rather than being written twice.
 
-## Two build settings that aren't obvious
+An `actual` in `jvmCommonMain` satisfies both android and desktop, so a service only needs three
+implementations when the platforms genuinely disagree — `Settings`, `FileIO`'s root directory and
+`PlatformUtils` are the three that do. See [APP-SERVICES.md](APP-SERVICES.md).
 
+## Three build settings that aren't obvious
+
+- **The configuration cache goes stale on a new source file.** A `.kt` file added to a source set can
+  leave `compileDebugKotlinAndroid` reporting `UP-TO-DATE` while the class is never built, and the
+  failure surfaces as `Unresolved reference` from the module that uses it. Pass
+  `--no-configuration-cache` once after adding files.
 - **JDK 21, not 25.** Gradle 8.14 cannot run on Java 25, and `JAVA_HOME` on this machine points at a
   Homebrew JDK 25. Android Studio and IntelliJ supply their own JDK so they are fine; from a terminal
   use `JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home ./gradlew …`.
@@ -74,9 +83,23 @@ first open. The Xcode build phase runs `:composeApp:embedAndSignAppleFrameworkFo
 `Info.plist` already declares `NSLocalNetworkUsageDescription` and the three adb Bonjour services.
 Without them iOS refuses every connection this app makes, and the refusal is silent.
 
+## Build-time keys
+
+`LOGGING_URL` and `LOGGING_API` are read from the environment, then `~/.gradle/gradle.properties`,
+and become BuildConfig constants. They're what `LogManager` uploads a log to. Missing resolves to
+`""` — the project builds and runs, and the upload refuses. `IS_RELEASE` is true only for the jDeploy
+fat jar, an android release variant, or an Xcode Release framework; `PlatformUtils.isDebugBuild()`
+reads it.
+
+## Releasing
+
+The desktop app ships through jDeploy to a separate **public** repo,
+`jpage4500/AndroidDeviceManagerRelease`. `.github/workflows/build-desktop.yml` does it on a merge to
+main; `scripts/build-desktop.sh` does the same thing by hand. `.github/workflows/build.yml` compiles
+all three targets on every push and PR and publishes nothing. See [RELEASING.md](RELEASING.md).
+
 ## Not set up yet
 
-- No app icons on any platform.
-- No CI. The Swing app's `.github/workflows/jdeploy.yml` is the model for the desktop half.
-- No signing config for Android release builds.
-- No `composeResources/` strings — the UI has its text inline so far.
+- No app icons except the jDeploy `icon.png` — nothing for Android, iOS, or the Compose desktop
+  `nativeDistributions` bundles.
+- No signing config for Android or iOS release builds, so no Play Store or TestFlight job.

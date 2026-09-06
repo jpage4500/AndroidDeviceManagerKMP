@@ -17,6 +17,29 @@ object Dimens {
     val rowPadding = 12.dp
     val listSpacing = 1.dp
 
+    // device table (desktop)
+    // 26.dp holds a battery bar and a 16.dp icon with a hairline to spare; 45 rows is the case
+    // this is sized for, and a taller row means fewer of them on screen
+    val tableRowHeight = 26.dp
+    val headerHeight = 28.dp
+    val cellPadding = 6.dp
+    val columnDefault = 100.dp
+    val columnMin = 40.dp
+    // the divider is a hairline; the drag target around it is not, because a 1px target is missed
+    val resizeHandle = 6.dp
+    val statusBarHeight = 26.dp
+
+    // toolbar
+    val toolbarIcon = 22.dp
+    val toolbarButtonWidth = 58.dp
+
+    val icon = 16.dp
+    val iconLarge = 24.dp
+
+    // battery bar
+    val batteryWidth = 22.dp
+    val batteryHeight = 11.dp
+
     // a phone row needs a bigger target than a mouse does
     val touchRowHeight = 68.dp
 
@@ -45,6 +68,9 @@ object Colors {
     val offline = Color(0xFF8A8F99)
     val unauthorized = Color(0xFFC08A2E)
     val error = Color(0xFFB3453B)
+
+    // a toast that's only telling you something; the other two reuse `online` and `error`
+    val info = Color(0xFF2F6FBF)
 }
 
 private val lightScheme = lightColorScheme()

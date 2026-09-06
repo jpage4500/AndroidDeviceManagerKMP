@@ -1,2 +1,5 @@
 09/06
 - list connected devices and mirror one, on desktop, Android and iOS
+- settings now persist between runs
+- logs are written to a file, and a crash is reported on next launch
+- publish desktop installers for macOS, Windows and Linux

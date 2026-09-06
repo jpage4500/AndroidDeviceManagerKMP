@@ -51,6 +51,22 @@ object DeviceManager {
         }
     }
 
+    /**
+     * re-read the device list now.
+     *
+     * the transport pushes changes on its own — `host:track-devices-l` on the adb server, a poll on
+     * the HTTP one — so this exists for the case the tracker can't see: an adb server that was
+     * restarted under us, where the socket is dead but nothing errored. restarting the collection
+     * opens a new one.
+     */
+    fun refresh() {
+        log.d("refresh: restarting the tracker")
+        trackJob?.cancel()
+        trackJob = null
+        // clearing first would blank the table for a frame; the merge in [start] keeps what's known
+        start()
+    }
+
     /** point the app at a different way in — see [DeviceTransport]. */
     fun useTransport(transport: DeviceTransport) {
         log.d("useTransport: ${transport.label}")

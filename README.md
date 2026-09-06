@@ -25,6 +25,12 @@ export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home
 open iosApp/iosApp.xcodeproj             # ios — set your signing team on first open
 ```
 
+## Releasing
+
+The desktop app ships as a native installer through [jDeploy](https://www.jdeploy.com), published to
+[AndroidDeviceManagerRelease](https://github.com/jpage4500/AndroidDeviceManagerRelease) on every
+merge to main. [docs/RELEASING.md](docs/RELEASING.md) has the details.
+
 ## How it reaches devices
 
 Through an **adb server** on port 5037 — the same route the Swing app takes, and the only one that

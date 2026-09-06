@@ -5,6 +5,27 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Properties
+
+// first value found for any of the given keys: environment variable first, then
+// ~/.gradle/gradle.properties. missing resolves to "" rather than failing the build — the log
+// upload is optional and a checkout with no keys still has to compile
+fun getValue(vararg keys: String): String {
+    for (key in keys) {
+        val value = System.getenv(key) ?: readGradleProperty(key)
+        if (!value.isNullOrBlank()) return value
+    }
+    return ""
+}
+
+fun readGradleProperty(key: String): String? {
+    val homeDir = System.getProperty("user.home") ?: return null
+    val gradleProps = File(homeDir, ".gradle/gradle.properties")
+    if (!gradleProps.exists()) return null
+    return runCatching {
+        Properties().apply { gradleProps.inputStream().use { load(it) } }.getProperty(key)?.trim()
+    }.getOrNull()
+}
 
 abstract class GitCommitCountValueSource : ValueSource<String, ValueSourceParameters.None> {
     @get:Inject
@@ -25,6 +46,18 @@ abstract class GitCommitCountValueSource : ValueSource<String, ValueSourceParame
 val commitCount = providers.of(GitCommitCountValueSource::class) {}.get()
 val appVersion = "1.0.$commitCount"
 
+// true only for a build that actually ships: the jDeploy fat jar, an android release variant, or an
+// Xcode Release framework. everything else is a local run, which is what PlatformUtils.isDebugBuild
+// reports — the gate for anything that must never reach a shipped build
+val isReleaseBuild = run {
+    val taskNames = gradle.startParameter.taskNames.joinToString(" ")
+    val isJDeploy = taskNames.contains("buildExecutableJar", ignoreCase = true)
+    val isAndroidShip = taskNames.contains("Release", ignoreCase = false) &&
+        !taskNames.contains("Debug", ignoreCase = false)
+    val isXcodeRelease = System.getenv("CONFIGURATION") == "Release"
+    isJDeploy || isAndroidShip || isXcodeRelease
+}
+
 // keep in sync with Branding.appName (commonMain), which supplies the in-app title
 val brandAppName = "Android Device Manager"
 val brandBundleId = "com.jpage4500.devicemanager"
@@ -42,10 +75,25 @@ buildConfig {
     packageName("com.jpage4500.devicemanager")
     buildConfigField("APP_VERSION", appVersion)
     buildConfigField("BUILD_DATE", SimpleDateFormat("yyyy.MM.dd hh:mm a").format(Date()))
+    buildConfigField("IS_RELEASE", isReleaseBuild)
+
+    // supabase log upload — where LogManager.uploadLogs() POSTs. one project serves every app, so
+    // the keys carry no app prefix. missing resolves to "" and uploading is simply refused
+    buildConfigField("LOGGING_URL", getValue("LOGGING_URL"))
+    buildConfigField("LOGGING_API", getValue("LOGGING_API"))
+
     useKotlinOutput {
         topLevelConstants = true
         internalVisibility = false
     }
+}
+
+// every end-user string lives in commonMain/composeResources/values/strings.xml; this is what names
+// the generated accessor `com.jpage4500.devicemanager.resources.Res` rather than a path-derived one
+compose.resources {
+    publicResClass = true
+    packageOfResClass = "com.jpage4500.devicemanager.resources"
+    generateResClass = auto
 }
 
 kotlin {
@@ -113,6 +161,11 @@ kotlin {
         // being written twice. iOS is the only target that doesn't see it
         val jvmCommonMain by creating {
             dependsOn(commonMain)
+            dependencies {
+                // desktop and android share one http client (manager/HttpClientFactory.jvm.kt), so
+                // the engine is declared once here rather than in both leaves
+                implementation(libs.ktor.client.okhttp)
+            }
         }
 
         val androidMain by getting {
@@ -121,7 +174,6 @@ kotlin {
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.kotlinx.coroutines.android)
-                implementation(libs.ktor.client.okhttp)
             }
         }
 
@@ -138,7 +190,6 @@ kotlin {
                 implementation(libs.desktop.jvm.windows.x64)
                 implementation(libs.kotlinx.coroutines.swing)
                 implementation(libs.slf4j.simple)
-                implementation(libs.ktor.client.okhttp)
             }
         }
 

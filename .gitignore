@@ -67,3 +67,9 @@ __pycache__/
 # scripts/generate-store-screenshots.sh --layers — generated output, re-run to rebuild
 resources/feature-graphic-layers/
 resources/store-screenshot-layers/
+
+# jDeploy + release scripts write these into the repo root
+package-lock.json
+notes.raw
+release-notes.txt
+combined-notes.txt

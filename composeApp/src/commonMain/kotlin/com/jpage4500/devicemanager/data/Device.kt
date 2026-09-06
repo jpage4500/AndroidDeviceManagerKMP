@@ -57,6 +57,13 @@ data class Device(
         }
 
     companion object {
+        // user-set properties, keyed the same way the Swing app keys them so the two agree
+        const val CUST_PROP_1 = "custom1"
+        const val CUST_PROP_2 = "custom2"
+        const val CUST_PROP_PHONE = "phone_number"
+        const val CUST_PROP_IMEI = "imei"
+        const val CUST_PROP_BOOTED = "booted"
+
         // the getprop keys the properties fetch asks for
         const val PROP_SDK = "ro.build.version.sdk"
         const val PROP_MODEL = "ro.product.model"

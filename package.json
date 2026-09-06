@@ -1,0 +1,60 @@
+{
+    "name": "android-device-manager",
+    "version": "1.0.0",
+    "description": "Manage many Android devices at once over adb — desktop, Android and iOS",
+    "author": "Joe Page",
+    "license": "ISC",
+    "main": "index.js",
+    "preferGlobal": true,
+    "bin": {
+        "adm": "jdeploy-bundle/jdeploy.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/jpage4500/AndroidDeviceManagerKMP.git"
+    },
+    "homepage": "https://github.com/jpage4500/AndroidDeviceManagerRelease",
+    "files": [
+        "jdeploy-bundle"
+    ],
+    "jdeploy": {
+        "title": "Android Device Manager",
+        "jar": "composeApp/build/libs/adm-all.jar",
+        "javaVersion": "21",
+        "jdk": false,
+        "javafx": false,
+        "generateLegacyBundles": false,
+        "publishTargets": [
+            {
+                "name": "github: github",
+                "type": "GITHUB",
+                "url": "https://github.com/jpage4500/AndroidDeviceManagerRelease"
+            }
+        ],
+        "urlSchemes": [
+            "adm"
+        ],
+        "documentTypes": [
+            {
+                "extension": "apk",
+                "mimetype": "application/vnd.android.package-archive",
+                "editor": false
+            },
+            {
+                "extension": "xapk",
+                "mimetype": "application/vnd.android.package-archive",
+                "editor": false
+            }
+        ]
+    },
+    "dependencies": {
+        "command-exists-promise": "^2.0.2",
+        "node-fetch": "2.6.7",
+        "tar": "^4.4.8",
+        "yauzl": "^2.10.0",
+        "shelljs": "^0.8.4"
+    },
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    }
+}

@@ -1,0 +1,144 @@
+# App services
+
+The layer under the app: settings, files, logs, http. All of it ported from **DashboardWeatherKMP**,
+which is where it was written and where a fix should probably go back to.
+
+None of this is about devices. Everything an *adb device* can tell us lives in `adb/`, `transport/`
+and `Device` — see [ADB-TRANSPORTS.md](ADB-TRANSPORTS.md). What's here is about the machine the app
+itself is running on.
+
+## The shape of it
+
+Each service is one object in `commonMain` in front of a per-platform implementation, so nothing
+above it learns which platform it is on:
+
+| Front | Behind it | Where the platform half lives |
+|---|---|---|
+| `SettingsManager` | `Settings` | SharedPreferences / a `.properties` file / NSUserDefaults |
+| `StorageManager` | `FileIO` | `JvmFileIO` (shared) / `IosFileIO` |
+| `LoggerConfig` | `AppLogWriter` | logcat / stdout / stdout |
+| `NetworkManager` | `createHttpClient()` | OkHttp (shared) / Darwin |
+| `PlatformUtils` | — | one `actual object` per platform |
+
+Only `Settings`, `FileIO` and `PlatformUtils` are written three times. `JvmFileIO` and the OkHttp
+client are in `jvmCommonMain`, because desktop and android agree about `java.io` and about
+`okhttp3`; they differ only in what root directory `FileIO` is handed.
+
+## Settings
+
+`AppPref` is the whole list, one enum constant per setting. The *declared default* is what gives a
+pref its type — a `Boolean` default makes it a boolean pref, an `Int` default an int pref, none at
+all a nullable string:
+
+```kotlin
+ADB_SERVER_PORT("adb_server_port", 5037)          // SettingsManager.getInt(...)
+MINIMIZE_TO_TRAY("minimize_to_tray")              // SettingsManager.getBoolean(...) -> false
+```
+
+Everything is **stored as a string** underneath, on all three platforms, so a pref can change type
+without stranding what a previous build wrote.
+
+Three ways to read one in the UI, in order of preference:
+
+- `SettingsManager.getBoolAsState(pref)` and friends — a composable reading a pref itself.
+- `SettingsManager.observePref(pref)` — a *plain* function a composable calls, where there's no state
+  to hoist and no parameter to thread through every call site. Reading the counter inside a
+  composition records it against the caller's recompose scope however many calls deep it is.
+- `SettingsManager.prefChanges` — a flow, for a manager that isn't a composable at all.
+
+A setter that writes the same value it read is a no-op and emits nothing; a slider dragged across
+200 values would otherwise wake every collector 200 times.
+
+## Files and logs
+
+`StorageManager` writes on a **single-threaded** dispatcher, and that isn't tidiness: Windows holds
+an exclusive lock across an append or a rename, so two concurrent writes to one file fail with
+*"process cannot access the file because it is being used by another process"*. `Dispatchers.Default`
+is a pool, not a thread.
+
+Everything is relative to a per-platform root, so nothing above `FileIO` ever writes an absolute
+path:
+
+| | Root |
+|---|---|
+| desktop | `~/.android-device-manager` (`Branding.desktopHomeDir`) |
+| android | the app's internal storage — private, and wiped on uninstall |
+| iOS | `Documents/` |
+
+The log lives at `logs/device-manager.log` and rotates to `.log.old` at 2 MB. `AppLogWriter` keeps
+the size in a variable rather than stat-ing the file per line; anything that writes to the log
+*behind* it — `LogManager` appending a crash report synchronously — has to call
+`invalidateLogFileSize()`.
+
+A line reads `MM-dd-HH:mm:ss [L] TT Tag: message`. `TT` is two hex digits of the thread, or `UI` —
+which is the point of it: a socket read that shouldn't be on the UI thread shows up in the log
+rather than only in a profiler.
+
+INFO and above go to the file; `AppPref.DEBUG_MODE` drops that to DEBUG. Verbose never does, because
+`HttpLog`'s body logging alone would fill 2 MB during a fleet refresh.
+
+## Crashes and log upload
+
+`installCrashHandler()` **chains** the platform's handler rather than replacing it: the previous
+handler is what actually kills the process (and on android puts up the crash dialog), so recording
+has to happen in front of it.
+
+`LogManager.recordCrash()` writes to `crashes/` **synchronously** — the process is about to die and
+the background write scope can't be trusted to flush. On the next launch `onAppStart()` appends
+those files to the log, uploads, and deletes them **only** once the upload succeeded, so a failed
+upload retries next time.
+
+The upload needs `LOGGING_URL` and `LOGGING_API`, read at build time from the environment or
+`~/.gradle/gradle.properties` (see `composeApp/build.gradle.kts`). A checkout without them compiles
+and runs; the upload refuses and says so. An uploaded log is prefixed with `Branding.analyticsId`,
+because the bucket is shared with the other apps and every upload is an upsert.
+
+## HTTP
+
+`NetworkManager` holds **one** client for the whole app — a client owns a connection pool and a
+thread pool, and one per request is how an app ends up with hundreds of idle sockets.
+
+Every client `createHttpClient()` builds logs through `HttpLog`, so filtering a log by that one tag
+shows the whole network conversation, request correlated to response by its `(N)`. Bodies are logged
+only in DEBUG_MODE, only for small textual responses, and API keys and tokens are redacted out of
+logged URLs.
+
+**Self-signed certificates are accepted.** The LAN routes this app takes — an adb server on another
+machine, a Device Manager instance serving its HTTP API — will not have a certificate a public CA
+signed. That is a trusted network only, which port 5037 already required of you.
+
+`evictIdleConnections()` exists for one specific stall: while backgrounded the wifi link drops and
+re-associates without the other end getting to send a FIN, so the pooled socket is half-open. It
+still looks healthy, the request gets written to it, and nothing comes back until TCP exhausts its
+retransmit backoff ~14s later. Call it when the app comes back to the foreground. It's a no-op on
+iOS, which tears its own connections down on suspend.
+
+**The adb routes do not come through here.** They speak adb's own framing over a raw socket.
+
+## Strings
+
+Every string the user reads is in `composeApp/src/commonMain/composeResources/values/strings.xml`,
+reached as `Res.string.*` from `com.jpage4500.devicemanager.resources` (the package is set in
+`compose.resources {}` rather than derived from the module path).
+
+From a composable that's `stringResource(Res.string.foo)`; from a manager that has no composition —
+`LogManager` raising a toast — it's the suspend `getString(Res.string.foo)`.
+
+## Toasts
+
+`ToastManager.showToast()` is callable from anywhere, which is the point: a manager has no
+composable to show a snackbar from. `ToastHost()` is placed once in `App` and draws whatever is
+current. One at a time, newest wins.
+
+## Not brought across
+
+Deliberately left in DashboardWeatherKMP, and worth taking if the need turns up:
+
+- `NetworkMonitor` — connectivity callbacks and the local IP. A USB fleet doesn't care, and the
+  android half needs `ACCESS_NETWORK_STATE`. Would matter for a phone on a flaky LAN.
+- `AnalyticsManager`, `BillingManager`, `UpdateManager` — a session/exit table, IAP, and GitHub
+  release checks.
+- `ImageLoaderConfig`, `PhotoPicker`, `LocationProvider`, `CpuSampler`, `Toast`'s per-platform
+  overlay container.
+- `PlatformUtils` came across trimmed: identity, memory and `openUrl`. Everything about screen wake,
+  brightness, haptics, permissions and APK installs was dashboard-specific.
