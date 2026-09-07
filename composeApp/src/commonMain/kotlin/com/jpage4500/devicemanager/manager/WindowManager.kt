@@ -1,5 +1,8 @@
 package com.jpage4500.devicemanager.manager
 
+import androidx.compose.ui.unit.*
+import com.jpage4500.devicemanager.data.*
+import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.flow.*
 
@@ -11,6 +14,30 @@ data class WindowBounds(
     val height: Int = 640,
 )
 
+/** how big a window of one kind was left, which is what the next one of that kind opens at. */
+data class WindowSize(val width: Int, val height: Int)
+
+/**
+ * what a window is *for*, with the device it is for left out.
+ *
+ * this is the key a window's size is remembered under, and leaving the serial out is the point: a
+ * person sizes a log window once, not once per device, and a pref holding a rect per serial would
+ * grow for as long as the app is used. It is also why a log window doesn't open at the device list's
+ * size — the two are different kinds and the size travelled with the *parent* before this existed.
+ *
+ * the sizes are the first-open defaults only; everything after that is what the user left behind.
+ */
+enum class WindowKind(val defaultWidth: Dp, val defaultHeight: Dp) {
+    DEVICE_LIST(Dimens.windowWidth, Dimens.windowHeight),
+    MIRROR(Dimens.mirrorWindowWidth, Dimens.mirrorWindowHeight),
+    LOGS(Dimens.logsWindowWidth, Dimens.logsWindowHeight),
+    FILES(Dimens.filesWindowWidth, Dimens.filesWindowHeight),
+    INFO(Dimens.formWindowWidth, Dimens.formWindowHeight),
+    CONNECT(Dimens.formWindowWidth, Dimens.formWindowHeight),
+    SETTINGS(Dimens.formWindowWidth, Dimens.formWindowHeight),
+    MESSAGE(Dimens.messageWindowWidth, Dimens.messageWindowHeight),
+}
+
 /** what a window opens on. */
 sealed interface WindowContent {
     /** the device list, and whatever is selected in it. */
@@ -18,13 +45,44 @@ sealed interface WindowContent {
 
     /** one device on its own — a mirror torn off into a window of its own. */
     data class Mirror(val serial: String) : WindowContent
+
+    /** one device's logcat. */
+    data class Logs(val serial: String) : WindowContent
+
+    /** one device's filesystem. */
+    data class Files(val serial: String) : WindowContent
+
+    /** everything known about one device. */
+    data class Info(val serial: String) : WindowContent
+
+    /** reach a device over the network. */
+    data object Connect : WindowContent
+
+    data object Settings : WindowContent
+
+    /** one log line, in full. */
+    data class Message(val text: String) : WindowContent
 }
+
+/** which remembered size a window uses. */
+val WindowContent.kind: WindowKind
+    get() = when (this) {
+        is WindowContent.DeviceList -> WindowKind.DEVICE_LIST
+        is WindowContent.Mirror -> WindowKind.MIRROR
+        is WindowContent.Logs -> WindowKind.LOGS
+        is WindowContent.Files -> WindowKind.FILES
+        is WindowContent.Info -> WindowKind.INFO
+        is WindowContent.Connect -> WindowKind.CONNECT
+        is WindowContent.Settings -> WindowKind.SETTINGS
+        is WindowContent.Message -> WindowKind.MESSAGE
+    }
 
 /** one open window, as the entry point's `application` block sees it. */
 class AppWindow(
     val id: Long,
     val content: WindowContent,
-    val bounds: WindowBounds?,
+    /** the size and position it opens at — see [WindowManager.placementFor]. */
+    val bounds: WindowBounds,
 )
 
 /**
@@ -48,7 +106,16 @@ object WindowManager {
     private val _windows = MutableStateFlow<List<AppWindow>>(emptyList())
     val windows: StateFlow<List<AppWindow>> = _windows.asStateFlow()
 
+    // where each open window is right now, for cascading a new one off it. not persisted: a
+    // position is only meaningful on the screens that were attached at the time
     private val bounds = mutableMapOf<Long, WindowBounds>()
+
+    // how big a window of each kind was last left, which is what the next one opens at. persisted
+    private val sizes = loadSizes().toMutableMap()
+
+    // a resize fires on every frame of a drag; the file it lands in doesn't need to
+    private val sizeWrite = Debouncer()
+
     private var nextWindowId = 1L
 
     /**
@@ -62,25 +129,48 @@ object WindowManager {
 
     fun openWindow(content: WindowContent, at: WindowBounds? = null): Long {
         val id = nextWindowId++
-        log.d("openWindow: $id, ${_windows.value.size} already open")
-        if (at != null) bounds[id] = at
-        _windows.value = _windows.value + AppWindow(id, content, at)
+        val place = at ?: placementFor(content, activeWindowId)
+        log.d("openWindow: $id ${content.kind}, ${place.width}x${place.height}, ${_windows.value.size} already open")
+        bounds[id] = place
+        _windows.value = _windows.value + AppWindow(id, content, place)
         // whatever opened it is what the user is looking at, and the OS is about to give it focus
         activeWindowId = id
         return id
     }
 
     /** a mirror in a window of its own, beside the one it was opened from. */
-    fun openMirror(serial: String, from: Long? = activeWindowId): Long {
-        // already open somewhere: raise that rather than opening a second one on the same device
-        val existing = _windows.value.firstOrNull {
-            (it.content as? WindowContent.Mirror)?.serial == serial
-        }
+    fun openMirror(serial: String, from: Long? = activeWindowId): Long =
+        openOnce(WindowContent.Mirror(serial), from)
+
+    fun openLogs(serial: String, from: Long? = activeWindowId): Long =
+        openOnce(WindowContent.Logs(serial), from)
+
+    fun openFiles(serial: String, from: Long? = activeWindowId): Long =
+        openOnce(WindowContent.Files(serial), from)
+
+    fun openInfo(serial: String, from: Long? = activeWindowId): Long =
+        openOnce(WindowContent.Info(serial), from)
+
+    fun openConnect(from: Long? = activeWindowId): Long = openOnce(WindowContent.Connect, from)
+
+    fun openSettings(from: Long? = activeWindowId): Long = openOnce(WindowContent.Settings, from)
+
+    fun openMessage(text: String, from: Long? = activeWindowId): Long =
+        openOnce(WindowContent.Message(text), from)
+
+    /**
+     * open [content], or raise the window already showing it.
+     *
+     * a second logcat on the same device would double the load on it for nothing, and a second
+     * mirror would halve both their frame rates.
+     */
+    private fun openOnce(content: WindowContent, from: Long?): Long {
+        val existing = _windows.value.firstOrNull { it.content == content }
         if (existing != null) {
             activeWindowId = existing.id
             return existing.id
         }
-        return openWindow(WindowContent.Mirror(serial), cascadeFrom(from))
+        return openWindow(content, placementFor(content, from))
     }
 
     fun close(id: Long) {
@@ -99,23 +189,66 @@ object WindowManager {
     /**
      * the window moved or was resized.
      *
-     * nothing is written to disk here on purpose: this fires on every frame of a drag.
+     * the **size** is remembered against the window's kind, so the next log window opens at the size
+     * the last one was left at rather than at whatever opened it. The position isn't kept past this
+     * run: a saved position is only meaningful on the screens that were attached when it was saved,
+     * and one restored onto a monitor that has since been unplugged is a window nobody can reach.
      */
     fun recordBounds(id: Long, at: WindowBounds) {
         bounds[id] = at
+        val kind = _windows.value.firstOrNull { it.id == id }?.content?.kind ?: return
+        val size = WindowSize(at.width, at.height)
+        if (sizes[kind] == size) return
+        sizes[kind] = size
+        // this fires on every frame of a drag, so the file waits for the drag to stop. copied here
+        // rather than read in there: the write runs on an io thread, and `sizes` is a plain map the
+        // next frame of the same drag is still putting into
+        val snapshot = sizes.toMap()
+        sizeWrite.submit { saveSizes(snapshot) }
     }
 
-    fun boundsOf(id: Long): WindowBounds? = bounds[id]
+    /** the size a window of [kind] opens at: whatever one of its kind was last left at. */
+    private fun sizeOf(kind: WindowKind): WindowSize = sizes[kind] ?: WindowSize(
+        kind.defaultWidth.value.toInt(),
+        kind.defaultHeight.value.toInt(),
+    )
 
     /**
-     * where a new window opened from [from] should go: down and across from it.
+     * how big a new window of [content]'s kind should be, and where to put it.
      *
-     * a window whose position isn't known yet gives null, and the new one is centred rather than
-     * placed at a guess.
+     * the size is its kind's, never the parent's — a log window opening at the device list's size is
+     * what this replaced. The position cascades off the last window of the same kind if there is one
+     * (a second one stacked exactly on the first looks like nothing happened), otherwise off whatever
+     * opened it, so it doesn't cover the window it came from. With nothing to cascade off it is
+     * centred, which is what a negative x means to the entry point.
      */
-    private fun cascadeFrom(from: Long?): WindowBounds? {
-        val parent = from?.let { bounds[it] } ?: return null
-        if (parent.x < 0 || parent.y < 0) return null
-        return parent.copy(x = parent.x + CASCADE_OFFSET, y = parent.y + CASCADE_OFFSET)
+    private fun placementFor(content: WindowContent, from: Long?): WindowBounds {
+        val size = sizeOf(content.kind)
+        val at = WindowBounds(width = size.width, height = size.height)
+        val over = _windows.value.lastOrNull { it.content.kind == content.kind }?.id ?: from
+        val parent = over?.let { bounds[it] }?.takeIf { it.x >= 0 && it.y >= 0 } ?: return at
+        return at.copy(x = parent.x + CASCADE_OFFSET, y = parent.y + CASCADE_OFFSET)
     }
+
+    // "<w>x<h>" rather than a nested object: this ends up in a properties file someone opens, and
+    // 1200x700 says what it is where {"width":1200,...} makes them read it
+    private fun saveSizes(sizes: Map<WindowKind, WindowSize>) {
+        val asMap = sizes.entries.associate { (kind, size) -> kind.name to "${size.width}x${size.height}" }
+        SettingsManager.setString(AppPref.WINDOW_SIZES, JsonUtils.toJson(asMap) ?: "")
+    }
+
+    private fun loadSizes(): Map<WindowKind, WindowSize> =
+        JsonUtils.stringToMap<String>(SettingsManager.getString(AppPref.WINDOW_SIZES))
+            .mapNotNull { (name, value) ->
+                val kind = Utils.enumFromName<WindowKind>(name) ?: return@mapNotNull null
+                val width = value.substringBefore('x').toIntOrNull() ?: return@mapNotNull null
+                val height = value.substringAfter('x', "").toIntOrNull() ?: return@mapNotNull null
+                // a size below the window minimum is one a previous build wrote wrong, or a window
+                // someone shrank against a minimum that has since grown
+                if (width < Dimens.minWindowWidth.value || height < Dimens.minWindowHeight.value) {
+                    return@mapNotNull null
+                }
+                kind to WindowSize(width, height)
+            }
+            .toMap()
 }

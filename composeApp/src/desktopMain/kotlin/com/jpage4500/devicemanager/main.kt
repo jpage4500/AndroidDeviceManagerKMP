@@ -9,6 +9,7 @@ import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.manager.*
 import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.*
+import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.screen.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
@@ -42,14 +43,18 @@ fun main() {
 
     application {
         val windows by WindowManager.windows.collectAsState()
+        val toTray by SettingsManager.getBoolAsState(AppPref.MINIMIZE_TO_TRAY)
 
-        // closing the last window is quitting, the way it is for a single-window app
-        LaunchedEffect(windows.isEmpty()) {
-            if (windows.isEmpty()) {
+        // closing the last window is quitting, the way it is for a single-window app — unless the
+        // tray is on, in which case the app is still there and the icon is how it comes back
+        LaunchedEffect(windows.isEmpty(), toTray) {
+            if (windows.isEmpty() && !toTray) {
                 log.d("main: no windows left - exiting")
                 exitApplication()
             }
         }
+
+        AppTray(onQuit = ::exitApplication)
 
         windows.forEach { appWindow ->
             key(appWindow.id) { DeviceWindow(appWindow) }
@@ -60,15 +65,13 @@ fun main() {
 /** one window, and everything the platform decides about it: where it is and what its menus say. */
 @Composable
 private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
+    // the size is its kind's — the one a window of this kind was last left at — and the position is
+    // wherever WindowManager cascaded it to. A negative x means "nothing to cascade off", and is
+    // centred rather than placed at a guess
     val saved = appWindow.bounds
     val windowState = rememberWindowState(
-        size = DpSize(
-            (saved?.width ?: Dimens.windowWidth.value.toInt()).dp,
-            (saved?.height ?: Dimens.windowHeight.value.toInt()).dp,
-        ),
-        // a saved position from a monitor that isn't attached any more comes through as -1, and is
-        // centred rather than placed off screen
-        position = if (saved != null && saved.x >= 0 && saved.y >= 0) {
+        size = DpSize(saved.width.dp, saved.height.dp),
+        position = if (saved.x >= 0 && saved.y >= 0) {
             WindowPosition(saved.x.dp, saved.y.dp)
         } else {
             WindowPosition(Alignment.Center)
@@ -77,31 +80,46 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
 
     val title = when (val content = appWindow.content) {
         is WindowContent.DeviceList -> Branding.appName
-        is WindowContent.Mirror ->
-            DeviceManager.device(content.serial)?.displayName ?: content.serial
+        is WindowContent.Mirror -> DeviceManager.nameOf(content.serial)
+        is WindowContent.Logs -> "Logs — ${DeviceManager.nameOf(content.serial)}"
+        is WindowContent.Files -> "Files — ${DeviceManager.nameOf(content.serial)}"
+        is WindowContent.Info -> DeviceManager.nameOf(content.serial)
+        is WindowContent.Connect -> "Connect"
+        is WindowContent.Settings -> "Settings"
+        is WindowContent.Message -> "Message Viewer"
     }
 
+    val alwaysOnTop by SettingsManager.getBoolAsState(AppPref.ALWAYS_ON_TOP)
+
+    // every window keeps an ordinary title bar. The toolbar was in it for a while (macOS
+    // `fullWindowContent`), which looked closer to Finder — but the window then has nothing to drag
+    // by except the toolbar's own gaps, and a title says which device a window is for
     Window(
         onCloseRequest = { WindowManager.close(appWindow.id) },
         state = windowState,
+        alwaysOnTop = alwaysOnTop,
         title = title,
     ) {
-        // the position is recorded as it moves so a new window can cascade off this one; nothing is
-        // written to disk here, since this fires on every frame of a drag
+        // reported as it moves and resizes: the position so a new window can cascade off this one,
+        // the size so the next window of this kind opens at it. The write to disk is debounced in
+        // WindowManager, because this fires on every frame of a drag.
+        //
+        // the size is reported even while the position is still `Aligned` — a centred window's
+        // position never becomes absolute unless someone drags it, and gating the whole thing on
+        // absolute meant a window nobody moved never remembered how big it was
         LaunchedEffect(windowState) {
             snapshotFlow { windowState.position to windowState.size }
                 .collect { (position, size) ->
-                    if (position is WindowPosition.Absolute) {
-                        WindowManager.recordBounds(
-                            appWindow.id,
-                            WindowBounds(
-                                position.x.value.toInt(),
-                                position.y.value.toInt(),
-                                size.width.value.toInt(),
-                                size.height.value.toInt(),
-                            ),
-                        )
-                    }
+                    val at = position as? WindowPosition.Absolute
+                    WindowManager.recordBounds(
+                        appWindow.id,
+                        WindowBounds(
+                            at?.x?.value?.toInt() ?: -1,
+                            at?.y?.value?.toInt() ?: -1,
+                            size.width.value.toInt(),
+                            size.height.value.toInt(),
+                        ),
+                    )
                 }
         }
 
@@ -117,6 +135,16 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
         when (val content = appWindow.content) {
             is WindowContent.DeviceList -> App(compact = false)
             is WindowContent.Mirror -> AppTheme { MirrorScreen(content.serial) }
+            is WindowContent.Logs -> AppTheme { LogsScreen(content.serial) }
+            is WindowContent.Files -> AppTheme { ExploreScreen(content.serial) }
+            is WindowContent.Info -> AppTheme { DeviceInfoScreen(content.serial) }
+            is WindowContent.Connect -> AppTheme {
+                ConnectScreen(onClose = { WindowManager.close(appWindow.id) })
+            }
+            is WindowContent.Settings -> AppTheme {
+                SettingsScreen(onClose = { WindowManager.close(appWindow.id) })
+            }
+            is WindowContent.Message -> AppTheme { MessageScreen(content.text) }
         }
     }
 }
@@ -127,10 +155,9 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
     MenuBar {
         Menu(stringResource(Res.string.menu_file), mnemonic = 'F') {
             Item(stringResource(Res.string.menu_new_window), shortcut = KeyShortcut(Key.N, meta = isMac(), ctrl = !isMac())) {
-                WindowManager.openWindow(
-                    WindowContent.DeviceList,
-                    WindowManager.boundsOf(appWindow.id)?.copy(),
-                )
+                // no bounds passed: WindowManager places it at the device list's own remembered
+                // size, cascaded off the last device-list window so it doesn't land on top of it
+                WindowManager.openWindow(WindowContent.DeviceList)
             }
             Item(stringResource(Res.string.menu_mirror_device), shortcut = KeyShortcut(Key.M, meta = isMac(), ctrl = !isMac())) {
                 DeviceManager.selectedSerial.value?.let { WindowManager.openMirror(it, appWindow.id) }

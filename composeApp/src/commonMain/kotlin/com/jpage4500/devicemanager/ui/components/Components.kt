@@ -137,6 +137,9 @@ fun ToolbarSeparator() {
  * a battery as a bar rather than a number, because 45 of them are read at a glance.
  *
  * green down to 30%, amber to 15%, red below — the thresholds the Swing app's battery icons use.
+ *
+ * amber is `busy` rather than `unauthorized`: the latter is now the Swing app's "not ready" yellow,
+ * which is all but invisible as a 2px bar on white.
  */
 @Composable
 fun BatteryLevel(level: Int?, charging: Boolean, modifier: Modifier = Modifier) {
@@ -146,7 +149,7 @@ fun BatteryLevel(level: Int?, charging: Boolean, modifier: Modifier = Modifier) 
     }
     val color = when {
         level > 30 -> Colors.online
-        level > 15 -> Colors.unauthorized
+        level > 15 -> Colors.busy
         else -> Colors.error
     }
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -167,7 +170,7 @@ fun BatteryLevel(level: Int?, charging: Boolean, modifier: Modifier = Modifier) 
         }
         if (charging) {
             Spacer(Modifier.width(2.dp))
-            AppIcon(Res.drawable.charging, size = 10.dp, tint = Colors.unauthorized)
+            AppIcon(Res.drawable.charging, size = 10.dp, tint = Colors.busy)
         }
     }
 }

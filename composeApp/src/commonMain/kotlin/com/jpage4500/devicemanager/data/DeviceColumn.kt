@@ -40,10 +40,11 @@ enum class DeviceColumn(
         CUSTOM1 -> device.customProperty(Device.CUST_PROP_1)
         CUSTOM2 -> device.customProperty(Device.CUST_PROP_2)
         CARRIER -> device.carrier
+        // a number someone typed in wins over one read off the SIM, which is often missing or wrong
         PHONE -> device.customProperty(Device.CUST_PROP_PHONE) ?: device.phone
-        IMEI -> device.customProperty(Device.CUST_PROP_IMEI)
+        IMEI -> device.customProperty(Device.CUST_PROP_IMEI) ?: device.imei
         FREE -> Utils.bytesToDisplayString(device.freeSpace)
-        BOOTED -> device.customProperty(Device.CUST_PROP_BOOTED)
+        BOOTED -> device.bootTimeMs?.let { DateUtils.formatDate(DateUtils.timeToDate(it), "MM/dd h:mm a") }
     }
 
     /**
@@ -57,6 +58,7 @@ enum class DeviceColumn(
         BATTERY -> device.batteryLevel
         FREE -> device.freeSpace
         OS -> device.sdk?.toIntOrNull() ?: device.os?.substringBefore('.')?.toIntOrNull()
+        BOOTED -> device.bootTimeMs
         else -> text(device)?.lowercase()
     }
 

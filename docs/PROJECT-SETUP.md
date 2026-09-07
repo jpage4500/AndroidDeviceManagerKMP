@@ -38,10 +38,11 @@ implementations when the platforms genuinely disagree — `Settings`, `FileIO`'s
 
 ## Three build settings that aren't obvious
 
-- **The configuration cache goes stale on a new source file.** A `.kt` file added to a source set can
-  leave `compileDebugKotlinAndroid` reporting `UP-TO-DATE` while the class is never built, and the
-  failure surfaces as `Unresolved reference` from the module that uses it. Pass
-  `--no-configuration-cache` once after adding files.
+- **Gradle goes stale on a newly added file.** A `.kt` added to a source set can leave a compile task
+  reporting `UP-TO-DATE` while the class is never built; a `.png` added to `composeResources/drawable`
+  can leave `Res.drawable` generated empty. Both surface as `Unresolved reference`. Pass
+  `--no-configuration-cache` after adding source files; for resources the daemon's own directory
+  listing is what's stale, so `./gradlew --stop` and delete `composeApp/build/generated/compose`.
 - **JDK 21, not 25.** Gradle 8.14 cannot run on Java 25, and `JAVA_HOME` on this machine points at a
   Homebrew JDK 25. Android Studio and IntelliJ supply their own JDK so they are fine; from a terminal
   use `JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home ./gradlew …`.
@@ -73,6 +74,26 @@ deprecated in 1.11 and fail the build, so every artifact is named explicitly in
 There is no test suite.
 
 Version is `1.0.<git commit count>` through gmazzo BuildConfig, the same scheme the Swing app uses.
+
+### Running the desktop app from IntelliJ
+
+Two Gradle tasks start it, and they are not the same task:
+
+- **`:composeApp:run`** — the Compose plugin's task. It runs everything declared in
+  `compose.desktop { application { … } }`, so this is the one to use. In IntelliJ: Run ▸ Edit
+  Configurations ▸ **+** ▸ Gradle, Gradle project `AndroidDeviceManagerKMP:composeApp`, task `run`.
+- **`desktopRun`** — the KMP plugin's plain `JavaExec` for the `desktop` jvm target. This is what
+  IntelliJ generates from the green arrow next to `main()`, and it knows nothing about the
+  `compose.desktop` block: without a main class of its own it fails at execution with *No main class
+  specified and classpath is not an executable jar*. `jvm("desktop") { mainRun { mainClass … } }` in
+  `composeApp/build.gradle.kts` is what supplies it.
+
+Neither is hot reload — the Compose hot-reload plugin (and its `hotRun` task) is not applied here, so
+a code change means stopping and running again.
+
+Set **Gradle JVM to JDK 21** in Settings ▸ Build, Execution, Deployment ▸ Build Tools ▸ Gradle;
+`.idea/gradle.xml` has it on `#JAVA_HOME`, which is JDK 25 on this machine. `.idea/` is gitignored,
+so run configurations are per-checkout and never travel with a clone.
 
 ## iOS
 

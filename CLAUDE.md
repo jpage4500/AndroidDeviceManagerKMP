@@ -69,7 +69,9 @@ the desktop app is built by `compose.desktop.application` inside `composeApp` wi
 - `manager/` — `DeviceManager` (the device list and the current transport), `MirrorSource`,
   `WindowManager`, plus the http layer: `NetworkManager`, `HttpClientFactory`, `HttpLog`, `LogManager`.
 - `ui/` — `App` (root, `compact` picks the phone or desktop layout), `theme/`, `components/`,
-  `screen/`.
+  `screen/`. `components/DataTable.kt` is the app's one table — keyboard, multi-select, sortable,
+  resizable — and the file explorer and log viewer are meant to reuse it rather than grow their own.
+  See [docs/UI-PORT.md](docs/UI-PORT.md).
 - `util/` — the services under the app: `SettingsManager`, `StorageManager`/`FileIO`, `LoggerConfig`
   /`AppLogWriter`, `PlatformUtils`, `ToastManager`, plus `DateUtils`, `JsonUtils`, `TextUtils`,
   `Utils`, `Timer`, `LruCache` and the `ioDispatcher` `expect`. See

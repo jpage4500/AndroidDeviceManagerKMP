@@ -26,15 +26,28 @@ data class Device(
     val carrier: String? = null,
     val timezone: String? = null,
     val phone: String? = null,
+    val imei: String? = null,
     val batteryLevel: Int? = null,
     val powerStatus: PowerStatus = PowerStatus.NONE,
     val freeSpace: Long? = null,
     val totalSpace: Long? = null,
     val customProperties: Map<String, String> = emptyMap(),
+    /** host clock time this device booted, from `/proc/uptime`. */
+    val bootTimeMs: Long? = null,
+    /**
+     * false while the device is still booting.
+     *
+     * defaults true: a device that hasn't been asked yet is assumed ready, so a row doesn't flicker
+     * through "not ready" on the way to normal.
+     */
+    val isBooted: Boolean = true,
     /** last time anything was heard from this device. */
     val lastUpdateMs: Long? = null,
 ) {
     val isOnline: Boolean get() = state == DeviceState.DEVICE
+
+    /** online, and finished booting — the only state in which a command will do what you meant. */
+    val isReady: Boolean get() = isOnline && isBooted
 
     /** a tcp serial is `host:port`; a usb one never contains a colon followed by digits. */
     val isWireless: Boolean
@@ -62,7 +75,6 @@ data class Device(
         const val CUST_PROP_2 = "custom2"
         const val CUST_PROP_PHONE = "phone_number"
         const val CUST_PROP_IMEI = "imei"
-        const val CUST_PROP_BOOTED = "booted"
 
         // the getprop keys the properties fetch asks for
         const val PROP_SDK = "ro.build.version.sdk"
@@ -76,11 +88,22 @@ data class Device(
     }
 }
 
+/**
+ * where a device's power is coming from, as `dumpsys battery` reports it.
+ *
+ * the *source* rather than a charging/discharging flag, which is what the Swing app tracks: a phone
+ * on a dock and a phone on USB behave differently on a 45-device bench, and only [NONE] means it is
+ * running the battery down.
+ */
 enum class PowerStatus {
     NONE,
-    CHARGING,
-    FULL,
-    DISCHARGING,
+    AC,
+    USB,
+    WIRELESS,
+    DOCK,
+    ;
+
+    val isCharging: Boolean get() = this != NONE
 }
 
 /**

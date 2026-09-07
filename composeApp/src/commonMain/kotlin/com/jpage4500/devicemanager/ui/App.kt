@@ -27,7 +27,11 @@ fun App(compact: Boolean = false) {
         LaunchedEffect(Unit) { DeviceManager.start() }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            if (compact) CompactLayout() else DeviceScreen()
+            // the same faint tile the Swing app draws behind its window; the table paints it again
+            // behind its own rows, since a row's background would otherwise cover it
+            Box(Modifier.fillMaxSize().watermark()) {
+                if (compact) CompactLayout() else DeviceScreen()
+            }
         }
         // one host for the whole app: a toast is raised from managers that have no composable of
         // their own — a failed command, a crash report going up

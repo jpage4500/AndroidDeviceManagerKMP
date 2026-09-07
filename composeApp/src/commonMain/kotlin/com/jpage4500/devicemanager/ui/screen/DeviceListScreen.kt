@@ -122,7 +122,7 @@ private fun DeviceRow(device: Device, selected: Boolean, onClick: () -> Unit) {
             Spacer(Modifier.width(Dimens.gap))
             BatteryLevel(
                 level = device.batteryLevel,
-                charging = device.powerStatus == PowerStatus.CHARGING || device.powerStatus == PowerStatus.FULL,
+                charging = device.powerStatus.isCharging,
             )
         }
     }

@@ -10,12 +10,166 @@
     <string name="devices_attached">%1$d attached</string>
     <string name="no_devices">No devices</string>
     <string name="no_devices_msg">Attach a device over USB, or start an adb server for this app to read.\nNothing here starts one for you.</string>
+    <string name="no_matches">No matches</string>
+    <string name="no_matches_msg">No device matches that filter.</string>
     <string name="nothing_selected">Nothing selected</string>
     <string name="nothing_selected_msg">Pick a device on the left to mirror it.</string>
 
+    <string name="device_up">Up</string>
     <string name="device_total">total: %1$d</string>
+    <string name="device_selected_of">%1$d of %2$d</string>
     <string name="connect_device">Connect a device</string>
     <string name="connect_device_msg">Enter an IP address and port, or start an adb server this app can read.</string>
+
+    <string name="filter_devices">Filter devices…</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="ok">OK</string>
+    <string name="save">Save</string>
+
+    <!-- connect -->
+    <string name="connect">Connect</string>
+    <string name="connect_ip">IP</string>
+    <string name="connect_none_yet">No wireless devices yet. Enter an address below — a device needs \"adb tcpip 5555\" run over USB once first.</string>
+    <string name="connect_port">Port</string>
+    <string name="connect_title">Connect to a wireless device</string>
+
+    <!-- row menu -->
+    <string name="copy_field">Copy Field</string>
+    <string name="copy_line">Copy Line</string>
+    <string name="edit_custom_1">Edit Custom 1…</string>
+    <string name="edit_custom_2">Edit Custom 2…</string>
+    <string name="edit_name">Edit Device Name…</string>
+    <string name="edit_phone">Edit Phone Number…</string>
+    <string name="reconnect">Reconnect</string>
+    <string name="remove">Remove</string>
+    <string name="restart">Restart</string>
+    <string name="disconnect">Disconnect</string>
+
+    <string name="device_details">Device Details</string>
+    <string name="history">History</string>
+    <string name="history_empty">Nothing yet</string>
+
+    <!-- custom commands -->
+    <string name="commands_add">Add</string>
+    <string name="commands_command">Shell command</string>
+    <string name="commands_empty">None yet — add one below</string>
+    <string name="commands_help">Runs through \"adb shell\" on the selected device. Click one above to edit it.</string>
+    <string name="commands_name">Name</string>
+    <string name="commands_save">Save</string>
+    <string name="commands_title">Custom Commands</string>
+
+    <!-- file explorer -->
+    <string name="files_copy_name">Copy Name</string>
+    <string name="files_copy_path">Copy Path</string>
+    <string name="files_count">%1$d items</string>
+    <string name="files_delete">Delete</string>
+    <string name="files_delete_title">Delete permanently?</string>
+    <string name="files_download">Download</string>
+    <string name="files_empty">Folder is empty</string>
+    <string name="files_error">Can\'t read that folder</string>
+    <string name="files_go_to">Go To…</string>
+    <string name="files_go_to_title">Go to folder</string>
+    <string name="files_new_folder">New Folder</string>
+    <string name="files_open">Open</string>
+    <string name="files_saved_to">Saved to %1$s</string>
+    <string name="files_up">Up</string>
+
+    <!-- settings -->
+    <string name="settings_adb_host">adb server host</string>
+    <string name="settings_adb_port">adb server port</string>
+    <string name="settings_app">APP</string>
+    <string name="settings_confirm">Confirm destructive commands</string>
+    <string name="settings_connection">CONNECTION</string>
+    <string name="settings_debug">Debug logging</string>
+    <string name="settings_device_list">DEVICE LIST</string>
+    <string name="settings_full_refresh">Full refresh (mins)</string>
+    <string name="settings_log_buffer">Log buffer (lines)</string>
+    <string name="settings_log_font">Log font size (⌘+ / ⌘-)</string>
+    <string name="settings_log_hold">Hold while scrolled up (lines)</string>
+    <string name="settings_logs">LOGS</string>
+    <string name="settings_mirror_ms">Mirror interval (ms)</string>
+    <string name="settings_not_set">Not set</string>
+    <string name="settings_on_top">Keep windows on top</string>
+    <string name="settings_open">OPEN</string>
+    <string name="settings_open_folder">App log file</string>
+    <string name="settings_refresh_secs">Refresh battery/disk (secs)</string>
+    <string name="settings_remote_token">Remote token</string>
+    <string name="settings_remote_url">Remote Device Manager URL</string>
+    <string name="settings_reset">Reset all settings</string>
+    <string name="settings_reset_button">RESET</string>
+    <string name="settings_reset_msg">Every setting goes back to its default, including column layout and saved filters. Devices are not touched.</string>
+    <string name="settings_reset_title">Reset all settings?</string>
+    <string name="settings_send">SEND</string>
+    <string name="settings_transport">Reading devices from</string>
+    <string name="settings_tooltips">Show Tooltips</string>
+    <string name="settings_tray">Stay in the menu bar when closed</string>
+    <string name="settings_upload_logs">Send app logs to support</string>
+
+    <string name="install_title">Choose an APK to install</string>
+
+    <!-- message viewer -->
+    <string name="message_edit">Edit</string>
+    <string name="message_format_off">Auto Format OFF</string>
+    <string name="message_format_on">Auto Format ON</string>
+    <string name="message_restore">Restore</string>
+    <string name="message_wrap_off">Wrap OFF</string>
+    <string name="message_wrap_on">Wrap ON</string>
+
+    <!-- input -->
+    <string name="input_delete">Delete</string>
+    <string name="input_enter">Enter</string>
+    <string name="input_recent">RECENT</string>
+    <string name="input_send">Send</string>
+    <string name="input_text">Text to type</string>
+    <string name="input_title">Type on %1$d device(s)</string>
+
+    <!-- device info -->
+    <string name="info_battery">Battery</string>
+    <string name="info_booted">Booted</string>
+    <string name="info_carrier">Carrier</string>
+    <string name="info_custom_1">Custom 1</string>
+    <string name="info_custom_2">Custom 2</string>
+    <string name="info_gone">Device is gone</string>
+    <string name="info_imei">IMEI</string>
+    <string name="info_model">Model</string>
+    <string name="info_name">Name</string>
+    <string name="info_os">OS</string>
+    <string name="info_phone">Phone</string>
+    <string name="info_serial">Serial</string>
+    <string name="info_storage">Internal Storage</string>
+    <string name="info_timezone">Timezone</string>
+
+    <!-- logs -->
+    <string name="logs_add_filter">Add Filter</string>
+    <string name="logs_clear">Clear</string>
+    <string name="logs_copy_message">Copy Message</string>
+    <string name="logs_duplicate_filter">Duplicate Filter</string>
+    <string name="logs_edit_filter">Edit Filter</string>
+    <string name="logs_filter_add">Add Filter</string>
+    <string name="logs_filter_add_term">Add a term</string>
+    <string name="logs_filter_edit">Edit Filter</string>
+    <string name="logs_filter_expression">Filter Expression:</string>
+    <string name="logs_auto_scroll">Auto Scroll</string>
+    <string name="logs_filter_hint">Filter…</string>
+    <string name="logs_hide">Hide</string>
+    <string name="logs_hold">holding %1$d older lines</string>
+    <string name="logs_hold_full">hold full — oldest lines dropping</string>
+    <string name="logs_search">Search…</string>
+    <string name="logs_tooltip">Tooltip</string>
+    <string name="logs_selected">selected %1$d of %2$d</string>
+    <string name="logs_viewing">viewing %1$d</string>
+    <string name="logs_viewing_of">viewing %1$d / %2$d</string>
+    <string name="logs_filter_level">Filter level %1$s and above</string>
+    <string name="logs_filter_name">Filter Name:</string>
+    <string name="logs_filter_new">New Filter</string>
+    <string name="logs_filter_remove_term">Remove this term</string>
+    <string name="logs_filter_tag">Filter tag %1$s</string>
+    <string name="logs_filter_value">Value</string>
+    <string name="logs_save">Save</string>
+    <string name="logs_start">Start</string>
+    <string name="logs_stop">Stop</string>
+    <string name="logs_view_message">View Message</string>
 
     <!-- toolbar -->
     <string name="action_adb">ADB</string>
@@ -34,6 +188,8 @@
     <!-- column header menu -->
     <string name="hide_column">Hide %1$s</string>
     <string name="reset_columns">Reset Columns</string>
+    <string name="size_all_to_fit">Size All to Fit</string>
+    <string name="size_to_fit">Size to Fit</string>
     <string name="show_column">Show %1$s</string>
 
     <!-- mirror -->

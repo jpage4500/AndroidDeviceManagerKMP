@@ -39,6 +39,40 @@ interface DeviceTransport {
     /** one folder on the device. */
     suspend fun listFiles(serial: String, path: String): Result<List<DeviceFile>>
 
+    /**
+     * one file off the device, whole.
+     *
+     * whole rather than streamed on purpose: the explorer downloads to the app's own folder and
+     * nothing else pulls a file yet, so a `ByteArray` is enough and a channel would be ceremony.
+     * Revisit when something needs to pull a video.
+     */
+    suspend fun pullFile(serial: String, path: String): Result<ByteArray> =
+        Result.failure(UnsupportedOperationException("$label can't download a file"))
+
+    /** put a file onto the device. [mode] is the POSIX permission bits it lands with. */
+    suspend fun pushFile(
+        serial: String,
+        bytes: ByteArray,
+        path: String,
+        mode: Int = 0b110_100_100,
+    ): Result<Unit> = Result.failure(UnsupportedOperationException("$label can't upload a file"))
+
+    /**
+     * pair with a device over the network.
+     *
+     * only an adb server can do this — a remote instance manages its own devices — so the default
+     * refuses rather than pretending.
+     */
+    suspend fun connect(host: String, port: Int): Result<String> =
+        Result.failure(UnsupportedOperationException("$label can't connect to a device"))
+
+    suspend fun disconnect(serial: String): Result<String> =
+        Result.failure(UnsupportedOperationException("$label can't disconnect a device"))
+
+    /** reboot the device. */
+    suspend fun reboot(serial: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException("$label can't reboot a device"))
+
     /** stop anything this transport is holding open. */
     fun close() {}
 }

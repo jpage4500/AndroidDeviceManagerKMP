@@ -127,6 +127,14 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
             freeCompilerArgs.add("-Xexpect-actual-classes")
         }
+        // the same main class `compose.desktop.application` runs, repeated here for the KMP
+        // plugin's own `desktopRun` task — that's the one IntelliJ generates from the green arrow
+        // next to main(), and without a main class it fails at execution with "No main class
+        // specified and classpath is not an executable jar"
+        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+        mainRun {
+            mainClass.set("com.jpage4500.devicemanager.MainKt")
+        }
     }
 
     @Suppress("unused")

@@ -3,3 +3,32 @@
 - settings now persist between runs
 - logs are written to a file, and a crash is reported on next launch
 - publish desktop installers for macOS, Windows and Linux
+- new devices screen on desktop, with a keyboard-driven multi-select table
+- device battery, charging, free space, IMEI and phone number
+- drag to select rows, and drag column headers to reorder them
+- filter, rename, restart, disconnect and copy on the devices screen
+- connect to wireless devices, and a log viewer with saved filters
+- browse device files, and a settings screen
+- menu bar icon listing every device
+- install an APK, or drag one onto the device list
+- log viewer rebuilt to match the Swing app, with auto-scroll
+- log viewer: pinned message panel, process names, and font size shortcuts
+- log search highlights matches, and a message viewer window
+- type anywhere in the log viewer to search, esc to clear
+- click the app version to open its log file
+- add filter built from field, operator and value pickers
+- dialogs are real windows with title bars
+
+09/07
+- dragging a column header now moves the whole column
+- table cells show their full value on hover when it doesn't fit
+- larger table text, matching the Swing app
+- right-click menus offer only what the clicked column can do
+- log viewer holds your place in the list as old lines are dropped
+- cmd-up / cmd-down jump to the oldest and newest log lines
+- log rows stripe evenly again with a filter on
+- no background image behind the log table
+- every kind of window remembers its own size
+- log auto-scroll follows the tail again, and lets go when you scroll up
+- cmd-up/down jump to the ends of a table, option-up/down move a page
+- log viewer keeps its oldest lines while you scroll back through them

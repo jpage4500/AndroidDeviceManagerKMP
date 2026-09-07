@@ -52,6 +52,8 @@ Corrections carried over from jadb, each one already paid for:
 | Multiple windows | `manager/WindowManager.kt` + `desktopMain/main.kt` | Ported from FileExplorerKMP |
 | UI | `ui/` | One device list and one mirror view; `compact` picks phone or desktop layout |
 | Settings, files, logs, http | `util/`, `manager/` | Ported from DashboardWeatherKMP — see [APP-SERVICES.md](APP-SERVICES.md) |
+| Device screen | `ui/screen/DeviceScreen.kt`, `ui/components/DataTable.kt` | The desktop's toolbar/table/status bar, and the phone's list — see [UI-PORT.md](UI-PORT.md) |
+| Icons | `commonMain/composeResources/drawable/` | All 91 PNGs from the Swing app's `resources/images`, tinted at draw time |
 
 `RemoteHttpTransport` speaks the **existing** Swing app's API — `/api/devices`, `/api/execute`,
 `/api/properties`, `/api/files/list`, `/api/screenshot` with bearer auth. So the phone app can be
@@ -61,9 +63,9 @@ pointed at today's app and work before any more of it is ported.
 
 The screen-by-screen detail is in [UI-PORT.md](UI-PORT.md) — this is the summary.
 
-1. **The device screen.** The desktop's main screen is a sortable, resizable, configurable table and
-   this is a two-pane list. Compose has no table, so a reusable one gets written here and the file
-   explorer and log viewer both reuse it.
+1. **Device actions.** The right-click menu on a row: details, copy field, rename, custom fields,
+   reconnect, disconnect. All are `exec` calls that already work, and the table already raises the
+   context click.
 2. **A connection picker.** Nothing sets a transport yet — it defaults to `127.0.0.1:5037`. The phone
    builds need a screen to enter a host, a port and a token; `AppPref` already has the four prefs to
    keep them in (`ADB_SERVER_HOST`, `ADB_SERVER_PORT`, `REMOTE_URL`, `REMOTE_TOKEN`) and nothing
