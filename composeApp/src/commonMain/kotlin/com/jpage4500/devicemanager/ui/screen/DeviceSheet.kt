@@ -55,7 +55,7 @@ fun DeviceSheet(serial: String, onDismiss: () -> Unit, onMirror: (String) -> Uni
         onDismiss = onDismiss,
         onEnter = null,
     ) {
-        Column(Modifier.fillMaxSize().background(Colors.menuBg)) {
+        Column(Modifier.fillMaxSize().background(Colors.menuBg).safeDrawingPadding()) {
             Header(
                 title = device?.displayName ?: serial,
                 // where this device came from as well as what it is: with more than one connection

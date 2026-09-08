@@ -75,6 +75,9 @@ object DeviceManager {
      */
     fun transportFromSettings(): DeviceTransport {
         val remote = SettingsManager.getString(AppPref.REMOTE_URL)?.takeIf { it.isNotBlank() }
+            // an explicit "adb server" ignores a remote URL that's still filled in, rather than
+            // making the user clear the field to get back to adb
+            ?.takeIf { SettingsManager.getEnum<TransportChoice>(AppPref.TRANSPORT) != TransportChoice.ADB_SERVER }
         return if (remote != null) {
             RemoteHttpTransport(remote, SettingsManager.getStringOrEmpty(AppPref.REMOTE_TOKEN))
         } else {
@@ -94,8 +97,11 @@ object DeviceManager {
             _transport.collectLatest { transport ->
                 transport.devices().collect { devices ->
                     // the long-form list already carries a model, so a row can be drawn before any
-                    // getprop has run — the details are filled in behind it
-                    _devices.value = merge(devices)
+                    // getprop has run — the details are filled in behind it. A transport that
+                    // carries the details itself is taken as it comes: merging would hold the first
+                    // battery reading forever, since merge exists to protect values this list has no
+                    // way of knowing
+                    _devices.value = if (transport.hasDeviceDetails) devices else merge(devices)
                     // remember any wireless device we can see, so the connect dialog opens with a
                     // list rather than an empty field
                     _devices.value.filter { it.isWireless && it.isOnline }.forEach(WirelessManager::remember)
@@ -247,6 +253,8 @@ object DeviceManager {
         changingOnly: Boolean = false,
         force: Boolean = false,
     ) {
+        // nothing to fetch when the list already said it — see DeviceTransport.hasDeviceDetails
+        if (_transport.value.hasDeviceDetails) return
         detailJob?.cancel()
         val online = devices.filter { it.isOnline }
         if (online.isEmpty()) return

@@ -20,12 +20,37 @@ import kotlinx.coroutines.flow.*
  * over TCP from anywhere, but a **USB** device is claimed exclusively by whichever adb server is
  * running, and 45 devices on hubs is the workload that matters.
  */
+/**
+ * which of the routes above the app is told to take.
+ *
+ * [AUTO] is what every install starts on and is the behaviour that predates this setting: a remote
+ * URL, if one is filled in, otherwise the adb server. The other two are an override, for a desktop
+ * that has both configured and wants to switch between them without clearing a field to do it.
+ *
+ * Stored in `AppPref.TRANSPORT`. It does not add a route — a choice with nothing filled in behind
+ * it still falls back to the adb server, since a transport that can't reach anything is worse than
+ * the wrong one.
+ */
+enum class TransportChoice { AUTO, ADB_SERVER, REMOTE }
+
 interface DeviceTransport {
     /** a name for this connection, as a picker would show it. */
     val label: String
 
     /** the attached set, re-pushed whenever it changes. */
     fun devices(): Flow<List<Device>>
+
+    /**
+     * whether [devices] already carries everything a row shows.
+     *
+     * An adb server's `host:devices-l` carries a model and nothing else, so battery, disk, carrier
+     * and the rest have to be asked for device by device — that is what
+     * [com.jpage4500.devicemanager.manager.DeviceManager.fetchDetails] is for. A Device Manager
+     * server has **already done that work** and puts the answers in `/api/devices`, so asking again
+     * is two shell commands per device per refresh for data that arrived with the list, run on
+     * someone else's machine. False here, true there.
+     */
+    val hasDeviceDetails: Boolean get() = false
 
     /** run a shell command and return what it printed. */
     suspend fun exec(serial: String, command: String): Result<String>
@@ -68,6 +93,30 @@ interface DeviceTransport {
 
     suspend fun disconnect(serial: String): Result<String> =
         Result.failure(UnsupportedOperationException("$label can't disconnect a device"))
+
+    /**
+     * pair with a device showing its wireless-debugging code, at the address it advertises.
+     *
+     * Only an adb server can do this, which is why it is a transport method rather than something
+     * the pairing screen does for itself: the handshake is SPAKE2 plus a TLS 1.3 client certificate
+     * and no pure-Kotlin implementation of it exists, so the phone finds the device and the server
+     * does the cryptography. A transport with no server behind it refuses rather than pretending.
+     */
+    suspend fun pair(host: String, port: Int, code: String): Result<String> =
+        Result.failure(UnsupportedOperationException("$label can't pair with a device"))
+
+    /** whether [pair] will do anything — what the pairing screen checks before offering itself. */
+    val canPair: Boolean get() = false
+
+    /**
+     * is whatever is at the other end actually answering, and what does it call itself.
+     *
+     * Cheap by contract: a screen calls this to fail *before* asking someone to do something, rather
+     * than after. The pairing screen is the reason it exists — finding out there is no adb server
+     * only once a QR has been scanned and a device found is a minute of someone's time for a failure
+     * that was knowable up front.
+     */
+    suspend fun probe(): Result<String> = Result.success(label)
 
     /** reboot the device. */
     suspend fun reboot(serial: String): Result<Unit> =

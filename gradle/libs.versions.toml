@@ -32,6 +32,11 @@ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMul
 # predictive-back gesture from commonMain, and the alternative is an expect/actual over
 # androidx.activity.compose for three targets
 compose-ui-backhandler = { module = "org.jetbrains.compose.ui:ui-backhandler", version.ref = "composeMultiplatform" }
+
+# the QR scanner, android only. Play Services supplies the whole scanning UI and needs no camera
+# permission at all; the alternative is ML Kit's 2.5 MB bundled model plus a hand-written CameraX
+# preview and a runtime permission flow, for the same one screen
+play-services-code-scanner = { module = "com.google.android.gms:play-services-code-scanner", version = "16.1.0" }
 compose-ui-tooling-preview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
 

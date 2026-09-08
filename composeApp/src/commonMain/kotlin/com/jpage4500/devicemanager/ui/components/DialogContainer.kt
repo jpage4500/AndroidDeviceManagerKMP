@@ -21,6 +21,16 @@ val LocalDialogTitled = staticCompositionLocalOf { false }
  * [onEnter] is handled by the window rather than by the form, so the default button answers Enter
  * even when nothing inside has focus — a confirmation with no fields in it, say.
  */
+/**
+ * true where [DialogContainer] hands a dialog a **real OS window** — one with a title bar, draggable
+ * anywhere on screen, and left up when a second dialog opens from it.
+ *
+ * false on a phone, where a dialog is an overlay: it has no title bar to drag, nowhere to be moved
+ * to, and only one of them can be on screen at a time. Every difference between how a dialog looks
+ * on a desktop and on a phone comes from this one value — see [com.jpage4500.devicemanager.ui.dialog.BaseDialog].
+ */
+expect val dialogsAreWindows: Boolean
+
 @Composable
 expect fun DialogContainer(
     title: String,

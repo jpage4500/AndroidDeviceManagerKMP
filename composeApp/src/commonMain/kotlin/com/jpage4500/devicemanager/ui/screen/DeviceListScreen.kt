@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
@@ -108,30 +109,34 @@ private fun DeviceRow(
 
         Column(Modifier.weight(1f)) {
             Text(
-                text = device.displayName,
+                text = device.nameWithModel(),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            // the second line is whatever this device actually knows, in the order it's worth
-            // reading — a device that hasn't answered a getprop yet still shows its serial
-            Text(
-                text = listOfNotNull(
-                    device.serial.takeIf { it != device.displayName },
-                    device.os?.let { "Android $it" },
-                    Utils.bytesToDisplayString(device.freeSpace).takeIf { device.freeSpace != null },
-                ).joinToString("  ·  "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            // no serial here on purpose. A wireless one is
+            // "adb-RFCX20NB5TY-DBjlg4._adb-tls-connect._tcp" and eats the whole line to say nothing
+            // anyone reads; it is one tap away in the sheet. These three are what identifies a
+            // device across a bench
+            val detail = listOfNotNull(
+                device.phone,
+                device.os?.let { "Android $it" },
+                Utils.bytesToDisplayString(device.freeSpace).takeIf { device.freeSpace != null },
+            ).joinToString("  ·  ")
+            if (detail.isNotEmpty()) {
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
 
         if (device.batteryLevel != null) {
             Spacer(Modifier.width(Dimens.gap))
-            BatteryLevel(
+            BatteryGauge(
                 level = device.batteryLevel,
                 charging = device.powerStatus.isCharging,
             )
@@ -153,6 +158,26 @@ private fun DeviceRow(
                     AppIcon(Res.drawable.success, size = Dimens.icon, tint = Colors.rowSelectedText)
                 }
             }
+        }
+    }
+}
+
+/**
+ * the name, and the model after it when they aren't already the same thing.
+ *
+ * [Device.displayName] is the nickname when there is one and the model when there isn't, so a device
+ * nobody has renamed would otherwise read "Pixel 10a (Pixel 10a)". The model is dimmed: the name is
+ * what someone is looking for and the model is what tells two of them apart.
+ */
+@Composable
+private fun Device.nameWithModel(): AnnotatedString = buildAnnotatedString {
+    withStyle(SpanStyle(fontWeight = FontWeight.Medium)) { append(displayName) }
+    val model = model
+    if (model != null && model != displayName) {
+        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+            append("  (")
+            append(model)
+            append(")")
         }
     }
 }

@@ -15,9 +15,36 @@ private val log = LoggerConfig.createLogger("AdbHost")
 suspend fun adbConnect(host: String, port: Int): AdbOutcome<String> =
     hostCommand("host:connect:$host:$port")
 
+/** `adb version` — the cheapest question the server answers, so the one that asks if it is there. */
+suspend fun adbVersion(): AdbOutcome<String> = hostCommand("host:version")
+
 /** `adb disconnect <serial>`. */
 suspend fun adbDisconnect(serial: String): AdbOutcome<String> =
     hostCommand("host:disconnect:$serial")
+
+/**
+ * `adb pair <host>:<port> <code>` — Android 11+ wireless pairing.
+ *
+ * [port] is the **pairing** port the device advertises over mDNS while its pairing dialog is up, not
+ * the 5555 you connect to afterwards; the two are different and the pairing one is random.
+ *
+ * The whole point of going through the server is that it does the cryptography: pairing is a SPAKE2
+ * exchange followed by a TLS 1.3 session with client certificates, and there is no pure-Kotlin
+ * implementation of the first half. The server already holds the key material and speaks both.
+ * See docs/MOBILE-UI.md.
+ */
+suspend fun adbPair(host: String, port: Int, code: String): AdbOutcome<String> =
+    when (val outcome = hostCommand("host:pair:$code:$host:$port")) {
+        is AdbOutcome.Err -> outcome
+        // the server answers OKAY either way and says so in the sentence, as it does for connect —
+        // but here the failure wording is "Failed: ..." rather than "failed to ..."
+        is AdbOutcome.Ok ->
+            if (outcome.value.contains("successfully paired", ignoreCase = true)) {
+                outcome
+            } else {
+                AdbOutcome.Err(AdbError.CONNECT_FAILED, outcome.value.ifBlank { "pairing was refused" })
+            }
+    }
 
 private suspend fun hostCommand(command: String): AdbOutcome<String> {
     val connection = AdbConnection.openOrNull()

@@ -23,6 +23,8 @@
     <string name="connect_device_msg">Enter an IP address and port, or start an adb server this app can read.</string>
 
     <string name="filter_devices">Filter devices…</string>
+    <string name="filter">Filter…</string>
+    <string name="help">Help</string>
     <string name="cancel">Cancel</string>
     <string name="close">Close</string>
     <string name="ok">OK</string>
@@ -39,21 +41,27 @@
     <string name="connect_add">Add a device</string>
     <string name="connect_connected">Connected to %1$s · %2$d devices</string>
     <string name="connect_device_by_ip">Connect to a device</string>
-    <string name="connect_device_by_ip_msg">By IP address, over wireless debugging</string>
+    <string name="connect_device_by_ip_msg">Pair with its wireless debugging screen</string>
+    <string name="connect_direct_later">Connecting straight to another device, with no computer involved, is not built yet.</string>
     <string name="connect_forget">Forget</string>
     <string name="connect_host">Host</string>
-    <string name="connect_host_hint">192.168.0.12</string>
-    <string name="connect_ip_hint">192.168.0.100</string>
+    <string name="connect_host_hint">192.168.0.12 — or 0.0.0.0 for test devices</string>
     <string name="connect_later">Later</string>
     <string name="connect_manual">Manual entry</string>
     <string name="connect_name">Name</string>
-    <string name="connect_pair_qr">Pair a device with a QR code</string>
-    <string name="connect_pair_qr_msg">Needs a computer running adb on this network</string>
-    <string name="connect_paste">Paste connection</string>
-    <string name="connect_paste_none">No connection string on the clipboard</string>
+    <string name="connect_pair_cancel">Stop waiting</string>
+    <string name="connect_pair_checking">Checking the adb server…</string>
+    <string name="connect_pair_found">Found %1$s — pairing…</string>
+    <string name="connect_pair_needs_adb">Set the adb server host in Settings first — pairing is done by a computer running adb.</string>
+    <string name="connect_pair_qr">Pair with a QR code</string>
+    <string name="connect_pair_retry">Try again</string>
+    <string name="connect_pair_steps">On the other device: Settings ▸ Developer options ▸ Wireless debugging ▸ Pair device with QR code, then scan this.</string>
+    <string name="connect_pair_waiting">Waiting for a device to scan…</string>
     <string name="connect_saved">SAVED</string>
+    <string name="connect_scan_none">That QR code is not a Device Manager connection</string>
     <string name="connect_scan_qr">Scan a QR code</string>
     <string name="connect_scan_qr_msg">Device Manager on your computer shows one under Server ▸ Share</string>
+    <string name="connect_scan_unsupported">This device has no scanner — type the address below.</string>
     <string name="connect_server">Connect to a computer</string>
     <string name="connect_server_msg">Running Device Manager on your network</string>
     <string name="connect_token">Auth token</string>
@@ -137,6 +145,23 @@
     <string name="settings_tooltips">Show Tooltips</string>
     <string name="settings_tray">Stay in the menu bar when closed</string>
     <string name="settings_upload_logs">Send app logs to support</string>
+    <string name="settings_max_mirrors">Mirror windows at once</string>
+    <string name="settings_enter_ms">Value in milliseconds</string>
+    <string name="settings_enter_secs">Value in seconds</string>
+    <string name="settings_enter_mins">Value in minutes</string>
+    <string name="settings_enter_lines">Number of lines</string>
+    <string name="settings_enter_pt">Font size in points</string>
+    <string name="settings_unit_ms">ms</string>
+    <string name="settings_unit_secs">secs</string>
+    <string name="settings_unit_mins">mins</string>
+    <string name="settings_unit_pt">pt</string>
+    <string name="settings_value_never">Never</string>
+    <string name="settings_transport_auto">Automatic</string>
+    <string name="settings_transport_auto_desc">Remote URL if set</string>
+    <string name="settings_transport_adb">adb server</string>
+    <string name="settings_transport_adb_desc">USB and wireless</string>
+    <string name="settings_transport_remote">Device Manager</string>
+    <string name="settings_transport_remote_desc">Another instance</string>
 
     <string name="install_title">Choose an APK to install</string>
 

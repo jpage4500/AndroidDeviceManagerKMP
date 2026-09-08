@@ -183,6 +183,7 @@ kotlin {
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.kotlinx.coroutines.android)
+                implementation(libs.play.services.code.scanner)
             }
         }
 

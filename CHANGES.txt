@@ -42,3 +42,13 @@
 - enter 0.0.0.0 in either connect field to load test devices
 - phone: long-press a device to pick several, and remove them together
 - phone: connecting to a computer leads with paste, and hides manual entry
+- phone: pair a new device by showing it a QR code
+- phone: reach settings from the device list
+- phone: scan the QR on a computer running Device Manager to connect to it
+- phone: device rows show the model, phone number and battery percent
+- phone: the title bar no longer sits under the status bar
+- battery rows line up, and show a bolt whenever a device is charging
+- reading a Device Manager server no longer runs adb commands on its devices
+- settings are a list of icon rows, each opening the control that fits it
+- pick a slider, a stepper or a typed value for any numeric setting
+- choose which route devices are read over, instead of it being inferred

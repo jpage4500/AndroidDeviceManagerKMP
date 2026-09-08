@@ -147,30 +147,70 @@ fun BatteryLevel(level: Int?, charging: Boolean, modifier: Modifier = Modifier) 
         TableText("", modifier)
         return
     }
-    val color = when {
-        level > 30 -> Colors.online
-        level > 15 -> Colors.busy
-        else -> Colors.error
-    }
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(Dimens.batteryWidth, Dimens.batteryHeight)
-                .clip(RoundedCornerShape(2.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))
-                .padding(1.5.dp),
-        ) {
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(level.coerceIn(0, 100) / 100f)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(color)
-            )
-        }
+        BatteryBar(level)
         if (charging) {
             Spacer(Modifier.width(2.dp))
             AppIcon(Res.drawable.charging, size = 10.dp, tint = Colors.busy)
         }
     }
+}
+
+/**
+ * the same battery, stacked, for a phone row.
+ *
+ * The number goes **above** the bar rather than beside it: a 28dp table row has no second line so
+ * the desktop reads the bar, but a 68dp touch row does, and at arm's length the digits are what
+ * anyone actually reads — the bar is the thing you glance at across forty-five of them.
+ */
+@Composable
+fun BatteryGauge(level: Int?, charging: Boolean, modifier: Modifier = Modifier) {
+    if (level == null) return
+    Column(
+        modifier.width(Dimens.batteryGaugeWidth),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "$level%",
+            style = MaterialTheme.typography.labelSmall,
+            color = batteryColor(level),
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(2.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BatteryBar(level)
+            Spacer(Modifier.width(2.dp))
+            // the slot is there whether or not the bolt is, so plugging a device in doesn't move
+            // its own bar — and every row's bar lines up with every other row's
+            Box(Modifier.size(Dimens.icon)) {
+                if (charging) AppIcon(Res.drawable.charging, tint = Colors.busy)
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatteryBar(level: Int) {
+    Box(
+        Modifier
+            .size(Dimens.batteryWidth, Dimens.batteryHeight)
+            .clip(RoundedCornerShape(2.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))
+            .padding(1.5.dp),
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(level.coerceIn(0, 100) / 100f)
+                .clip(RoundedCornerShape(1.dp))
+                .background(batteryColor(level))
+        )
+    }
+}
+
+private fun batteryColor(level: Int): Color = when {
+    level > 30 -> Colors.online
+    level > 15 -> Colors.busy
+    else -> Colors.error
 }

@@ -1,14 +1,7 @@
 package com.jpage4500.devicemanager.ui.components
 
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.*
-import androidx.compose.ui.unit.*
-import com.jpage4500.devicemanager.resources.*
-import com.jpage4500.devicemanager.ui.theme.*
-import org.jetbrains.compose.resources.stringResource
+import com.jpage4500.devicemanager.ui.dialog.common.*
 
 /** what a [ConfirmDialog] is currently asking about; null when nothing is. */
 data class ConfirmRequest(
@@ -17,25 +10,19 @@ data class ConfirmRequest(
     val onConfirm: () -> Unit,
 )
 
-/** are you sure — for the handful of actions that can't be undone. */
+/**
+ * are you sure — for the handful of actions that can't be undone.
+ *
+ * The request-shaped wrapper is what every caller already holds; the dialog it draws is the ported
+ * [ConfirmationDialog], so a delete prompt in the file explorer reads the same as one in settings.
+ */
 @Composable
 fun ConfirmDialog(request: ConfirmRequest?, onDismiss: () -> Unit) {
     if (request == null) return
-    AppDialog(
+    ConfirmationDialog(
         title = request.title,
+        message = request.message,
         onDismiss = onDismiss,
-        confirmLabel = stringResource(Res.string.ok),
-        onConfirm = {
-            request.onConfirm()
-            onDismiss()
-        },
-    ) {
-        Column(Modifier.heightIn(max = 240.dp).verticalScroll(rememberScrollState())) {
-            Text(
-                text = request.message,
-                style = MaterialTheme.typography.bodySmall,
-                color = Colors.secondaryText,
-            )
-        }
-    }
+        onConfirm = request.onConfirm,
+    )
 }

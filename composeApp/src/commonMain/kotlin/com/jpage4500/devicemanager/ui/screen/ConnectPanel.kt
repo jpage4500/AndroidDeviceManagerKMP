@@ -1,7 +1,6 @@
 package com.jpage4500.devicemanager.ui.screen
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.*
@@ -9,10 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
-import androidx.compose.ui.geometry.*
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.platform.*
-import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
@@ -44,8 +39,6 @@ import org.jetbrains.compose.resources.stringResource
 fun ConnectPanel(modifier: Modifier = Modifier, startExpanded: Boolean = false) {
     var expanded by remember { mutableStateOf(startExpanded) }
     var route by remember { mutableStateOf<Route?>(null) }
-    val servers by ServerManager.servers.collectAsState()
-    val activeKey by ServerManager.activeKey.collectAsState()
 
     Column(
         modifier
@@ -62,14 +55,6 @@ fun ConnectPanel(modifier: Modifier = Modifier, startExpanded: Boolean = false) 
                 onClick = { expanded = true },
             )
             return@Column
-        }
-
-        if (servers.isNotEmpty()) {
-            SectionLabel(stringResource(Res.string.connect_saved))
-            servers.asReversed().forEach { server ->
-                SavedServerRow(server = server, active = server.key == activeKey)
-            }
-            HorizontalDivider(color = Colors.divider)
         }
 
         Route.entries.forEachIndexed { index, entry ->
@@ -90,57 +75,35 @@ fun ConnectPanel(modifier: Modifier = Modifier, startExpanded: Boolean = false) 
 /**
  * one route and, when it is open, the form that belongs to it.
  *
- * An expanded section is drawn as a single block — its own ground, a rounded edge and an accent
- * stripe down the left of both halves — because a form that simply appears below a row reads as the
- * next item in the list rather than as that row's contents.
+ * [ExpandableBlock] is the drawing: a form that simply appears below a row reads as the next item in
+ * the list rather than as that row's contents. The device list's computers open the same way.
  */
 @Composable
 private fun RouteBlock(entry: Route, open: Boolean, onToggle: () -> Unit) {
-    val shape = RoundedCornerShape(Dimens.corner)
-    val stripe = Colors.accent
-    val stripeWidth = with(LocalDensity.current) { Dimens.accentStripe.toPx() }
-    val background by animateColorAsState(
-        if (open) Colors.listBg else Color.Transparent,
-        label = "blockBackground",
-    )
-
-    Column(
-        Modifier
-            .fillMaxWidth()
-            // the same inset open or shut: making it conditional moved the icon and the title down
-            // and to the right at the instant the form appeared, which read as a stutter
-            .padding(Dimens.gap / 2)
-            .clip(shape)
-            .background(background)
-            // painted rather than laid out: the stripe has to be as tall as the row *and* the form,
-            // and a sibling in a Row can't know that height while the form is still animating
-            .drawBehind { if (open) drawRect(stripe, size = Size(stripeWidth, size.height)) },
-    ) {
-        OptionRow(
-            icon = entry.icon,
-            title = stringResource(entry.title),
-            subtitle = stringResource(entry.subtitle),
-            enabled = entry.enabled,
-            open = open,
-            onClick = onToggle,
-        )
-        AnimatedVisibility(
-            visible = open,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut(),
-        ) {
+    ExpandableBlock(
+        open = open,
+        header = {
+            OptionRow(
+                icon = entry.icon,
+                title = stringResource(entry.title),
+                subtitle = stringResource(entry.subtitle),
+                enabled = entry.enabled,
+                open = open,
+                onClick = onToggle,
+                // a route that isn't built yet says so where its chevron would be
+                trailing = if (entry.enabled) null else ({ Chip(stringResource(Res.string.connect_later)) }),
+            )
+        },
+        body = {
             when (entry) {
                 Route.SERVER -> ServerForm()
                 Route.DEVICE -> DeviceForm()
-                // pairing is drawn, disabled — the shape is real and the reason it doesn't work yet
-                // is on the row itself. see docs/MOBILE-UI.md
-                Route.PAIR -> Unit
             }
-        }
-    }
+        },
+    )
 }
 
-/** the three ways in, in the order the panel offers them. */
+/** the two ways in, in the order the panel offers them. */
 private enum class Route(
     val icon: DrawableResource,
     val title: StringResource,
@@ -149,7 +112,6 @@ private enum class Route(
 ) {
     SERVER(Res.drawable.server, Res.string.connect_server, Res.string.connect_server_msg),
     DEVICE(Res.drawable.device_remote, Res.string.connect_device_by_ip, Res.string.connect_device_by_ip_msg),
-    PAIR(Res.drawable.qr_code, Res.string.connect_pair_qr, Res.string.connect_pair_qr_msg, enabled = false),
 }
 
 /**
@@ -165,9 +127,8 @@ private enum class Route(
 @Composable
 private fun ServerForm() {
     val scope = rememberCoroutineScope()
-    val paste = rememberClipboardPaste()
     // resolved here rather than in the click handler: stringResource is a composable read
-    val nothingPasted = stringResource(Res.string.connect_paste_none)
+    val notOurQr = stringResource(Res.string.connect_scan_none)
 
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf(SavedServer.DEFAULT_PORT.toString()) }
@@ -196,48 +157,42 @@ private fun ServerForm() {
         }
     }
 
+    // the camera is the way in that needs no typing at all: Device Manager's Share Server dialog
+    // shows a QR of the very connection string SavedServer already reads
+    val scan = rememberQrScanner { text ->
+        val server = SavedServer.fromConnectionString(text)
+        if (server == null) {
+            status = Status(notOurQr, isError = true)
+        } else {
+            host = server.host
+            port = server.port.toString()
+            token = server.token
+            // show what was scanned, so a failure can be corrected rather than retried blind
+            manual = true
+            connect()
+        }
+    }
+
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Dimens.rowPadding).padding(bottom = Dimens.gapLarge),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // the camera is the way in that needs no typing at all — the desktop shows a QR of the same
-        // connection string its Share Server button copies. Drawn as the main action even while it
-        // is unbuilt, because that is where it belongs and nothing has to move when it lands
         CenteredButton(
             label = stringResource(Res.string.connect_scan_qr),
             icon = Res.drawable.qr_code,
-            enabled = false,
-            onClick = {},
+            enabled = scan != null && !busy,
+            onClick = { scan?.invoke() },
         )
         Spacer(Modifier.height(Dimens.gap))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = stringResource(Res.string.connect_scan_qr_msg),
-                style = MaterialTheme.typography.bodySmall,
-                color = Colors.secondaryText,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Spacer(Modifier.width(Dimens.gap))
-            Chip(stringResource(Res.string.connect_later))
-        }
-
+        Text(
+            text = stringResource(
+                if (scan != null) Res.string.connect_scan_qr_msg else Res.string.connect_scan_unsupported
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = Colors.secondaryText,
+            textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.height(Dimens.gap))
-        // pasting the connection string is the same one-step path without a camera, so it connects
-        // straight away rather than only filling the fields in
-        LinkButton(stringResource(Res.string.connect_paste), Res.drawable.paste, enabled = !busy) {
-            val server = SavedServer.fromConnectionString(paste())
-            if (server == null) {
-                status = Status(nothingPasted, isError = true)
-            } else {
-                host = server.host
-                port = server.port.toString()
-                token = server.token
-                // reveal what was pasted, so a failure can be corrected rather than retried blind
-                manual = true
-                connect()
-            }
-        }
 
         if (!manual) {
             LinkButton(stringResource(Res.string.connect_manual), enabled = !busy) { manual = true }
@@ -264,105 +219,116 @@ private fun ServerForm() {
 }
 
 /**
- * a device at an address.
+ * a device, reached without a computer in the middle.
  *
- * what this actually does depends on what the app is reading: against an adb server it is
- * `host:connect`, and the server dials the device on our behalf. Against a Device Manager server
- * there is no endpoint for it, and the transport says so rather than pretending.
+ * That is what this section is *for*, and only half of it exists. Showing a QR for the other device
+ * to scan works today, but the pairing behind it is still done by an adb server — and there is no
+ * address field, because typing one would go through that server too. Reaching another phone with
+ * nothing else involved needs the direct `adbd` transport, which is not written; see
+ * docs/MOBILE-UI.md for what that costs.
  */
 @Composable
 private fun DeviceForm() {
-    val scope = rememberCoroutineScope()
-    val last = remember { WirelessManager.lastAddress() }
-
-    var host by remember { mutableStateOf(last?.host ?: "") }
-    var port by remember { mutableStateOf((last?.port ?: WirelessDevice.DEFAULT_PORT).toString()) }
-    var busy by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf<Status?>(null) }
-
-    fun connect() {
-        if (busy || host.isBlank()) return
-        busy = true
-        status = null
-        scope.launch {
-            val atPort = port.toIntOrNull() ?: WirelessDevice.DEFAULT_PORT
-            DeviceManager.connect(host.trim(), atPort)
-                .onSuccess {
-                    // the test-data address isn't a device, so it doesn't go in the remembered list
-                    if (host.trim() != FakeTransport.HOST) WirelessManager.add(host.trim(), atPort)
-                    status = Status(it, isError = false)
-                }
-                .onFailure { status = Status(it.message ?: "couldn't connect", isError = true) }
-            busy = false
-        }
-    }
+    val transport by DeviceManager.transport.collectAsState()
+    var pairing by remember { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Dimens.rowPadding).padding(bottom = Dimens.gapLarge),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        LabelledField(Res.string.connect_host, host, KeyboardType.Uri, { host = it }, ::connect, Res.string.connect_ip_hint)
-        LabelledField(Res.string.connect_port, port, KeyboardType.Number, { port = it.digits(5) }, ::connect)
-        Spacer(Modifier.height(Dimens.gapLarge))
-        CenteredButton(
-            label = stringResource(Res.string.connect),
-            enabled = !busy && host.isNotBlank(),
-            onClick = ::connect,
-        )
-        StatusText(status)
+        if (pairing) {
+            PairPanel(onDone = { pairing = false })
+        } else {
+            CenteredButton(
+                label = stringResource(Res.string.connect_pair_qr),
+                icon = Res.drawable.qr_code,
+                // pairing needs an adb server behind us to do the cryptography, so the button is
+                // only offered where it can work — see PairingSession
+                enabled = transport.canPair,
+                onClick = { pairing = true },
+            )
+            Spacer(Modifier.height(Dimens.gap))
+            Text(
+                text = stringResource(
+                    if (transport.canPair) Res.string.connect_pair_steps else Res.string.connect_pair_needs_adb
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = Colors.secondaryText,
+                textAlign = TextAlign.Center,
+            )
+        }
+
+        // there is deliberately no address field here. Typing one would reach the device through a
+        // desk's adb server, which is the opposite of what this section is for: it exists to reach
+        // another phone with no computer in the middle, and that needs the direct adbd transport
+        Spacer(Modifier.height(Dimens.gap))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(Res.string.connect_direct_later),
+                style = MaterialTheme.typography.bodySmall,
+                color = Colors.menuDisabledText,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(Dimens.gap))
+            Chip(stringResource(Res.string.connect_later))
+        }
     }
 }
 
+/**
+ * the QR itself, and what happened to it.
+ *
+ * The session runs for as long as this is composed: leaving the panel stops the mDNS browse, which
+ * is the whole reason it is a `LaunchedEffect` over a suspending [PairingSession.run] rather than a
+ * start/stop pair somebody has to remember to call.
+ */
 @Composable
-private fun SavedServerRow(server: SavedServer, active: Boolean) {
+private fun PairPanel(onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = Dimens.touchRowHeight)
-            .padding(horizontal = Dimens.rowPadding),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AppIcon(
-            res = Res.drawable.server,
-            size = Dimens.iconLarge,
-            tint = if (active) Colors.online else Colors.offline,
-        )
-        Spacer(Modifier.width(Dimens.rowPadding))
-        Column(Modifier.weight(1f)) {
-            Text(server.displayName, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    val session = remember { PairingSession() }
+    val state by session.state.collectAsState()
+    LaunchedEffect(session) { session.run() }
+
+    val current = state
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        // no QR while the server is still in question, and none once it turned out not to be there:
+        // a code nobody can act on is an invitation to waste a minute scanning it
+        if (current !is PairState.Checking && !(current is PairState.Failed && !current.canRetry)) {
             Text(
-                server.key,
+                text = stringResource(Res.string.connect_pair_steps),
                 style = MaterialTheme.typography.bodySmall,
                 color = Colors.secondaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
             )
+            Spacer(Modifier.height(Dimens.gap))
+            QrImage(session.qrContent, Modifier.fillMaxWidth(0.8f))
+            Spacer(Modifier.height(Dimens.gap))
         }
-        TextButton(
-            enabled = !busy,
-            onClick = {
-                if (active) {
-                    ServerManager.disconnect()
-                } else {
-                    busy = true
-                    scope.launch {
-                        ServerManager.connect(server).onFailure {
-                            ToastManager.showToast(it.message ?: "couldn't connect", success = false)
-                        }
-                        busy = false
-                    }
-                }
+
+        Text(
+            text = when (current) {
+                is PairState.Checking -> stringResource(Res.string.connect_pair_checking)
+                is PairState.Waiting -> stringResource(Res.string.connect_pair_waiting)
+                is PairState.Found -> stringResource(Res.string.connect_pair_found, current.address)
+                is PairState.Paired -> current.message
+                is PairState.Failed -> current.message
             },
-        ) {
-            Text(
-                stringResource(if (active) Res.string.disconnect else Res.string.connect),
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        TextButton(onClick = { ServerManager.forget(server.key) }) {
-            Text(stringResource(Res.string.connect_forget), style = MaterialTheme.typography.bodySmall)
+            style = MaterialTheme.typography.bodySmall,
+            color = when (current) {
+                is PairState.Paired -> Colors.online
+                is PairState.Failed -> Colors.error
+                else -> Colors.secondaryText
+            },
+            textAlign = TextAlign.Center,
+        )
+        Row {
+            if (current is PairState.Failed && current.canRetry) {
+                LinkButton(stringResource(Res.string.connect_pair_retry)) {
+                    scope.launch { session.retry() }
+                }
+            }
+            LinkButton(stringResource(Res.string.connect_pair_cancel), onClick = onDone)
         }
     }
 }
@@ -449,65 +415,6 @@ private fun LinkButton(
             Spacer(Modifier.width(Dimens.gap))
         }
         Text(label, style = MaterialTheme.typography.bodySmall)
-    }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = Colors.secondaryText,
-        modifier = Modifier.padding(horizontal = Dimens.rowPadding, vertical = Dimens.gap),
-    )
-}
-
-@Composable
-private fun OptionRow(
-    icon: DrawableResource,
-    title: String,
-    subtitle: String?,
-    enabled: Boolean = true,
-    open: Boolean? = null,
-    onClick: () -> Unit,
-) {
-    val tint = if (enabled) Colors.accent else Colors.menuDisabledText
-    // the chevron turns rather than swapping icon, so the row says which way it is going
-    val turn by animateFloatAsState(if (open == true) 90f else 0f, label = "chevron")
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .heightIn(min = Dimens.touchRowHeight)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = Dimens.rowPadding, vertical = Dimens.gap),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        AppIcon(res = icon, size = Dimens.iconLarge, tint = tint)
-        Spacer(Modifier.width(Dimens.rowPadding))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = if (enabled) Colors.primaryText else Colors.menuDisabledText,
-            )
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Colors.secondaryText,
-                )
-            }
-        }
-        when {
-            !enabled -> Chip(stringResource(Res.string.connect_later))
-            open != null -> AppIcon(
-                res = Res.drawable.arrow_right,
-                modifier = Modifier.rotate(turn),
-                size = Dimens.icon,
-                tint = Colors.secondaryText,
-            )
-        }
     }
 }
 

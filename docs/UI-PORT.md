@@ -305,12 +305,44 @@ differently on a bench.
 
 ### Dialogs
 
-**Nothing uses Material3's `AlertDialog`.** It draws a 28dp-radius floating card with 24dp padding
-and pill buttons — a phone dialog on a desktop, and nothing else in this app looks like it. It also
-doesn't answer Enter or Escape. `AppDialog` is a plain panel with the buttons bottom-right where a
-desktop puts them. `AppTextField` replaces `OutlinedTextField` for the same reason (floating label,
-56dp minimum height, Material's focus animation), and `AppCheckbox` replaces `Checkbox`, which is
-48dp of touch target.
+**There are two families, and new work belongs in the second one.**
+
+`BaseDialog` (`ui/dialog/`) is the one ported from DashboardWeatherKMP and the shape all three of
+Joe's KMP apps now share: a coloured title bar with an icon and a close X, a scrolling body, and a
+full-width CANCEL / OK row. Around it sit the generic dialogs in `ui/dialog/common/` —
+`ConfirmationDialog`, `TextInputDialog`, `OptionsDialog` (radio buttons), `MultiSelectOptionsDialog`
+(checkboxes), `SliderDialog`, `StepperDialog` — and the settings rows in `ui/setting/` that open
+them. **A new dialog goes here.** `ConfirmDialog` / `InputDialog` are thin request-shaped wrappers
+over the first two, so every existing `ConfirmRequest` and `InputRequest` call site draws the new
+one without knowing.
+
+`AppDialog` (`ui/components/`) is the older desktop-only panel and is what Command, Logs and Send
+Input still use. It is a plain panel with the buttons bottom-right where a desktop puts them, inside
+a real OS window — see the next two paragraphs, which still describe it exactly.
+
+**Nothing in either family uses Material3's `AlertDialog`.** It draws a 28dp-radius floating card
+with 24dp padding and pill buttons — a phone dialog on a desktop — and it doesn't answer Enter or
+Escape. `AppTextField` replaces `OutlinedTextField` for the same reason (floating label, 56dp
+minimum height, Material's focus animation), and `AppCheckbox` replaces `Checkbox`, which is 48dp of
+touch target.
+
+**`BaseDialog` draws in-window on every platform**, unlike `AppDialog`. Two things make that work:
+
+- **`isTopDialog()`** (`ui/dialog/DialogStack.kt`). A dialog opened from another one is a step
+  deeper into one flow, not a second thing on screen, so only the innermost one draws. The levels
+  behind it stay composed and keep their scroll position. This is what lets a `SliderDialog` open a
+  type-a-value `TextInputDialog` over itself.
+- **The card takes focus, but yields it.** `BaseDialog` requests focus on its own card so Enter and
+  Escape work in a dialog with nothing focusable in it. That request is declared *before* the
+  content, so a field inside that asks for focus runs later and wins — get the order wrong and the
+  soft keyboard never comes up on a phone.
+
+**Settings rows are sized twice.** `SettingItem`, `SettingSwitchItem`, `SettingSliderItem` and
+`SettingStepperItem` read `LocalCompactUi` (provided by `App(compact)`) through `Dimens`. The
+weather app's row is a 26dp icon and a 20sp label read at arm's length; the same row in a 560dp
+desktop form window is cartoonish, and the desktop is the workload that matters. The value on the
+right is red on purpose and is the one place in the app that uses red for something that isn't
+wrong — in a list of thirty rows it is the only part anyone scans.
 
 **A dialog is a real window on the desktop.** `DialogContainer` is an `expect`: the desktop actual is
 a `DialogWindow` with a title bar and a close button, auto-sized to its form, which is what the Swing

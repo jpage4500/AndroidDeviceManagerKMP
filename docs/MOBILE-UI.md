@@ -56,11 +56,13 @@ Two things block it right now, both worth knowing before any of this is written:
 │ Devices                    ⟳ ⚙  │
 ├─────────────────────────────────┤
 │ CONNECTED · 2                   │
-│ ● Pixel 10a            87% ⚡   │
-│   192.168.0.147 · Android 16    │
+│                            87%  │
+│ ● joe's pixel (Pixel 10a) [==]⚡│
+│   555-0101 · Android 16 · 21.4G │
 ├─────────────────────────────────┤
-│ ● kitchen 7            3.6G     │
-│   emulator-5554 · joe's imac    │  ← which connection it came through
+│                            46%  │
+│ ● kitchen 7 (Pixel 8 Pro) [=  ] │
+│   Android 15 · 3.6G             │
 ├─────────────────────────────────┤
 │ NOT CONNECTED · 3               │
 │ ○ Pixel 8                       │
@@ -80,14 +82,32 @@ below it, and the connect panel as the last item. One `LazyColumn` with sticky h
 lists — the sections are a grouping of one collection, and a phone that shows an empty "CONNECTED"
 header above a full "NOT CONNECTED" one has told the user everything they need in one glance.
 
-**A row is two lines, not ten columns.** Name and the live numbers on the first line, identity on the
-second. `Dimens.touchRowHeight` (68dp) is already the row height, and `DeviceListScreen` already
-draws roughly this row — what it lacks is the sections, the connection name and the offline half.
+**A row is two lines, not ten columns**, in 68dp (`Dimens.touchRowHeight`).
 
-**The second line says where the device came from** once more than one connection can exist. A
-device reached directly shows its address; a device belonging to a desk shows that desk's name. This
-is the Swing app's per-server colour in a form that survives on a phone, where a 4px colour chip is
-not a label.
+- **The first line names the device**, with the model in dimmer type after it when the two differ.
+  `Device.displayName` is already the nickname when there is one and the model when there isn't, so
+  appending unconditionally would give "Pixel 10a (Pixel 10a)". The name is what someone is looking
+  for; the model is what tells two of them apart.
+- **The second line is the phone number, the Android version and the free space** — and *not* the
+  serial. A wireless serial is `adb-RFCX20NB5TY-DBjlg4._adb-tls-connect._tcp`, which eats the whole
+  line to say nothing anyone reads at a glance. It is one tap away in the sheet. If a device knows
+  none of the three yet the line is left out rather than drawn empty.
+- **The battery is stacked**: the percentage above the bar, with a charging bolt beside it. The
+  desktop's one-line `BatteryLevel` stays as it is — a 28dp table row has no second line, and across
+  forty-five rows the bar is what you glance at. On a phone, at arm's length, the digits are what you
+  read. The whole block is a **fixed width** with the bolt's slot always reserved, so that "100%"
+  doesn't push its bar further out than "99%" and a device that starts charging doesn't shift its own
+  bar sideways. A column of bars that don't line up is worse than no bars.
+
+  Whether a device *is* charging is read from `dumpsys battery`'s `status:` as well as its
+  "AC powered" / "USB powered" lines. The plug lines say which plug is live and are the better
+  answer when one of them matches, but they are OEM-worded and a dock may name none of them —
+  `status: 2` (CHARGING) or `5` (FULL) is the fallback, and without it the bolt was missing on
+  exactly the devices most likely to be on a charger permanently.
+
+**Which connection a device came through** belongs on the sheet, not the row. It is in the sheet's
+subtitle next to the serial: with two lines and a battery there is no room for a fourth thing, and a
+desk's name is not what anyone is scanning the list for.
 
 ### The "not connected" half
 
@@ -200,10 +220,17 @@ whole of the jank — the expand animation itself was fine.
 **A form's one real action is centred.** A button hard against the left edge of a panel reads as a
 label rather than as the thing to press.
 
-**The keyboard must not sit on the fields.** The phone's whole layout takes `imePadding()`, so the
-list underneath gets shorter and Compose's own scroll-the-focused-field-into-view has a viewport that
-knows it shrank. Padding the field instead leaves the scroll container full height, and the field
-scrolls behind the keyboard where nothing can reach it.
+**The content is inset from the system, the background is not.** `MainActivity` calls
+`enableEdgeToEdge()`, so the window genuinely extends behind the status and navigation bars — which
+is what lets the watermark run to the edges, and what had the title sitting under the clock until
+this was handled. `safeDrawingPadding()` goes on the *content* column rather than on the `Box` that
+paints the background, so both are true at once.
+
+**That is also what keeps the keyboard off the fields.** `safeDrawing` is the union of the system
+bars, the display cutout and the IME, so the layout shrinks when the keyboard opens — and Compose
+only scrolls a focused field into view within a viewport that knows it got shorter. Padding the field
+instead leaves the scroll container full height and the field scrolls behind the keyboard where
+nothing can reach it.
 
 ```
 ┌─────────────────────────────────┐
@@ -222,10 +249,8 @@ scrolls behind the keyboard where nothing can reach it.
 │  │ ┃      Manual entry       │  │
 │  ├───────────────────────────┤  │
 │  │ [dev]  Connect to a device▸│ │
-│  │        by IP address      │  │
-│  ├───────────────────────────┤  │
-│  │ [qr]   Pair a device with │  │
-│  │        a QR code    (Later)│ │
+│  │        pair with its      │  │
+│  │        wireless debugging │  │
 │  └───────────────────────────┘  │
 │                                 │
 │  Found on this network:         │
@@ -235,12 +260,25 @@ scrolls behind the keyboard where nothing can reach it.
 
 Ordered by how likely each is to work, not by how interesting it is.
 
-**Scanning is not a route of its own — it is how you reach a computer.** It was a fourth row at
-first, which read as a fourth unrelated thing to try; it belongs inside "Connect to a computer" as
-that section's main action, because that is the only thing a scan does. Inside the section the three
-ways are ordered by how little work each is: **scan** needs nothing typed, **paste connection** is
-the same thing without a camera and connects straight away rather than only filling the fields, and
-**manual entry** is a link that reveals the three fields — most people should never see them.
+**A QR code is not a route — it is how you reach the thing behind it.** Both QR flows started as
+rows of their own, which read as unrelated things to try; each belongs inside the section it serves,
+as that section's main action. So there are two rows, and each is ordered by how little work its ways
+in take:
+
+- **Connect to a computer** — *scan* the QR that Device Manager shows on its Share Server dialog
+  (nothing typed at all), then *manual entry* behind a link for the address, port and token.
+- **Connect to a device** — *pair with a QR code*, which this app **shows** and the other device
+  scans. No address field, deliberately: see below.
+
+The two QRs point in opposite directions and it is worth being clear which is which — one has our
+camera reading someone else's screen, the other has our screen being read by someone else's camera.
+
+**The two sections mean different things, and only one of them is finished.** A computer is reached
+over the Device Manager HTTP API and works today. A *device* is meant to be reached **directly, with
+no computer anywhere** — that is the whole point of the section — and that needs the `adbd`
+transport, which is not written. So there is no address field there: typing one would quietly go
+through a desk's adb server, which is the opposite of what the section says it does. The QR pairing
+in it works, but it still leans on a desk for the handshake, and the section says so.
 
 ### Route 3, first: connect to a Device Manager server
 
@@ -278,35 +316,55 @@ Three things to get right:
   Manager server, the "connect a device by IP" option is about *this phone*, not about the desk — and
   the panel should say so rather than silently doing something else.
 
+**Nothing on this route runs a shell command.** `/api/devices` already carries the battery, the free
+space, the carrier, the phone number, the IMEI, the custom properties and the boot time — the server
+did that work when it built the list. Asking again with `/api/execute` is two `adb shell` round trips
+per device per refresh, run on someone else's machine, for answers that arrived with the list. So
+`DeviceTransport.hasDeviceDetails` is true here, `DeviceManager.fetchDetails` returns immediately,
+and the merge that protects locally-fetched values is skipped — left in, it would hold the first
+battery reading forever, because it exists to defend fields the adb device list has no way of
+knowing.
+
+**And the list itself is not re-read on a fast timer.** `/api/info` is polled every five seconds,
+which is an in-memory device count and nothing more; `/api/devices` is re-read only when that count
+changes, or when `DETAILS_REFRESH_SECS` elapses. A device plugged in at the desk still appears within
+seconds, without the phone asking the desk to survey its whole bench every three.
+
 **Mirroring over this route should use `/ws/screen`, not polled `/api/screenshot`.** The websocket
 pushes JPEG at a server-controlled interval with `intervalMs` and `quality` messages back;
 `RemoteHttpTransport` currently polls, which on a phone is a round trip and a fresh JPEG decision
 every 250ms. That is the mobile mirror's path, not a nice-to-have.
 
-### Route 3b: scan a QR code from the desktop
+### Route 3b: scan a QR code from the computer — **built**
 
-The same connection string, read by the camera instead of the keyboard. The desktop shows a QR of its
-`adm://…` string; the phone points at the screen and is connected. Nothing about the protocol changes
-— this is purely how the token gets across.
+The same `adm://` connection string, read by the camera instead of the keyboard. Device Manager's
+Share Server dialog shows a QR of it (`ConnectionQrCodeDialog` in the Swing app); the phone points at
+the screen and is connected. Nothing about the protocol changes — this is purely how a sixteen
+character token gets across without anyone typing it, and it is the single largest usability win in
+the app for what it costs.
 
-This is the single largest usability win available and it costs almost nothing:
+`rememberQrScanner` returns the function that starts a scan, or **null** where a platform has no
+scanner — the button is disabled rather than offered and doing nothing.
 
-- **iOS decodes QR with no dependency at all** — `AVCaptureMetadataOutput` with
-  `AVMetadataObject.ObjectType.qr`.
-- **Android needs one.** ML Kit barcode scanning is the obvious choice and is several MB; CameraX
-  plus ZXing core is smaller. Either is a real dependency and wants the reason written down before
-  it lands — see the rule in CLAUDE.md.
-- Behind one `expect suspend fun scanQrCode(): String?`, so the panel doesn't know which.
-- Needs a camera permission on both, and a usage string in `Info.plist`.
+- **iOS decodes QR with no dependency at all** — an `AVCaptureSession` with an
+  `AVCaptureMetadataOutput` asked for `AVMetadataObjectTypeQRCode`. What has to be hand-written is
+  the view controller around it, because Compose has no camera preview. Needs
+  `NSCameraUsageDescription`, which is now in `Info.plist`.
+- **Android takes one dependency**, `play-services-code-scanner`. It is the smallest thing that
+  works: the scan runs in a Play Services activity outside this process, so there is **no camera
+  permission to request** and no preview, permission flow or lifecycle to write. The alternative was
+  ML Kit's 2.5 MB bundled model plus a hand-written CameraX preview, for the same one screen.
+- **The desktop has no scanner and shouldn't** — a desktop is the machine *showing* the QR, and a
+  webcam pointed at your own screen is not a connection flow.
 
-The desktop side is a new dialog next to the existing Share Server one, and **generating** a QR is
-pure `commonMain` — a QR encoder is a few hundred lines and draws to a Compose `Canvas`, no
-dependency and no platform code.
+Pasting the connection string used to sit next to this and has been removed: scanning is strictly
+less work, and two ways to do the same thing on the same panel is one of them going stale.
 
-### Route 1: connect to a device by IP address
+### Route 1: connect to a device
 
-An address and a port, defaulting to 5555, with Connect. What actually happens depends on what the
-phone is connected to, and this is where it gets interesting:
+Pairing by QR is the main path here (below); typing an address is the fallback behind **Manual
+entry**. An address and a port, defaulting to 5555, with Connect — and what that actually does
+depends on what the phone is connected to:
 
 | Situation | What "connect" means | Status |
 |---|---|---|
@@ -330,43 +388,72 @@ The prefill rule from the desktop's `ConnectScreen` is worth keeping: open on th
 connected to with its final octet selected, so the phone next to the last one is a few keystrokes.
 With a numeric IME.
 
-### Route 2: pair a device with a QR code
+### Route 2: pair a device with a QR code — **built**
 
-The phone shows a QR; the target Android device scans it from Settings ▸ Developer options ▸ Wireless
-debugging ▸ *Pair device with QR code*.
+Inside the device section, as its main action. This app shows a QR; the target Android device scans
+it from Settings ▸ Developer options ▸ Wireless debugging ▸ *Pair device with QR code*.
 
-The QR itself is trivial and already documented by the Swing app's `QrCodeDialog`:
+The QR content is the format the Swing app's `QrCodeDialog` already documents:
 
 ```
 WIFI:T:ADB;S:ADB_WIFI_<20 random chars>;P:<20 random chars>;;
 ```
 
-What happens after the scan is the whole problem. The target starts advertising
-`_adb-tls-pairing._tcp.local.` on a random port, and whoever wants to pair with it must complete a
-**SPAKE2 handshake and then a TLS 1.3 session with client certificates**, using that password. There
-is no pure-Kotlin implementation of SPAKE2, which ADB-TRANSPORTS.md calls the one genuinely unsolved
-piece of this project.
+What happens after the scan is the part that decides the design. The target starts advertising
+`_adb-tls-pairing._tcp.local.` on a **random** port, and whoever pairs with it must complete a
+**SPAKE2 handshake and then a TLS 1.3 session with client certificates** using that password. There
+is no pure-Kotlin SPAKE2 — ADB-TRANSPORTS.md calls it the one genuinely unsolved piece of this
+project — so the phone does not do it. It does what the Swing app does instead: **find the device,
+and hand it to an adb server**, which already holds the key material and speaks both halves.
 
-The Swing app does not implement it either — and how it avoids doing so is the answer for mobile
-too. `QrCodeDialog` only does the **discovery**, over JmDNS; when the service resolves it hands the
-address and the password to the adb server as `host:pair:<code>:<host>:<port>` (jadb's
-`HostPairWithRemoteTcpDevice`) and lets the server do the crypto.
+So the flow is split across four pieces, and each is where it is for a reason:
 
-So there are two versions of this button, and only one of them is buildable now:
+| Piece | Where | Why there |
+|---|---|---|
+| the QR encoder | `util/QrCode.kt` | pure `commonMain`, ~350 lines, no dependency |
+| drawing it | `ui/components/QrImage.kt` | a Compose `Canvas`, so no image encoder either |
+| finding the device | `util/Mdns.kt` + three actuals | mDNS is the one part no socket library gives you |
+| the handshake | `DeviceTransport.pair` → `host:pair` | only an adb server can do it at all |
 
-- **Delegated (buildable).** The phone shows the QR and browses mDNS for the pairing service — both
-  platform APIs, no crypto — then sends `host:pair:…` to whichever adb server it is reading. The
-  newly paired device attaches to that desk, which is where the phone is already getting its list
-  from, so it simply appears. Needs a `pair(host, port, code)` method on `DeviceTransport`, an
-  `AdbServerTransport` implementation of it, and the mDNS `expect` that route 1 wants anyway.
-- **Standalone (not buildable).** A phone with no desk anywhere has to do SPAKE2 itself. Deferred
-  indefinitely; the sidestep, if a standalone phone matters, is a device already on legacy
-  `adb tcpip 5555` with plain RSA auth — which is route 1's direct case and is what
-  [scrcpy-mobile](https://github.com/wsvn53/scrcpy-mobile) ships with.
+**The encoder is hand-written**, for the reason the adb client is: everything this app needs a QR for
+is short ASCII, and every library that does it is either Android-only or a megabyte of jar. Byte
+mode, versions 1–10, all four ECC levels, with the mask chosen by the spec's four penalty rules. It
+was checked by rendering 56 codes across every version and ECC level and decoding each of them back
+with Apple's Vision framework; all 56 round-tripped, and anything longer than a version-10 code
+returns null rather than guessing.
 
-**So the button has a precondition**, and the panel must say it rather than fail: pairing needs a
-computer running adb on this network. Offering an action that cannot work is worse than not offering
-it.
+**mDNS is platform code on all three targets** and there is no way around it — ktor-network has no
+mDNS, and multicast DNS by hand is a protocol rather than a helper. `NsdManager` on Android,
+`NSNetServiceBrowser` on iOS, and **nothing on the desktop**: the JVM has no mDNS without JmDNS,
+which is a dependency for one screen a desktop doesn't need, since a desktop running this app is
+already running the adb server that `adb pair` talks to. Two details cost time and are worth keeping:
+Android's `resolveService` handles one lookup at a time and fails rather than queues, so the actual
+queues; and iOS hands back raw `sockaddr` bytes rather than a string, read octet by octet so no host
+byte order is assumed.
+
+**The button is only offered where it can work, and the server is asked before anyone is asked.**
+Both halves of that were learned by running it:
+
+- `canPair` was true for any `AdbServerTransport`, and a phone's default address is `127.0.0.1`.
+  There is no adb server inside an Android or iOS app, so the button was offered, a QR was shown, a
+  device scanned it, mDNS found it at `192.168.0.85:45615` — and only *then* did it say
+  `no adb server on 127.0.0.1`. `canPair` now excludes loopback on anything that isn't a desktop, and
+  the row says to set the adb server host in Settings.
+- The remaining case is a host that *is* set but isn't answering — the desk asleep, or its server not
+  started with `-a`. So `PairingSession` calls `DeviceTransport.probe()` (`host:version`, the
+  cheapest thing the server answers) **before** it shows a QR at all, and shows the failure instead.
+
+**A failure can be retried without starting over.** mDNS announces a service once and then goes
+quiet: `onServiceFound` does not fire again for a device already known, so a pairing that failed for
+any transient reason would otherwise need the target's dialog closed and reopened. The resolved
+address is kept and a Try again link re-attempts with it.
+
+**Settings had to become reachable on the phone for any of this to work** — the adb server host lives
+there, and there was no way in. See below.
+
+**Still not possible: a phone with no desk at all.** That needs SPAKE2 in the app. The sidestep, if
+it ever matters, is a device already on legacy `adb tcpip 5555` with plain RSA auth — route 1's
+direct case, and what [scrcpy-mobile](https://github.com/wsvn53/scrcpy-mobile) ships with.
 
 ### Test devices
 
@@ -457,9 +544,21 @@ time, not vanish. That is the section's whole purpose.
 
 ## Settings
 
-Small, and mostly the connection list. `SettingsScreen` exists for the desktop; the phone's version
-is the same prefs at touch size: which connections are saved (with Edit and Forget), Keep connected,
-mirror quality/interval, and the log-file link the desktop has.
+The gear in the title bar opens the desktop's own `SettingsScreen` in the phone's overlay container.
+It had to be reachable before anything else could be tested, because **the adb server address lives
+there**: a phone's `AdbServerTransport` defaults to `127.0.0.1:5037`, which on a phone is nothing at
+all, so until that host is set to a desk the app can only read a Device Manager server or the test
+devices — and pairing, which needs an adb server behind it, can never be offered.
+
+It is now one screen at two sizes rather than a desktop form squeezed onto a phone. The rows come
+from `ui/setting/` (ported from DashboardWeatherKMP) and read `LocalCompactUi` through `Dimens`, so
+the phone gets a 26dp icon and a 20sp label against the desktop's 18dp and 14sp — see the Dialogs
+section of [UI-PORT.md](UI-PORT.md). Tapping a row opens the control that fits what it holds: a
+slider for a duration, +/- for a small count, a list of radio buttons for the transport, a field for
+an address, all of them at touch size.
+
+Still missing on the phone: which connections are saved (with Edit and Forget), Keep connected, and
+mirror quality.
 
 ## Build order
 
@@ -480,15 +579,34 @@ Each step leaves the app usable and compiles on all three targets.
 3. **The lifecycle seam.** `isForeground`, reconnect on return, stop polling on leave. iOS needs it
    and everything after it assumes it.
 4. **The list's two sections**, and remembered offline devices.
-5. **QR scan** for a server's connection string, and QR generate on the desktop.
+5. ~~**QR scan** for a server's connection string~~ **Done.** `ui/components/QrScanner.kt` with a
+   Play Services actual on Android and an AVFoundation one on iOS; the desktop has none. The Swing
+   app already shows the QR.
 6. **Many connections at once** — connection id on `Device`, address off the `AdbConnection` global,
    `DeviceManager` holding a list. The one change that must be measured against 45 devices on hubs
    before it lands.
-7. **`host:connect` and mDNS discovery**, which is route 1 through a desk.
-8. **The Android foreground service.**
-9. **Delegated QR pairing** — mDNS plus `host:pair` on the adb server.
-10. **Direct to `adbd`** with RSA auth, if a phone should work with no desk at all. SPAKE2, only if
-    ever.
+7. ~~**`host:connect` and mDNS discovery**~~ **Done.** `AdbServerTransport.connect`, and
+   `util/Mdns.kt` with actuals for Android and iOS.
+8. ~~**Delegated QR pairing**~~ **Done.** `util/QrCode.kt`, `ui/components/QrImage.kt`,
+   `manager/PairingSession.kt` and `host:pair` behind `DeviceTransport.pair` — compile-verified and
+   encoder-verified, but the pairing round trip itself needs two real devices and an adb server.
+9. **The Android foreground service.**
+10. **Direct to `adbd`**, which is what "Connect to a device" is *for* and the reason its address
+    field is switched off today. Two problems, and only one is hard: the **transport** is the adb
+    device protocol — 24-byte framing, `CNXN`/`OPEN`/`WRTE`, pure `commonMain` — and the **trust**
+    step is the one with no pure-Kotlin answer. Three ways through it, cheapest first:
+
+    - **Legacy `adb tcpip 5555`.** Plain RSA auth, no TLS: sign a 20-byte token with RSA-2048 and a
+      SHA-1 DigestInfo prefix *without hashing it*, plus adb's 524-byte pubkey blob. `scrcpy-mobile`
+      ships this and is on the App Store. The catch is the bootstrap — something must run
+      `adb tcpip 5555` on the target once — **which composes with the pairing that now exists**: pair
+      once through a desk, run `adb tcpip` through that desk, and the phone talks to that device
+      directly ever after.
+    - **SPAKE2 for real**, plus TLS 1.3 with a generated client certificate and platform TLS on both
+      sides. The only route to "scan and go, no computer ever", and probably the largest remaining
+      piece of work outside Tier III video.
+    - **Bundle the `adb` binary** on Android, as LADB does. A weekend's work, Android only, a couple
+      of MB per ABI, and against the reason `scripts/*.sh` is on PORT-PLAN.md's staying-behind list.
 
 ## Deliberately later
 

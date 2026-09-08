@@ -24,6 +24,15 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun App(compact: Boolean = false) {
+    // published so a setting row or a dialog deep in the tree can size itself for a thumb or a
+    // mouse without every caller threading the flag through — see Dimens' setting metrics
+    CompositionLocalProvider(LocalCompactUi provides compact) {
+        AppContent(compact)
+    }
+}
+
+@Composable
+private fun AppContent(compact: Boolean) {
     AppTheme {
         LaunchedEffect(Unit) { DeviceManager.start() }
 
@@ -58,6 +67,7 @@ private fun CompactLayout() {
     var mirroring by remember { mutableStateOf<String?>(null) }
     var multiSelect by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
 
     val serials = remember(selection) { selection.keys.filterIsInstance<String>().toSet() }
 
@@ -70,7 +80,7 @@ private fun CompactLayout() {
     val mirrored = mirroring
     if (mirrored != null) {
         OnBack(enabled = true) { mirroring = null }
-        Column(Modifier.imeInset()) {
+        Column(Modifier.safeInsets()) {
             AppBar(
                 title = DeviceManager.nameOf(mirrored),
                 subtitle = mirrored,
@@ -85,7 +95,7 @@ private fun CompactLayout() {
     // the person in it
     OnBack(enabled = multiSelect) { exitMultiSelect() }
 
-    Column(Modifier.imeInset()) {
+    Column(Modifier.safeInsets()) {
         AppBar(
             title = stringResource(Res.string.devices),
             subtitle = if (multiSelect) {
@@ -94,6 +104,7 @@ private fun CompactLayout() {
                 stringResource(Res.string.devices_attached, devices.size)
             },
             onBack = if (multiSelect) ({ exitMultiSelect() }) else null,
+            onSettings = if (multiSelect) null else ({ settingsOpen = true }),
         )
         Box(Modifier.weight(1f)) {
             DeviceListScreen(
@@ -131,6 +142,18 @@ private fun CompactLayout() {
                     modifier = Modifier.align(Alignment.BottomEnd).padding(Dimens.gapLarge),
                 )
             }
+        }
+    }
+
+    if (settingsOpen) {
+        // the phone had no way in at all before this: the adb server address lives in settings, and
+        // without it a phone can only ever read the loopback server it doesn't have
+        DialogContainer(
+            title = stringResource(Res.string.action_settings),
+            onDismiss = { settingsOpen = false },
+            onEnter = null,
+        ) {
+            SettingsScreen(onClose = { settingsOpen = false }, modifier = Modifier.safeInsets())
         }
     }
 
@@ -188,17 +211,27 @@ private fun SelectionMenu(
 }
 
 /**
- * leave room for the soft keyboard.
+ * keep the content out from under the system.
  *
- * the phone's whole layout shrinks rather than the field moving, which is what lets the scroll under
- * it reach a field the keyboard would otherwise be sitting on — Compose scrolls a focused field into
- * view on its own, but only into a viewport that knows it got shorter. A no-op on the desktop, where
- * `WindowInsets.ime` is always zero.
+ * `MainActivity` calls `enableEdgeToEdge()`, so the window really does extend behind the status bar
+ * and the navigation bar — which is what lets the watermark bleed to the edges, and what put the
+ * title under the clock until this existed. `safeDrawing` is the union of the system bars, the
+ * display cutout **and** the keyboard, so this is also what makes the connect fields reachable: the
+ * layout shrinks rather than the field moving, and Compose only scrolls a focused field into a
+ * viewport that knows it got shorter.
+ *
+ * Applied to the content and not to the `Box` above it, so the background still runs edge to edge.
+ * A no-op on the desktop, where every one of those insets is zero.
  */
-private fun Modifier.imeInset(): Modifier = imePadding()
+private fun Modifier.safeInsets(): Modifier = safeDrawingPadding()
 
 @Composable
-private fun AppBar(title: String, subtitle: String, onBack: (() -> Unit)? = null) {
+private fun AppBar(
+    title: String,
+    subtitle: String,
+    onBack: (() -> Unit)? = null,
+    onSettings: (() -> Unit)? = null,
+) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -210,13 +243,18 @@ private fun AppBar(title: String, subtitle: String, onBack: (() -> Unit)? = null
             TextButton(onClick = onBack) { Text(stringResource(Res.string.back)) }
             Spacer(Modifier.width(Dimens.gap))
         }
-        Column {
+        Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (onSettings != null) {
+            IconButton(onClick = onSettings) {
+                AppIcon(Res.drawable.settings, size = Dimens.iconLarge, tint = Colors.toolbarIcon)
+            }
         }
     }
     HorizontalDivider()

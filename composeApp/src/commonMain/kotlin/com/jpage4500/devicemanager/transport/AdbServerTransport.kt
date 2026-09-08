@@ -19,8 +19,10 @@ class AdbServerTransport(
 
     private val log = LoggerConfig.createLogger("AdbServerTransport")
 
+    private val isLoopback: Boolean get() = host == "127.0.0.1" || host == "localhost"
+
     override val label: String
-        get() = if (host == "127.0.0.1" || host == "localhost") "adb (this computer)" else "adb ($host)"
+        get() = if (isLoopback) "adb (this computer)" else "adb ($host)"
 
     /**
      * point the adb package at this server before every call.
@@ -110,6 +112,27 @@ class AdbServerTransport(
     override suspend fun reboot(serial: String): Result<Unit> {
         aim()
         return adbReboot(serial).toResult()
+    }
+
+    /**
+     * pairing is done *by* the server, so it needs one that exists.
+     *
+     * The loopback case is the trap this closes: there is no adb server inside an Android or iOS
+     * app, so a phone left on the default address would offer the button, show a QR, watch someone
+     * scan it, find the device over mDNS — and only then say there was never a server. Measured in
+     * whose time, that is the worst failure in the app.
+     */
+    override val canPair: Boolean
+        get() = !isLoopback || PlatformUtils.getPlatform() == PlatformType.DESKTOP
+
+    override suspend fun pair(host: String, port: Int, code: String): Result<String> {
+        aim()
+        return adbPair(host, port, code).toResult()
+    }
+
+    override suspend fun probe(): Result<String> {
+        aim()
+        return adbVersion().toResult().map { "$label, protocol $it" }
     }
 }
 

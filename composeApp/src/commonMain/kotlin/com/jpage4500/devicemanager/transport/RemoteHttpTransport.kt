@@ -30,7 +30,6 @@ class RemoteHttpTransport(
     val baseUrl: String,
     private val authToken: String,
     private val clientName: String = "Device Manager",
-    private val pollMs: Long = 3_000,
 ) : DeviceTransport {
 
     private val log = LoggerConfig.createLogger("RemoteHttpTransport")
@@ -67,10 +66,37 @@ class RemoteHttpTransport(
             ?: throw IllegalStateException("that isn't a Device Manager server")
     }
 
+    override suspend fun probe(): Result<String> = info().map { it.serverName ?: label }
+
+    /** everything a row shows is in `/api/devices` already — see [DeviceTransport.hasDeviceDetails]. */
+    override val hasDeviceDetails: Boolean get() = true
+
+    /**
+     * poll `/api/info`, and only re-read the device list when it is worth reading.
+     *
+     * `/api/info` is a device count the server already has in memory, so asking every few seconds
+     * costs nothing and a device plugged in at the desk shows up almost at once. `/api/devices` is
+     * the expensive one — the server assembled it by talking to every device — so it is re-read when
+     * the **count changes**, and otherwise on the same slow timer that governs battery and disk
+     * everywhere else in the app. That is the cadence the server's own client uses, and the reason
+     * this app runs no shell commands of its own against a Device Manager server.
+     */
     override fun devices(): Flow<List<Device>> = flow {
+        var knownCount = -1
+        var lastFetchMs = 0L
         while (currentCoroutineContext().isActive) {
-            emit(fetchDevices().getOrElse { emptyList() })
-            delay(pollMs)
+            val refreshMs =
+                SettingsManager.getInt(AppPref.DETAILS_REFRESH_SECS).coerceAtLeast(5) * 1000L
+            val count = info().getOrNull()?.deviceCount ?: -1
+            val now = DateUtils.nowMs()
+            if (count != knownCount || now - lastFetchMs >= refreshMs) {
+                val devices = fetchDevices().getOrElse { emptyList() }
+                emit(devices)
+                // what was actually read, not what the count said, so a disagreement retries
+                knownCount = devices.size
+                lastFetchMs = now
+            }
+            delay(INFO_POLL_MS)
         }
     }
 
@@ -142,10 +168,17 @@ class RemoteHttpTransport(
                 os = obj.text("os"),
                 sdk = obj.text("sdk"),
                 carrier = obj.text("carrier"),
+                timezone = obj.text("timezone"),
                 phone = obj.text("phone"),
+                imei = obj.text("imei"),
                 batteryLevel = obj.text("batteryLevel")?.toIntOrNull(),
+                powerStatus = obj.powerStatus(),
                 freeSpace = obj.text("freeSpace")?.toLongOrNull(),
                 totalSpace = obj.text("totalSpace")?.toLongOrNull(),
+                customProperties = obj.stringMap("customPropertyMap"),
+                bootTimeMs = obj.text("bootTimeMs")?.toLongOrNull(),
+                isBooted = obj.bool("isBooted") != false,
+                lastUpdateMs = obj.text("lastUpdateMs")?.toLongOrNull(),
             )
         }
     }
@@ -175,4 +208,36 @@ class RemoteHttpTransport(
 
     private fun JsonObject.bool(key: String): Boolean? =
         (this[key] as? JsonPrimitive)?.booleanOrNull
+
+    private fun JsonObject.stringMap(key: String): Map<String, String> =
+        (this[key] as? JsonObject)
+            ?.mapNotNull { (name, value) ->
+                (value as? JsonPrimitive)?.contentOrNull?.let { name to it }
+            }
+            ?.toMap()
+            .orEmpty()
+
+    /**
+     * the server's `POWER_AC` and friends, which are this app's [PowerStatus] with a prefix.
+     *
+     * read from `batteryInfo` when the top-level field is missing: both carry it, and Gson omits
+     * whichever happens to be null.
+     */
+    private fun JsonObject.powerStatus(): PowerStatus {
+        val name = text("powerStatus")
+            ?: (this["batteryInfo"] as? JsonObject)?.text("powerStatus")
+            ?: return PowerStatus.NONE
+        return runCatching { PowerStatus.valueOf(name.removePrefix("POWER_")) }
+            .getOrDefault(PowerStatus.NONE)
+    }
+
+    private companion object {
+        /**
+         * how often the server is asked how many devices it has.
+         *
+         * cheap enough to do often — it is an in-memory count — and it is what makes a device
+         * plugged in at the desk appear here within a few seconds rather than on the slow timer.
+         */
+        const val INFO_POLL_MS = 5_000L
+    }
 }

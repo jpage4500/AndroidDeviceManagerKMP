@@ -58,6 +58,32 @@ object Dimens {
     val gapLarge = 16.dp
     val corner = 6.dp
 
+    /**
+     * settings rows and dialogs — see `ui/setting/` and `ui/dialog/`.
+     *
+     * Two sizes rather than one, keyed off [LocalCompactUi]. DashboardWeatherKMP, where these came
+     * from, is a phone and a wall tablet, so its row is a 26.dp icon and a 22.sp label read at arm's
+     * length. The same row in a 560.dp desktop form window is cartoonish, and this app's desktop is
+     * the workload that matters — so the phone keeps the original numbers and the desktop gets a
+     * form line sized like the rest of its chrome.
+     */
+    val settingPadding: Dp @Composable get() = if (LocalCompactUi.current) 8.dp else 12.dp
+    val settingRowPadding: Dp @Composable get() = if (LocalCompactUi.current) 6.dp else 5.dp
+    val settingItemGap: Dp @Composable get() = if (LocalCompactUi.current) 10.dp else 8.dp
+    val settingIcon: Dp @Composable get() = if (LocalCompactUi.current) 26.dp else 18.dp
+    val settingLabelSize: TextUnit @Composable get() = if (LocalCompactUi.current) 20.sp else 14.sp
+    val settingValueSize: TextUnit @Composable get() = if (LocalCompactUi.current) 16.sp else 13.sp
+
+    val dialogTitleSize: TextUnit @Composable get() = if (LocalCompactUi.current) 24.sp else 17.sp
+    val dialogTitleIcon: Dp @Composable get() = if (LocalCompactUi.current) 32.dp else 22.dp
+    val dialogTextSize: TextUnit @Composable get() = if (LocalCompactUi.current) 16.sp else 14.sp
+    val dialogButtonSize: TextUnit @Composable get() = if (LocalCompactUi.current) 18.sp else 14.sp
+    val dialogCorner = 16.dp
+    /** how much of the screen a dialog takes on a desktop or a tablet; a phone always fills it. */
+    const val dialogWidthFraction = 0.5f
+    /** and how much of its height, at most — the rest is what says there is an app behind it. */
+    const val dialogHeightFraction = 0.9f
+
     // desktop windows. the minimum is the same for every kind — it is what the toolbar needs before
     // it starts clipping buttons off the middle
     val minWindowWidth = 520.dp
@@ -102,6 +128,16 @@ object Dimens {
     // battery bar
     val batteryWidth = 22.dp
     val batteryHeight = 11.dp
+
+    /**
+     * the phone row's whole battery block: the bar, the gap, the charging slot, and room for "100%"
+     * over the top of them.
+     *
+     * fixed, so the bar sits at the same place in every row — left to itself the block was as wide
+     * as its widest part, which meant "100%" pushed it further out than "99%" and a device that
+     * started charging shifted its own bar sideways.
+     */
+    val batteryGaugeWidth = 44.dp
 
     val statusDot = 8.dp
 
@@ -198,6 +234,17 @@ data class Palette(
     val menuHighlightText: Color,
     val menuDisabledText: Color,
     val menuSeparator: Color,
+    /** the band behind a dialog's title, so the heading reads as a bar rather than a first row. */
+    val dialogTitleBg: Color,
+    /**
+     * a setting's current value.
+     *
+     * red on purpose, and the one place in the app that uses red for something that isn't wrong: in
+     * a list of thirty rows the value is the only part anyone scans, and the weather app this came
+     * from proved it reads faster than the grey a form would use. Lighter on a dark ground — pure
+     * red on near-black is the pair that vibrates.
+     */
+    val settingValue: Color,
 )
 
 val LightPalette = Palette(
@@ -225,6 +272,8 @@ val LightPalette = Palette(
     menuHighlightText = Color(0xFFFFFFFF),
     menuDisabledText = Color(0xFFB0B0B4),
     menuSeparator = Color(0x1A000000),
+    dialogTitleBg = Color(0xFFEFEFEF),
+    settingValue = Color(0xFFD32F2F),
 )
 
 /**
@@ -260,6 +309,8 @@ val DarkPalette = Palette(
     menuHighlightText = Color(0xFFFFFFFF),
     menuDisabledText = Color(0xFF6A6A6E),
     menuSeparator = Color(0x1AFFFFFF),
+    dialogTitleBg = Color(0xFF3A3A3C),
+    settingValue = Color(0xFFFF7B72),
 )
 
 /**
@@ -267,6 +318,15 @@ val DarkPalette = Palette(
  * exactly what `staticCompositionLocalOf` does, and it costs nothing to read in between.
  */
 val LocalPalette = staticCompositionLocalOf { LightPalette }
+
+/**
+ * true where the UI is a phone's rather than a desktop's.
+ *
+ * The same value `App(compact)` branches on, published so a component deep in the tree can size
+ * itself without every caller threading a flag through. Read by [Dimens]' setting and dialog
+ * metrics, which are the only sizes in the app that genuinely differ between a thumb and a mouse.
+ */
+val LocalCompactUi = staticCompositionLocalOf { false }
 
 /**
  * the app's colors.
@@ -312,6 +372,9 @@ object Colors {
     val menuHighlightText: Color @Composable get() = LocalPalette.current.menuHighlightText
     val menuDisabledText: Color @Composable get() = LocalPalette.current.menuDisabledText
     val menuSeparator: Color @Composable get() = LocalPalette.current.menuSeparator
+
+    val dialogTitleBg: Color @Composable get() = LocalPalette.current.dialogTitleBg
+    val settingValue: Color @Composable get() = LocalPalette.current.settingValue
 }
 
 /**

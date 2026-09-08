@@ -97,6 +97,17 @@ data class Device(
  */
 enum class PowerStatus {
     NONE,
+
+    /**
+     * charging, plug unknown.
+     *
+     * `dumpsys battery` says *which* plug is live on its "AC powered" / "USB powered" lines and
+     * whether it is charging at all in `status`, and the two do not always agree — an OEM that words
+     * those lines differently, or a dock that reports none of them, still sets `status: 2`. Reading
+     * only the plug lines lost the charging state on exactly the devices most likely to be on a
+     * charger permanently.
+     */
+    CHARGING,
     AC,
     USB,
     WIRELESS,

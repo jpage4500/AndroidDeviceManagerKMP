@@ -212,6 +212,10 @@ object DeviceDetails {
         return nowMs - (seconds * 1000).toLong()
     }
 
+    // BatteryManager.BATTERY_STATUS_CHARGING / _FULL
+    private const val STATUS_CHARGING = 2
+    private const val STATUS_FULL = 5
+
     /** what `dumpsys battery` says right now. */
     data class BatteryInfo(
         val level: Int? = null,
@@ -241,6 +245,7 @@ object DeviceDetails {
         var temperatureC: Float? = null
         var voltageMv: Int? = null
         var status = PowerStatus.NONE
+        var statusCode: Int? = null
 
         for (raw in output.lineSequence()) {
             val line = raw.trim()
@@ -257,12 +262,21 @@ object DeviceDetails {
                 "USB powered" -> if (value.toBoolean()) status = PowerStatus.USB
                 "Wireless powered" -> if (value.toBoolean()) status = PowerStatus.WIRELESS
                 "Dock powered" -> if (value.toBoolean()) status = PowerStatus.DOCK
+                // BatteryManager.BATTERY_STATUS_*: 2 is CHARGING, 5 is FULL — and FULL is only
+                // reported while something is still supplying power
+                "status" -> statusCode = value.toIntOrNull()
             }
         }
         return BatteryInfo(
             // some Android TV boxes report 0; that's "no battery", not a flat one
             level = level?.takeIf { it in 1..100 },
-            powerStatus = status,
+            // the plug lines win when one of them matched, because they say more; `status` is the
+            // fallback for a device that words them differently or is on a dock that names none
+            powerStatus = when {
+                status != PowerStatus.NONE -> status
+                statusCode == STATUS_CHARGING || statusCode == STATUS_FULL -> PowerStatus.CHARGING
+                else -> PowerStatus.NONE
+            },
             temperatureC = temperatureC,
             voltageMv = voltageMv,
         )
