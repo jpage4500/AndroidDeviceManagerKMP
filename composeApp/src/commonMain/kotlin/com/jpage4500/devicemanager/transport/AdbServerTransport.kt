@@ -75,6 +75,42 @@ class AdbServerTransport(
         aim()
         return withSync(serial) { it.list(path) }.toResult()
     }
+
+    override suspend fun pullFile(serial: String, path: String): Result<ByteArray> {
+        aim()
+        return withSync(serial) { it.pullBytes(path) }.toResult()
+    }
+
+    override suspend fun pushFile(
+        serial: String,
+        bytes: ByteArray,
+        path: String,
+        mode: Int,
+    ): Result<Unit> {
+        aim()
+        return withSync(serial) { it.push(bytes, path, mode) }.toResult()
+    }
+
+    /**
+     * `adb connect` — the server dials the device, not us.
+     *
+     * which is what makes this the cheap route for a phone: the desk's server holds the auth key and
+     * does the handshake, and the new device simply turns up in the next `track-devices` push.
+     */
+    override suspend fun connect(host: String, port: Int): Result<String> {
+        aim()
+        return adbConnect(host, port).toResult()
+    }
+
+    override suspend fun disconnect(serial: String): Result<String> {
+        aim()
+        return adbDisconnect(serial).toResult()
+    }
+
+    override suspend fun reboot(serial: String): Result<Unit> {
+        aim()
+        return adbReboot(serial).toResult()
+    }
 }
 
 /** an adb failure, once it has to cross out of the adb package as an exception. */

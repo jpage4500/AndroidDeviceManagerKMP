@@ -8,6 +8,7 @@
     <!-- device list -->
     <string name="devices">Devices</string>
     <string name="devices_attached">%1$d attached</string>
+    <string name="devices_selected">%1$d selected</string>
     <string name="no_devices">No devices</string>
     <string name="no_devices_msg">Attach a device over USB, or start an adb server for this app to read.\nNothing here starts one for you.</string>
     <string name="no_matches">No matches</string>
@@ -33,6 +34,37 @@
     <string name="connect_none_yet">No wireless devices yet. Enter an address below — a device needs \"adb tcpip 5555\" run over USB once first.</string>
     <string name="connect_port">Port</string>
     <string name="connect_title">Connect to a wireless device</string>
+
+    <!-- connect panel (mobile) -->
+    <string name="connect_add">Add a device</string>
+    <string name="connect_connected">Connected to %1$s · %2$d devices</string>
+    <string name="connect_device_by_ip">Connect to a device</string>
+    <string name="connect_device_by_ip_msg">By IP address, over wireless debugging</string>
+    <string name="connect_forget">Forget</string>
+    <string name="connect_host">Host</string>
+    <string name="connect_host_hint">192.168.0.12</string>
+    <string name="connect_ip_hint">192.168.0.100</string>
+    <string name="connect_later">Later</string>
+    <string name="connect_manual">Manual entry</string>
+    <string name="connect_name">Name</string>
+    <string name="connect_pair_qr">Pair a device with a QR code</string>
+    <string name="connect_pair_qr_msg">Needs a computer running adb on this network</string>
+    <string name="connect_paste">Paste connection</string>
+    <string name="connect_paste_none">No connection string on the clipboard</string>
+    <string name="connect_saved">SAVED</string>
+    <string name="connect_scan_qr">Scan a QR code</string>
+    <string name="connect_scan_qr_msg">Device Manager on your computer shows one under Server ▸ Share</string>
+    <string name="connect_server">Connect to a computer</string>
+    <string name="connect_server_msg">Running Device Manager on your network</string>
+    <string name="connect_token">Auth token</string>
+
+    <!-- device sheet (mobile) -->
+    <string name="sheet_copy_serial">Copy serial</string>
+    <string name="sheet_done">Done</string>
+    <string name="sheet_rename_title">Device name</string>
+    <string name="sheet_restart_msg">Restart %1$s? Anything running on it stops.</string>
+    <string name="sheet_restart_title">Restart device</string>
+    <string name="sheet_screenshot_failed">Couldn't take a screenshot</string>
 
     <!-- row menu -->
     <string name="copy_field">Copy Field</string>
@@ -67,7 +99,7 @@
     <string name="files_delete_title">Delete permanently?</string>
     <string name="files_download">Download</string>
     <string name="files_empty">Folder is empty</string>
-    <string name="files_error">Can\'t read that folder</string>
+    <string name="files_error">Can't read that folder</string>
     <string name="files_go_to">Go To…</string>
     <string name="files_go_to_title">Go to folder</string>
     <string name="files_new_folder">New Folder</string>
@@ -173,6 +205,8 @@
 
     <!-- toolbar -->
     <string name="action_adb">ADB</string>
+    <string name="action_exit_select">Exit</string>
+    <string name="action_remove_device">Remove Device</string>
     <string name="action_browse">Browse</string>
     <string name="action_connect">Connect</string>
     <string name="action_input">Input</string>
@@ -193,7 +227,7 @@
     <string name="show_column">Show %1$s</string>
 
     <!-- mirror -->
-    <string name="mirror_failed">Can\'t mirror this device</string>
+    <string name="mirror_failed">Can't mirror this device</string>
     <string name="key_app_switch">Recents</string>
     <string name="key_back">Back</string>
     <string name="key_home">Home</string>
@@ -210,8 +244,8 @@
     <string name="back">Back</string>
 
     <!-- logs and crash reporting -->
-    <string name="log_upload_failed">Couldn\'t send the logs</string>
-    <string name="log_upload_not_configured">Logging isn\'t configured in this build</string>
+    <string name="log_upload_failed">Couldn't send the logs</string>
+    <string name="log_upload_not_configured">Logging isn't configured in this build</string>
     <string name="log_upload_ok">Logs sent</string>
     <string name="reporting_crash">Reporting a crash from last time</string>
 </resources>

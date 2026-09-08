@@ -25,7 +25,9 @@ import kotlinx.serialization.json.*
  * which is what a mirror view should use — see docs/ADB-TRANSPORTS.md.
  */
 class RemoteHttpTransport(
-    private val baseUrl: String,
+    /** `http://host:port`, readable so [com.jpage4500.devicemanager.manager.ServerManager] can say
+     *  which saved server the app is currently on. */
+    val baseUrl: String,
     private val authToken: String,
     private val clientName: String = "Device Manager",
     private val pollMs: Long = 3_000,
@@ -43,6 +45,26 @@ class RemoteHttpTransport(
     private fun HttpRequestBuilder.auth() {
         header(HttpHeaders.Authorization, "Bearer $authToken")
         header("x-client-name", clientName)
+    }
+
+    /**
+     * ask the server who it is — `/api/info`, which answers `{version, deviceCount, serverName}`.
+     *
+     * the call to make when someone presses Connect, rather than `/api/devices`: it is the cheapest
+     * endpoint, a wrong token comes back as a plain 401 rather than as an empty list, and the name
+     * it hands back is what the saved entry should be labelled with instead of an IP address.
+     */
+    suspend fun info(): Result<ServerInfo> = runCatching {
+        val response = client.get("$baseUrl/api/info") { auth() }
+        if (response.status == HttpStatusCode.Unauthorized) {
+            throw IllegalStateException("wrong auth token")
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("server answered ${response.status.value}")
+        }
+        val body = response.bodyAsText()
+        JsonUtils.fromJson<ServerInfo>(body)
+            ?: throw IllegalStateException("that isn't a Device Manager server")
     }
 
     override fun devices(): Flow<List<Device>> = flow {

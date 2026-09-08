@@ -21,6 +21,12 @@ object Dimens {
     // a phone row needs a bigger target than a mouse does
     val touchRowHeight = 68.dp
 
+    // the label column of a stacked form field — wide enough for "Auth token" at bodySmall
+    val fieldLabelWidth = 88.dp
+
+    // the bar down the left of an expanded section, tying its form to the row that opened it
+    val accentStripe = 3.dp
+
     // device table (desktop)
     // 28.dp holds a battery bar and a 16.dp icon with a hairline to spare; 45 rows is the case
     // this is sized for, and a taller row means fewer of them on screen

@@ -123,6 +123,9 @@ fun DialogButton(
  *
  * `OutlinedTextField` brings a floating label, a 56dp minimum height and Material's own focus
  * animation; none of that belongs on a desktop form.
+ *
+ * [keyboardType] does nothing on a desktop and everything on a phone, where the soft keyboard that
+ * comes up decides whether an address is four taps or twenty.
  */
 @Composable
 fun AppTextField(
@@ -132,6 +135,7 @@ fun AppTextField(
     hint: String = "",
     focusRequester: FocusRequester? = null,
     isError: Boolean = false,
+    keyboardType: KeyboardType = KeyboardType.Text,
     onSubmit: (() -> Unit)? = null,
 ) {
     BasicTextField(
@@ -141,7 +145,10 @@ fun AppTextField(
         textStyle = MaterialTheme.typography.bodySmall.copy(color = Colors.primaryText),
         cursorBrush = SolidColor(Colors.primaryText),
         keyboardActions = KeyboardActions(onDone = { onSubmit?.invoke() }),
-        keyboardOptions = KeyboardOptions(imeAction = if (onSubmit != null) ImeAction.Done else ImeAction.Default),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = keyboardType,
+            imeAction = if (onSubmit != null) ImeAction.Done else ImeAction.Default,
+        ),
         modifier = modifier.fieldFocus(focusRequester).fieldChrome(isError),
         decorationBox = { field -> FieldDecoration(value, hint, field) },
     )

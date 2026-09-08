@@ -1,51 +1,13 @@
 # Porting the UI
 
-How the Swing app's screens become Compose ones, starting with the device list — the entry point on
-every platform. [PORT-PLAN.md](PORT-PLAN.md) covers what has already come across;
+How the Swing app's screens become Compose ones, starting with the device list.
+[PORT-PLAN.md](PORT-PLAN.md) covers what has already come across;
 [ADB-TRANSPORTS.md](ADB-TRANSPORTS.md) covers how devices are reached.
 
-The two platforms diverge here more than anywhere else in the app. The desktop is a **data table**
-someone watches 45 rows in; the phone is a **list** someone taps one row in. They share the model,
-the transport and the actions — and almost none of the layout.
-
----
-
-## First: is the transport assumption right?
-
-> "the desktop version can get the devices from a running adb server where the mobile version will
-> have to connect directly to each device"
-
-The desktop half is exactly right, and for the reason that decides the whole project: a USB device is
-claimed exclusively by whichever adb server is running, so on desktop we talk to that server or we
-don't see USB at all.
-
-The mobile half is **half right**, and the half that's wrong matters. "Connect directly to each
-device" is *one* of three routes, and it is the only one that **cannot** reach the USB fleet:
-
-| Route from a phone | Reaches USB devices | Needs a desktop | Auth | Status |
-|---|---|---|---|---|
-| adb server on a LAN address (`AdbServerTransport`, host set) | **yes** | yes | **none at all** | written |
-| Device Manager's HTTP API on `:8765` (`RemoteHttpTransport`) | **yes** | yes | bearer token | written |
-| direct to `adbd` on `:5555` | **no** | no | RSA, or pairing | not written |
-
-So:
-
-- A phone pointed at a desk **already works today** through code that exists — it drives all 45 USB
-  devices, and needs no new protocol, no crypto and no pairing.
-- Direct-to-`adbd` is the only route that needs no desktop, and it only ever reaches devices that
-  have **wireless debugging switched on**. A phone plugged into a hub is invisible to it.
-- Direct-to-`adbd` is also the most expensive route left: the 24-byte message framing is easy and
-  pure `commonMain`, but Android 11+ pairing needs SPAKE2 + TLS 1.3 client certs and no pure-Kotlin
-  implementation exists. The sidestep is legacy `adb tcpip 5555` with plain RSA auth — which is what
-  scrcpy-mobile ships, so the approach and the App Store outcome both have precedent.
-
-**Recommendation:** the mobile app's "connect" flow should offer all three, in this order — a saved
-desk (HTTP API), an adb server address, then a direct device. Building only the third means the
-phone can't see the bench the desktop app exists to manage. Building the first two means the phone
-is useful before any new protocol is written.
-
-That is a change to the *plan*, not to the code: `DeviceTransport` already makes it a picker rather
-than a branch.
+**This is the desktop.** The phone is a different screen rather than the same one at a narrower
+width — the desktop is a data table someone watches 45 rows in, the phone is a list someone taps one
+row in — and it has [MOBILE-UI.md](MOBILE-UI.md) to itself. They share the model, the transports and
+the actions, and almost none of the layout.
 
 ---
 
@@ -411,37 +373,6 @@ running and the icon is how it comes back.
 
 ---
 
-## The mobile device screen
-
-Deliberately not the same screen. A phone has one column of usable width, a finger instead of a
-mouse, and no fleet — its list is short.
-
-```
-┌─────────────────────────────┐
-│ Devices              ⟳  ⚙   │
-├─────────────────────────────┤
-│ ● Pixel 10a                 │
-│   192.168.0.147   87%  ⚡   │
-├─────────────────────────────┤
-│ ● kitchen 7                 │
-│   192.168.0.175   3.6G      │
-├─────────────────────────────┤
-│                             │
-│         (+ Connect)         │  ← the primary action, not a toolbar button
-└─────────────────────────────┘
-```
-
-- **A row is two lines, not ten columns.** Name and status on the first, whatever else fits on the
-  second. No column configuration on a phone.
-- **Connect is the primary action**, because a phone starts with an empty list where the desktop
-  starts with a full one. A FAB or a prominent empty state, opening a sheet that offers the three
-  routes above.
-- **Tap opens the device**, rather than selecting it — there is no second pane to fill. That is what
-  `App(compact = true)` already does.
-- **Swipe or long-press for actions** where the desktop right-clicks.
-
----
-
 ## Screens beyond the device list
 
 `WindowManager` grew three more window kinds, all opened through `openOnce` so a second one on the
@@ -648,14 +579,16 @@ Each phase compiles on all three targets and leaves the app usable.
 
 1. ~~**The device screen.**~~ **Done.** `ui/components/DataTable.kt` (generic; keyboard, multi-select, sortable, resizable),
    `data/DeviceColumn.kt`, `manager/DeviceTableState.kt` (order/hidden/widths/sort, all persisted),
-   `ui/screen/DeviceScreen.kt` on desktop and a reworked `DeviceListScreen.kt` on mobile. The 91
-   icons came across from the Swing app as `composeResources/drawable`. Mirror, screenshot and
-   refresh are wired; every other toolbar button is drawn disabled, so the toolbar is the real shape
-   rather than a stub.
+   `ui/screen/DeviceScreen.kt`. The 91 icons came across from the Swing app as
+   `composeResources/drawable`. Mirror, screenshot and refresh are wired; every other toolbar button
+   is drawn disabled, so the toolbar is the real shape rather than a stub. The phone's
+   `DeviceListScreen.kt` came across in the same phase — see [MOBILE-UI.md](MOBILE-UI.md).
 2. **Device actions.** Right-click / long-press menu: details, copy field, rename, custom fields,
    reconnect, disconnect. All are `exec` calls that already work.
-3. **Connect.** The transport picker and the wireless-connect sheet. `AppPref` already holds the four
-   settings; nothing reads them yet.
+3. **Connect.** The transport picker and the wireless-connect sheet. The phone's half is built —
+   [MOBILE-UI.md](MOBILE-UI.md) — and `AdbServerTransport` now implements `connect`/`disconnect`, so
+   the desktop's `ConnectScreen` works too; what's missing on the desktop is a way to pick a
+   transport at all.
 4. **File explorer.** `AdbSync` already lists, stats, pulls and pushes — this is a `DataTable` and a
    path bar on top of it.
 5. **Log viewer.** `logcat` over `exec:`, plus the Swing app's filter syntax.

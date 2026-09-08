@@ -77,6 +77,17 @@ object DeviceDetails {
     private fun batch(commands: List<String>): String =
         commands.joinToString(" ; echo $MARKER ; ")
 
+    /**
+     * the inverse of [splitBatch] — one section per command, joined the way a device would print
+     * them.
+     *
+     * only [com.jpage4500.devicemanager.transport.FakeTransport] needs this, and it needs it for a
+     * real reason: a transport that answers a batch with anything else sends every parser down its
+     * failure path, and then the invented devices don't exercise the code the real ones do.
+     */
+    fun joinBatch(parts: List<String>): String =
+        parts.joinToString("\n$MARKER\n")
+
     /** split one batch's output back into a section per command, in the order they were sent. */
     fun splitBatch(output: String?, count: Int): List<String> {
         val parts = MutableList(count) { StringBuilder() }

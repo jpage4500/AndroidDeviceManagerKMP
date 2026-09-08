@@ -23,6 +23,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     DEVICE_NICKNAMES("device_nicknames"),                   // JSON map of serial -> the name the user gave it
     CUSTOM_COMMANDS("custom_commands"),                     // JSON list of the user's saved shell commands
     RECENT_WIRELESS("recent_wireless"),                     // JSON list of WirelessDevice, most recent last
+    SAVED_SERVERS("saved_servers"),                         // JSON list of SavedServer — the Device Manager instances this app knows
     RECENT_INPUT("recent_input"),                           // newline-separated strings typed onto devices
     LOGS_FILTERS("logs_filters"),                           // JSON list of LogFilter
     LOGS_HIDDEN_COLUMNS("logs_hidden_columns"),             // comma-separated LogColumn names

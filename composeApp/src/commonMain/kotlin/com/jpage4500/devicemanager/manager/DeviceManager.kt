@@ -405,6 +405,12 @@ object DeviceManager {
     }
 
     suspend fun connect(host: String, port: Int): Result<String> {
+        // 0.0.0.0 loads the invented fleet instead — see FakeTransport for why it is a route rather
+        // than a debug menu. intercepted here so both Connect fields reach it
+        if (host == FakeTransport.HOST) {
+            useTransport(FakeTransport())
+            return Result.success("showing test devices")
+        }
         log.i("connect: $host:$port")
         StatusManager.post("Connecting to $host:$port", progress = 0)
         return _transport.value.connect(host, port).also { result ->

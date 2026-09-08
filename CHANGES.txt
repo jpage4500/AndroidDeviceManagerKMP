@@ -32,3 +32,13 @@
 - log auto-scroll follows the tail again, and lets go when you scroll up
 - cmd-up/down jump to the ends of a table, option-up/down move a page
 - log viewer keeps its oldest lines while you scroll back through them
+
+09/08
+- connect, disconnect, restart, file download and install now work
+- phone: add a device from the list, or a Device Manager server
+- phone: tap a device for its details, a screenshot and a mirror
+- phone: the keyboard no longer covers the connect fields
+- phone: an open connect section is drawn as part of the row above it
+- enter 0.0.0.0 in either connect field to load test devices
+- phone: long-press a device to pick several, and remove them together
+- phone: connecting to a computer leads with paste, and hides manual entry
