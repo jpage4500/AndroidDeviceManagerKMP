@@ -58,9 +58,9 @@ fun DeviceInfoScreen(deviceId: String, modifier: Modifier = Modifier) {
  * Ported from the Swing app's `DeviceInfoScreen`. Reads the live device, so it follows a refresh
  * rather than showing a snapshot — the free space and the battery move while it is open.
  *
- * Sections rather than cards-on-grey: the same [SectionHeader] and flat rows a settings screen uses,
- * so this reads as part of the app rather than as two panels floating on a band of grey. **Must be
- * called inside a `Column`.**
+ * Sections rather than cards-on-grey: the same headers and flat rows a settings screen uses, so it
+ * reads as part of the app rather than as two panels floating on a band of grey. Each one folds
+ * away and is remembered folded — see [InfoSection]. **Must be called inside a `Column`.**
  *
  * [onRename] draws a pencil on the Name row when it is given. The desktop's window is read-only and
  * passes nothing.
@@ -70,6 +70,7 @@ fun DeviceInfoContent(deviceId: String, onRename: (() -> Unit)? = null) {
     val devices by DeviceManager.devices.collectAsState()
     val device = devices.firstOrNull { it.id == deviceId }
     val copyToClipboard = rememberClipboardCopy()
+    val collapsed by SettingsManager.getEnumSetAsState<InfoSection>(AppPref.INFO_COLLAPSED)
 
     if (device == null) {
         // one line, not the full-screen EmptyState: this is composed inside someone else's scroll,
@@ -84,88 +85,119 @@ fun DeviceInfoContent(deviceId: String, onRename: (() -> Unit)? = null) {
         return
     }
 
-    SectionHeader(stringResource(Res.string.info_details))
-    Property(
-        label = stringResource(Res.string.info_serial),
-        value = device.serial,
-        onCopy = copyToClipboard,
-        // a wireless serial is `adb-RFCX20NB5TY-DBjlg4._adb-tls-connect._tcp`, which ellipsizes on
-        // one line into something nobody can read back or check against a device
-        maxLines = 2,
-    )
-    Property(
-        label = stringResource(Res.string.info_name),
-        // falls back to the display name so a device nobody has renamed still has a row to rename
-        value = device.nickname ?: device.displayName,
-        onCopy = copyToClipboard,
-        onEdit = onRename,
-    )
-    Property(stringResource(Res.string.info_model), device.model, copyToClipboard)
-    Property(stringResource(Res.string.info_phone), device.phone, copyToClipboard)
-    Property(stringResource(Res.string.info_imei), device.imei, copyToClipboard)
-    Property(stringResource(Res.string.info_carrier), device.carrier, copyToClipboard)
-    Property(
-        label = stringResource(Res.string.info_os),
-        value = device.os?.let { os -> device.sdk?.let { "$os (SDK $it)" } ?: os },
-        onCopy = copyToClipboard,
-    )
-    Property(stringResource(Res.string.info_timezone), device.timezone, copyToClipboard)
-    Property(
-        label = stringResource(Res.string.info_booted),
-        value = device.bootTimeMs?.let { booted ->
-            val since = Utils.formatDuration(DateUtils.nowMs() - booted)
-            "${DateUtils.formatDate(DateUtils.timeToDate(booted), "MM/dd h:mm a")} (up $since)"
-        },
-        onCopy = copyToClipboard,
-    )
-    Property(
-        stringResource(Res.string.info_custom_1),
-        device.customProperty(Device.CUST_PROP_1),
-        copyToClipboard,
-    )
-    Property(
-        stringResource(Res.string.info_custom_2),
-        device.customProperty(Device.CUST_PROP_2),
-        copyToClipboard,
-    )
+    CollapsibleSection(
+        text = stringResource(Res.string.info_details),
+        open = InfoSection.DETAILS.isOpen(collapsed),
+        onToggle = { InfoSection.DETAILS.toggle(collapsed) },
+    ) {
+        Property(
+            label = stringResource(Res.string.info_serial),
+            value = device.serial,
+            onCopy = copyToClipboard,
+            // a wireless serial is `adb-RFCX20NB5TY-DBjlg4._adb-tls-connect._tcp`, which on one
+            // line ellipsizes into something nobody can read back or check against a device
+            maxLines = 2,
+        )
+        Property(
+            label = stringResource(Res.string.info_name),
+            // falls back to the display name, so a device nobody has renamed still has a row for it
+            value = device.nickname ?: device.displayName,
+            onCopy = copyToClipboard,
+            onEdit = onRename,
+        )
+        Property(stringResource(Res.string.info_model), device.model, copyToClipboard)
+        Property(stringResource(Res.string.info_phone), device.phone, copyToClipboard)
+        Property(stringResource(Res.string.info_imei), device.imei, copyToClipboard)
+        Property(stringResource(Res.string.info_carrier), device.carrier, copyToClipboard)
+        Property(
+            label = stringResource(Res.string.info_os),
+            value = device.os?.let { os -> device.sdk?.let { "$os (SDK $it)" } ?: os },
+            onCopy = copyToClipboard,
+        )
+        Property(stringResource(Res.string.info_timezone), device.timezone, copyToClipboard)
+        Property(
+            label = stringResource(Res.string.info_booted),
+            value = device.bootTimeMs?.let { booted ->
+                val since = Utils.formatDuration(DateUtils.nowMs() - booted)
+                "${DateUtils.formatDate(DateUtils.timeToDate(booted), "MM/dd h:mm a")} (up $since)"
+            },
+            onCopy = copyToClipboard,
+        )
+        Property(
+            stringResource(Res.string.info_custom_1),
+            device.customProperty(Device.CUST_PROP_1),
+            copyToClipboard,
+        )
+        Property(
+            stringResource(Res.string.info_custom_2),
+            device.customProperty(Device.CUST_PROP_2),
+            copyToClipboard,
+        )
+    }
 
     Spacer(Modifier.height(Dimens.gapLarge))
 
-    SectionHeader(stringResource(Res.string.info_status))
-    Gauge(
-        label = stringResource(Res.string.info_storage),
-        percent = device.storageUsedPercent,
-        detail = listOfNotNull(
-            device.freeSpace?.let { "Free ${Utils.bytesToDisplayString(it)}" },
-            device.totalSpace?.let { "Total ${Utils.bytesToDisplayString(it)}" },
-        ).joinToString(", "),
-        // a nearly-full disk is what stops a device installing anything
-        color = when {
-            (device.storageUsedPercent ?: 0) > 90 -> Colors.error
-            (device.storageUsedPercent ?: 0) > 75 -> Colors.busy
-            else -> Colors.accent
-        },
-    )
-    Gauge(
-        label = stringResource(Res.string.info_battery),
-        percent = device.batteryLevel,
-        detail = listOfNotNull(
-            device.batteryLevel?.let { "$it%" },
-            device.powerStatus.takeIf { it != PowerStatus.NONE }?.name?.lowercase(),
-        ).joinToString(", "),
-        color = when {
-            (device.batteryLevel ?: 100) <= 15 -> Colors.error
-            (device.batteryLevel ?: 100) <= 30 -> Colors.busy
-            else -> Colors.online
-        },
+    CollapsibleSection(
+        text = stringResource(Res.string.info_status),
+        open = InfoSection.STATUS.isOpen(collapsed),
+        onToggle = { InfoSection.STATUS.toggle(collapsed) },
+    ) {
+        Gauge(
+            label = stringResource(Res.string.info_storage),
+            percent = device.storageUsedPercent,
+            detail = listOfNotNull(
+                device.freeSpace?.let { "Free ${Utils.bytesToDisplayString(it)}" },
+                device.totalSpace?.let { "Total ${Utils.bytesToDisplayString(it)}" },
+            ).joinToString(", "),
+            // a nearly-full disk is what stops a device installing anything
+            color = when {
+                (device.storageUsedPercent ?: 0) > 90 -> Colors.error
+                (device.storageUsedPercent ?: 0) > 75 -> Colors.busy
+                else -> Colors.accent
+            },
+        )
+        Gauge(
+            label = stringResource(Res.string.info_battery),
+            percent = device.batteryLevel,
+            detail = listOfNotNull(
+                device.batteryLevel?.let { "$it%" },
+                device.powerStatus.takeIf { it != PowerStatus.NONE }?.name?.lowercase(),
+            ).joinToString(", "),
+            color = when {
+                (device.batteryLevel ?: 100) <= 15 -> Colors.error
+                (device.batteryLevel ?: 100) <= 30 -> Colors.busy
+                else -> Colors.online
+            },
+        )
+    }
+}
+
+/**
+ * the parts of a device's page that fold away, and are remembered folded.
+ *
+ * In `AppPref.INFO_COLLAPSED` rather than in the composable's own state: the sheet is built fresh
+ * for each device, so a section that forgot would have to be shut again on every one. Stored as the
+ * set that is **shut**, so a build that adds a section shows it rather than hiding it.
+ */
+enum class InfoSection { DETAILS, STATUS, COMMANDS }
+
+fun InfoSection.isOpen(collapsed: Set<InfoSection>): Boolean = this !in collapsed
+
+fun InfoSection.toggle(collapsed: Set<InfoSection>) {
+    SettingsManager.setEnumSet(
+        AppPref.INFO_COLLAPSED,
+        if (this in collapsed) collapsed - this else collapsed + this,
     )
 }
 
 /**
  * name on the left, value on the right; tap to copy. an unknown value is left blank, not "null".
  *
- * The tap **toasts what it copied**: it used to put the text on the clipboard and say nothing, which
- * on a phone is indistinguishable from a tap that missed.
+ * **Every part of the affordance is on the row, because a column of text that silently copies is
+ * indistinguishable from a column of text.** The row ripples under the finger, so the press says
+ * which line it landed on; a copy hint sits in the gutter at the end of it, so the line says it can
+ * be copied before anyone tries; a divider closes it, so it reads as a row rather than as a line of
+ * a paragraph; and the toast afterwards names what went to the clipboard.
  */
 @Composable
 private fun Property(
@@ -180,11 +212,12 @@ private fun Property(
     Row(
         Modifier
             .fillMaxWidth()
-            .plainClickable {
+            // a real ripple rather than plainClickable: the highlight is the whole point here
+            .clickable {
                 onCopy(value)
                 ToastManager.showToast(copied)
             }
-            .padding(horizontal = Dimens.gap, vertical = 6.dp),
+            .padding(start = Dimens.gap, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -202,19 +235,28 @@ private fun Property(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        // the rename affordance where the name is, rather than a button at the foot of the screen
-        onEdit?.let {
-            Spacer(Modifier.width(Dimens.gap))
-            Box(Modifier.plainClickable(onClick = it).padding(Dimens.gap)) {
+        // one gutter, whatever is in it, so the icons line up down the right of the list
+        Box(
+            modifier = Modifier
+                .width(Dimens.infoGutter)
+                .heightIn(min = Dimens.iconLarge + Dimens.gap)
+                // the rename affordance where the name is, rather than a button at the foot
+                .then(if (onEdit == null) Modifier else Modifier.plainClickable(onClick = onEdit)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (onEdit != null) {
                 AppIcon(
                     res = Res.drawable.edit,
                     size = Dimens.iconLarge,
                     tint = Colors.accent,
                     contentDescription = stringResource(Res.string.edit_name),
                 )
+            } else {
+                AppIcon(res = Res.drawable.copy, size = Dimens.icon, tint = Colors.secondaryText)
             }
         }
     }
+    HorizontalDivider(color = Colors.divider)
 }
 
 @Composable

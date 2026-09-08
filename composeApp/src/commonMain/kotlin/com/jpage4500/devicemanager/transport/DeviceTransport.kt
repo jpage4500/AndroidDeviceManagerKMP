@@ -167,6 +167,17 @@ object DeviceInput {
     fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Int) =
         "input swipe $x1 $y1 $x2 $y2 $durationMs"
 
+    /**
+     * a press held in place.
+     *
+     * adb has no long press of its own: it is a swipe that goes nowhere, slowly. [LONG_PRESS_MS] is
+     * the Swing window's own figure — comfortably past Android's ~500ms threshold, so the gesture
+     * still registers when the shell is slow to start it.
+     */
+    fun longPress(x: Int, y: Int, durationMs: Int = LONG_PRESS_MS) = swipe(x, y, x, y, durationMs)
+
+    const val LONG_PRESS_MS = 650
+
     /** a space has to be sent as `%s`; `input text` splits its argument on whitespace. */
     fun text(value: String) = "input text \"${value.replace(" ", "%s")}\""
 

@@ -184,15 +184,15 @@ straight to a 250ms screencap poll is an expensive guess.
 │ │      📁     ││      ≡      │ │
 │ │   Browse    ││    Logs     │ │
 │ └ ─ ─ ─ ─ ─ ─ ┘└ ─ ─ ─ ─ ─ ─ ┘ │
-│ DETAILS ────────────────────────│
-│ Serial      192.168.0.147:5555  │
-│ Name        Pixel 10a        ✎  │
-│ Model       Pixel 10a           │
-│ Android     16 (SDK 36)         │
-│ STATUS ─────────────────────────│
+│ DETAILS                      ⌄  │
+│ Serial      192.168.0.147:5555 ⧉│
+│ Name        Pixel 10a         ✎ │
+│ Model       Pixel 10a          ⧉│
+│ Android     16 (SDK 36)        ⧉│
+│ STATUS                       ⌄  │
 │ Storage     ▓▓▓▓▓▓░░░  62%      │
 │ Battery     ▓▓▓▓▓▓▓▓░  87% ⚡   │
-│ ACTIONS ────────────────────────│
+│ COMMANDS                     ⌄  │
 │ ↻  Restart                      │
 │ ✕  Disconnect                   │
 └─────────────────────────────────┘
@@ -209,14 +209,22 @@ the list below.
   scroll of its own and calls the content directly. **Sections rather than cards on grey**: the same
   `SectionHeader` and flat rows a settings screen uses, because two white cards floating on a band of
   `headerBg` was the one part of the phone app that looked like a different product.
-- **A property row copies itself and says so.** The tap always put the value on the clipboard; it now
-  toasts what it copied, which is the difference between that and a tap that missed. Rename is a
-  pencil on the Name row, where a user looks for it.
+- **Every section folds, and stays folded.** Details, Status and Commands are `CollapsibleSection`s —
+  the settings header plus a chevron that turns, so the app has one way of saying "this opens" rather
+  than two. Which ones are shut lives in `AppPref.INFO_COLLAPSED` rather than in the composable, and
+  is stored as the set that is *shut*: the sheet is built fresh for each device, so a section that
+  forgot would have to be closed again on every one, and a build that adds a section shows it.
+- **A property row copies itself and says so.** A column of text that silently copies is
+  indistinguishable from a column of text, so all four affordances are on the row: it ripples under
+  the finger, a copy hint sits in the gutter at the end of it, a divider closes it, and the toast
+  afterwards names what went to the clipboard. Rename is the one exception in that gutter — a pencil
+  on the Name row, where a user looks for it.
 - **The actions above it are the desktop's row menu**, filtered to what a phone can do and ordered by
   what a phone is for. Mirror and Screenshot are the two the user reaches for; Browse and Logs are
   **dashed outlines** until those screens exist — the shape is the real one, nothing moves when they
-  arrive, and an outline reads as not-yet where grey text read as broken. Restart and Disconnect are
-  `SettingItem` rows at the foot, away from the thumb.
+  arrive, and an outline reads as not-yet where grey text read as broken. The rest are `SettingItem`
+  rows under **Commands**, away from the thumb — named for what it becomes rather than what it holds
+  today, since the Swing app's row menu has a dozen more to come.
 - **A destructive action still confirms** — `AppPref.CONFIRM_DESTRUCTIVE` is already the setting, and
   Restart on the wrong row is exactly the mistake a phone makes easier.
 - **The sheet is a `BaseDialog`** like every other dialog in the app, which is where its title band,
@@ -241,6 +249,19 @@ phone that turns every attempt to scroll the mirrored device into a click on wha
 thumb. Past the touch slop it becomes `input swipe`, replayed over the time the finger actually took
 so a flick reads as a flick, clamped to 50–2000 ms.
 
+**And the gesture is drawn where it landed, straight away.** A frame arrives every 250ms at best and
+the device takes longer than that to react, so a tap with no local feedback is a second of nothing —
+and the natural response to that is to tap again, which is what a run of identical taps in the logs
+is. `MirrorFeedback` draws the Swing window's own mint ring and arrow (`Animations.java`, timings
+included) over the frame the instant the finger lifts, on a frame loop that runs only while something
+is animating.
+
+**The mirror wears the dialog title bar**, not the device list's. It is a thing opened over the app
+the way a dialog is, so it gets `DialogTitle` — the accent band, the device's name over its serial,
+the close X, the whole band tappable — except it fills the screen instead of sitting in a card. The
+desktop's mirror window needs none of this: its heading is the OS title bar, the same as a dialog's
+there (see [UI-PORT.md](UI-PORT.md)).
+
 ## Connecting a device
 
 The screen a first-run user sees, and the one that decides whether the app is any good.
@@ -260,7 +281,11 @@ than swapping icon, and the form expands and fades rather than appearing, so the
 the content came from.
 
 That drawing is `ui/components/ExpandableBlock.kt`, not this file's own: the device list's computers
-expand the same way, and a phone with two expanding idioms has one of them drawn slightly wrong.
+expand the same way, and a phone with two expanding idioms has one of them drawn slightly wrong. The
+one thing that folds and *isn't* an `ExpandableBlock` is a section inside a form — `SectionHeader`'s
+`CollapsibleSection`, which the device sheet's Details / Status / Commands use. A list row that opens
+into its own contents and a heading over a group of rows want different chrome; what they share, and
+what has to agree, is the chevron that turns rather than swaps.
 Remembered computers themselves are **not** on this panel — they are rows of the device list, next to
 the devices they own. Two places listing the same server is one of them going stale.
 
@@ -660,10 +685,11 @@ Each step leaves the app usable and compiles on all three targets.
    loads `transport/FakeTransport.kt`.
 2. ~~**The device sheet.**~~ **Done.** `ui/screen/DeviceSheet.kt`: `DeviceInfoContent` inside a
    `BaseDialog`, the 2×2 grid of action tiles above it, and Restart / Disconnect as `SettingItem`
-   rows below. Mirror and Screenshot are wired; Browse and Logs are dashed outlines. Rename is a
-   pencil on the Name row and Copy serial is gone — every property row copies itself. Restart
-   confirms when `CONFIRM_DESTRUCTIVE` is on. A screenshot is shown and thrown away — the share sheet
-   is still waiting on `shareImage`.
+   rows under Commands. Mirror and Screenshot are wired; Browse and Logs are dashed outlines. Rename
+   is a pencil on the Name row and Copy serial is gone — every property row copies itself. Details,
+   Status and Commands each fold away, remembered in `AppPref.INFO_COLLAPSED`. Restart confirms when
+   `CONFIRM_DESTRUCTIVE` is on. A screenshot is shown and thrown away — the share sheet is still
+   waiting on `shareImage`.
 3. **The lifecycle seam.** `isForeground`, reconnect on return, stop polling on leave. iOS needs it
    and everything after it assumes it.
 4. **The list's two sections**, and remembered offline devices.

@@ -57,6 +57,8 @@ class MirrorSource(
     suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Int = 200) =
         send(DeviceInput.swipe(x1, y1, x2, y2, durationMs))
 
+    suspend fun longPress(x: Int, y: Int) = send(DeviceInput.longPress(x, y))
+
     suspend fun text(value: String) = send(DeviceInput.text(value))
 
     suspend fun key(keyCode: Int) = send(DeviceInput.keyEvent(keyCode))

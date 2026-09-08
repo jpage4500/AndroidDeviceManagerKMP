@@ -310,8 +310,9 @@ differently on a bench.
 
 `BaseDialog` (`ui/dialog/`) is the one ported from DashboardWeatherKMP. Around it sit the generic
 dialogs in `ui/dialog/common/` — `ConfirmationDialog`, `TextInputDialog`, `OptionsDialog` (radio
-buttons), `MultiSelectOptionsDialog` (checkboxes), `SliderDialog`, `StepperDialog` — and the settings
-rows in `ui/setting/` that open them. **A new dialog goes here.** `ConfirmDialog` / `InputDialog` are
+buttons), `MultiSelectOptionsDialog` (checkboxes), `SliderDialog`, `StepperDialog` — and the rows in
+`ui/setting/` that open them: `SettingItem` and its slider, stepper and switch variants, under a
+`SectionHeader` or a `CollapsibleSection` when a form has enough of them to want folding. **A new dialog goes here.** `ConfirmDialog` / `InputDialog` are
 thin request-shaped wrappers over the first two, so every existing `ConfirmRequest` and
 `InputRequest` call site draws the new one without knowing.
 
@@ -607,10 +608,13 @@ remembered. `TextUtils.formatJson` is a character walk rather than parse-and-re-
 the input is a log *sentence* with a payload in the middle and the prose either side has to survive.
 
 **Device Details** (`DeviceInfoScreen`) — the properties list plus storage and battery gauges, under
-`SectionHeader`s rather than in cards, so the window reads like the settings forms beside it. The
-rows themselves are `DeviceInfoContent`, which the phone's `DeviceSheet` drops into its own scroll;
-the screen is the scrolling wrapper around them, and owns the empty state for a device that is gone —
-nothing can fill an unbounded height, so that check has to sit outside the scroll.
+section headers rather than in cards, so the window reads like the settings forms beside it. Both
+sections fold away and are remembered folded in `AppPref.INFO_COLLAPSED`, which the phone's sheet
+shares — it adds a third, Commands. The rows themselves are `DeviceInfoContent`, which that sheet
+drops into its own scroll; the screen is the scrolling wrapper around them, and owns the empty state
+for a device that is gone — nothing can fill an unbounded height, so that check has to sit outside
+the scroll. Every property row copies itself on click, with a ripple, a copy hint in the gutter and a
+toast naming what it took.
 
 **Settings** (`SettingsDialog`) — and one section with no Swing equivalent: **which transport the
 device list reads from**. That app is always a client of a local adb server; this one can also point

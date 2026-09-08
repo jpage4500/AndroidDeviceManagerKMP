@@ -70,11 +70,15 @@ private fun CompactLayout() {
     val mirrored = mirroring
     if (mirrored != null) {
         OnBack(enabled = true) { mirroring = null }
+        // the dialog's own title bar rather than the list's: a mirror is a thing opened over the
+        // app the way a dialog is, and the whole band closes it — it just fills the screen instead
+        // of sitting in a card
         Column(Modifier.safeInsets()) {
-            AppBar(
+            DialogTitle(
                 title = DeviceManager.nameOf(mirrored),
                 subtitle = Device.serialOf(mirrored),
-                onBack = { mirroring = null },
+                icon = Res.drawable.mirror,
+                onDismiss = { mirroring = null },
             )
             MirrorScreen(mirrored)
         }

@@ -36,6 +36,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     COLUMN_WIDTHS("column_widths"),                         // JSON map of DeviceColumn name -> px width the user dragged to
     DEVICE_SORT("device_sort"),                             // "<DeviceColumn name>,<asc|desc>"
     INSTALL_ID("install_id"),                               // random UUID identifying this install to log uploads
+    INFO_COLLAPSED("info_collapsed"),                       // comma-separated InfoSection names the device details keeps shut
 
     // -------------------------------------------------------------
     // -- boolean settings --

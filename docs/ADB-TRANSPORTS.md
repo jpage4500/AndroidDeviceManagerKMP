@@ -169,7 +169,9 @@ all three targets.
 | III | scrcpy-grade live video | high — roughly 70% of the total work |
 
 Tier II is why a useful app is close: at ~4 fps it is a real remote control, and no video decoder is
-needed on either platform. The Swing app's built-in mirror window is exactly this — `LocalScreenSource`
+needed on either platform. The lag it costs is paid for on the client: `ui/components/MirrorFeedback.kt`
+draws the tap or the swipe locally the moment it happens, so the wait for the next frame doesn't read
+as the tap having missed. The Swing app's built-in mirror window is exactly this — `LocalScreenSource`
 polls on a fixed delay and `ScreenStreamWebSocket` streams JPEG at a 250 ms default with JSON control
 actions for tap, swipe, text, keyevent, quality and interval.
 

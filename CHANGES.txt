@@ -65,4 +65,7 @@
 - phone: a device's page has the same title bar as every other dialog
 - phone: the four device actions are tiles, and the ones still to come say so
 - phone: rename from the name row, and restart or disconnect from the bottom
-- tapping any device property tells you it copied it
+- see your tap or swipe on the mirrored screen the moment you make it
+- phone: the mirror opens with the same title bar as a dialog, full screen
+- details, status and commands each fold away, and stay folded next time
+- tapping a device property highlights the row and says what it copied

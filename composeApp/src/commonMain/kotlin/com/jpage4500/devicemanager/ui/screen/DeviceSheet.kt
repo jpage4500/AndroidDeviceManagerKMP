@@ -62,6 +62,7 @@ fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> U
     val shotFailed = stringResource(Res.string.sheet_screenshot_failed)
 
     val online = device?.isOnline == true
+    val collapsed by SettingsManager.getEnumSetAsState<InfoSection>(AppPref.INFO_COLLAPSED)
 
     BaseDialog(
         title = device?.displayName ?: serial,
@@ -116,44 +117,51 @@ fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> U
         Spacer(Modifier.height(Dimens.gapLarge))
 
         // the rest of the desktop's row menu, as the settings screen's icon rows rather than as text
-        // buttons across the foot — those wrapped mid-word and matched nothing else in the app
-        SectionHeader(stringResource(Res.string.info_actions))
-        SettingItem(
-            icon = Res.drawable.restart,
-            labelRes = Res.string.restart,
-            enabled = online,
-            // only a wireless device can be dropped; a USB one comes straight back
-            showDivider = device?.isWireless == true,
-            onClick = {
-                val run = { scope.launch { DeviceManager.reboot(deviceId) }; Unit }
-                if (SettingsManager.getBoolean(AppPref.CONFIRM_DESTRUCTIVE)) {
-                    scope.launch {
-                        confirm = ConfirmRequest(
-                            title = restartTitle,
-                            message = getString(
-                                Res.string.sheet_restart_msg,
-                                device?.displayName ?: serial,
-                            ),
-                            onConfirm = run,
-                        )
-                    }
-                } else {
-                    run()
-                }
-            },
-        )
-        if (device?.isWireless == true) {
+        // buttons across the foot — those wrapped mid-word and matched nothing else in the app.
+        // "Commands" rather than "Actions" because this is the list that grows: the Swing app's row
+        // menu has a dozen more, and the four tiles above are the ones a finger reaches for
+        CollapsibleSection(
+            text = stringResource(Res.string.info_commands),
+            open = InfoSection.COMMANDS.isOpen(collapsed),
+            onToggle = { InfoSection.COMMANDS.toggle(collapsed) },
+        ) {
             SettingItem(
-                icon = Res.drawable.close,
-                labelRes = Res.string.disconnect,
-                labelColor = Colors.error,
-                iconColor = Colors.error,
-                showDivider = false,
+                icon = Res.drawable.restart,
+                labelRes = Res.string.restart,
+                enabled = online,
+                // only a wireless device can be dropped; a USB one comes straight back
+                showDivider = device?.isWireless == true,
                 onClick = {
-                    scope.launch { DeviceManager.disconnect(deviceId) }
-                    onDismiss()
+                    val run = { scope.launch { DeviceManager.reboot(deviceId) }; Unit }
+                    if (SettingsManager.getBoolean(AppPref.CONFIRM_DESTRUCTIVE)) {
+                        scope.launch {
+                            confirm = ConfirmRequest(
+                                title = restartTitle,
+                                message = getString(
+                                    Res.string.sheet_restart_msg,
+                                    device?.displayName ?: serial,
+                                ),
+                                onConfirm = run,
+                            )
+                        }
+                    } else {
+                        run()
+                    }
                 },
             )
+            if (device?.isWireless == true) {
+                SettingItem(
+                    icon = Res.drawable.close,
+                    labelRes = Res.string.disconnect,
+                    labelColor = Colors.error,
+                    iconColor = Colors.error,
+                    showDivider = false,
+                    onClick = {
+                        scope.launch { DeviceManager.disconnect(deviceId) }
+                        onDismiss()
+                    },
+                )
+            }
         }
     }
 

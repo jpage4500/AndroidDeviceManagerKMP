@@ -64,6 +64,14 @@ object Dimens {
     val tileIcon = 30.dp
     val tileCorner = 12.dp
 
+    // a section header that opens and shuts. taller than the label needs, because it is now a thing
+    // you tap rather than a thing you read past
+    val sectionHeaderHeight = 34.dp
+
+    // the column down the right of the device details, holding whatever a row offers: the copy hint
+    // on most of them, the rename pencil on the name
+    val infoGutter = 36.dp
+
     /**
      * settings rows and dialogs — see `ui/setting/` and `ui/dialog/`.
      *
@@ -138,6 +146,26 @@ object Dimens {
 
     val icon = 16.dp
     val iconLarge = 24.dp
+
+    // the tap, hold and swipe feedback drawn over a mirrored screen. dp where Animations.java used
+    // desktop pixels, and about twice its figures: this is read at arm's length, over a screenshot
+    // of whatever the device happens to be showing, and a thin ring over a busy screen is invisible
+    val mirrorRing = 60.dp
+    val mirrorRingInner = 24.dp
+    // the hold's ring is bigger again than the tap's — the size is half of what tells them apart
+    val mirrorHoldRing = 92.dp
+    val mirrorArrowHead = 64.dp
+    val mirrorArrowWidth = 52.dp
+    val mirrorSwipeDot = 28.dp
+    val mirrorStroke = 8.dp
+    val mirrorGlowStroke = 20.dp
+
+    // the bubble a key press raises in the middle of the frame. its text is a ninth of the frame's
+    // width, the Swing app's own sizing, and never smaller than this
+    val mirrorKeyTextMin = 34.sp
+    val mirrorKeyPadding = 26.dp
+    val mirrorKeyCorner = 32.dp
+    val mirrorKeyGlow = 8.dp
 
     // battery bar
     val batteryWidth = 22.dp
@@ -358,6 +386,16 @@ object Colors {
 
     // a toast that's only telling you something; the other two reuse `online` and `error`
     val info = Color(0xFF2F6FBF)
+
+    // the mirror's input feedback, in the Swing app's own mint. fixed rather than taken from the
+    // palette: it is drawn over a device's screenshot, not over any of this app's chrome
+    val mirrorInk = Color(0xFF00FFB4)
+    val mirrorGlow = Color(0x5000FFB4)
+
+    // a held press is warmer than a tap, which is how the two are told apart at a glance
+    val mirrorHoldInk = Color(0xFFFFA000)
+    val mirrorHoldGlow = Color(0x46FFA000)
+    val mirrorHoldFill = Color(0xFFFFB919)
 
     // --- chrome, from the palette in force ---
     val accent: Color @Composable get() = LocalPalette.current.accent

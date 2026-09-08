@@ -183,8 +183,8 @@
     <!-- device info -->
     <string name="info_battery">Battery</string>
     <string name="info_booted">Booted</string>
-    <string name="info_actions">Actions</string>
     <string name="info_carrier">Carrier</string>
+    <string name="info_commands">Commands</string>
     <string name="info_copied">Copied %1$s</string>
     <string name="info_custom_1">Custom 1</string>
     <string name="info_custom_2">Custom 2</string>
