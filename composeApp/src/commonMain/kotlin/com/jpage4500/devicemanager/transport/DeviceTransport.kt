@@ -34,6 +34,18 @@ import kotlinx.coroutines.flow.*
 enum class TransportChoice { AUTO, ADB_SERVER, REMOTE }
 
 interface DeviceTransport {
+    /**
+     * what this connection *is*, as a URI: `adb://10.0.0.4:5037`, `adm://imac.local:8765`.
+     *
+     * The app can hold several connections at once, so this is what tells them apart — a device's
+     * identity is this plus its serial ([com.jpage4500.devicemanager.data.Device.id]), because a
+     * serial alone is not unique across two desks. Derived from the address rather than minted, so
+     * the same server reached twice is one connection and not two.
+     *
+     * **No `/` past the scheme**: it is the separator a device id is split back apart on.
+     */
+    val id: String
+
     /** a name for this connection, as a picker would show it. */
     val label: String
 
@@ -54,6 +66,19 @@ interface DeviceTransport {
 
     /** run a shell command and return what it printed. */
     suspend fun exec(serial: String, command: String): Result<String>
+
+    /**
+     * `logcat` as it arrives, a batch of lines at a time.
+     *
+     * Here rather than in the log window because a batch has to come off *this* connection: with
+     * two desks attached, a stream that found its own way to an adb server would read the wrong
+     * `emulator-5554`. A transport with no way to stream refuses by saying nothing, which is what a
+     * log window draws as an empty buffer.
+     */
+    fun logcat(serial: String): Flow<List<String>> = emptyFlow()
+
+    /** whether [logcat] will produce anything — what a log window checks before it says "no logs". */
+    val canStreamLogs: Boolean get() = false
 
     /** everything `getprop` knows. */
     suspend fun properties(serial: String): Result<Map<String, String>>
@@ -93,6 +118,15 @@ interface DeviceTransport {
 
     suspend fun disconnect(serial: String): Result<String> =
         Result.failure(UnsupportedOperationException("$label can't disconnect a device"))
+
+    /**
+     * whether [connect] will do anything — which connection an address typed into Connect goes to.
+     *
+     * Only an adb server can dial a device: it holds the RSA key and does the handshake. A Device
+     * Manager instance manages its own devices and has no endpoint for it, which is why this is a
+     * question worth asking rather than something to find out from a failure.
+     */
+    val canConnect: Boolean get() = false
 
     /**
      * pair with a device showing its wireless-debugging code, at the address it advertises.

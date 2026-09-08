@@ -315,16 +315,17 @@ internal fun joinChunks(chunks: List<ByteArray>): ByteArray {
  * the session is held for a whole operation rather than one file — see [AdbSync].
  */
 suspend fun <T> withSync(
+    server: AdbServer,
     serial: String,
     block: suspend (AdbSync) -> AdbOutcome<T>,
 ): AdbOutcome<T> {
-    val opened = AdbConnection.toDevice(serial)
+    val opened = AdbConnection.toDevice(server, serial)
     val connection = when (opened) {
         is AdbOutcome.Err -> return opened
         is AdbOutcome.Ok -> opened.value
     }
     return connection.use {
-        when (val session = it.startSync(AdbFeatures.syncV2(serial))) {
+        when (val session = it.startSync(AdbFeatures.syncV2(server, serial))) {
             is AdbOutcome.Err -> session
             is AdbOutcome.Ok -> try {
                 block(session.value).also { _ -> session.value.quit() }

@@ -20,6 +20,14 @@ data class SavedServer(
     val name: String? = null,
     val token: String = "",
     val lastSeenMs: Long = 0,
+    /**
+     * whether the app was reading this server when it last closed.
+     *
+     * saved rather than derived because it is what brings a desk back at the next start: several
+     * servers can be attached at once, so "which ones" is a real question the settings have to
+     * answer. See [com.jpage4500.devicemanager.manager.ServerManager].
+     */
+    val connected: Boolean = false,
 ) {
     /** the Swing app's own rule: a bare host gets a scheme, a host that brought one keeps it. */
     val baseUrl: String
@@ -36,9 +44,21 @@ data class SavedServer(
 
     val displayName: String get() = name?.takeIf { it.isNotBlank() } ?: key
 
+    /** what [com.jpage4500.devicemanager.manager.DeviceManager] knows this server's connection as. */
+    val connectionId: String get() = connectionIdOf(key)
+
     companion object {
         fun keyOf(baseUrl: String): String =
             baseUrl.removePrefix("https://").removePrefix("http://")
+
+        /**
+         * the id a connection to this server has, without having to build one to ask it.
+         *
+         * `server://` rather than [PREFIX]'s `adm://`, which already means something else here: a
+         * connection string is base64 of the whole entry, and two things that read the same and are
+         * not the same is a bug waiting for someone in a log file.
+         */
+        fun connectionIdOf(key: String): String = "server://$key"
 
         /** `RemoteServerManager.DEFAULT_PORT` in the Swing app. */
         const val DEFAULT_PORT = 8765

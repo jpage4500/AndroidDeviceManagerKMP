@@ -29,25 +29,46 @@ What it does have, in the order it is worth building:
 
 ## The one thing the phone needs that the desktop doesn't
 
-**More than one connection at a time.** A desk has one adb server and that is the whole story;
-`DeviceManager` holds exactly one `DeviceTransport` and `useTransport` closes the previous one. A
-phone is the opposite case: two devices reached directly, plus a desk at the office, plus a desk at
-home, and the list it shows is the **union** of all of them.
+**More than one connection at a time — built.** A desk has one adb server and that is the whole
+story. A phone is the opposite case: two devices reached directly, plus a desk at the office, plus a
+desk at home, and the list it shows is the **union** of all of them.
 
-The Swing app already works this way — `RemoteConnectionManager` holds a list of `RemoteServerConfig`
-with a colour each, and `Device.remoteConnection` says which one a row came from. The phone needs the
-same shape, and the desktop keeps working because a list of one behaves like the single transport it
-has today.
+`DeviceManager` holds a **list** of `DeviceTransport`s. Each has its own tracker and its own detail
+fetch, `devices` is every connection's rows in the order the connections were added, and adding or
+dropping one leaves the others exactly where they are. The desktop is unaffected: a list of one
+behaves as the single transport it had before. The Swing app already works this way —
+`RemoteConnectionManager` holds a list of `RemoteServerConfig` and `Device.remoteConnection` says
+which one a row came from.
 
-Two things block it right now, both worth knowing before any of this is written:
+Two things had to change first, and both are the load-bearing part of the design:
 
-- **`AdbServerTransport.aim()` sets a global.** `AdbConnection.host` / `.port` are set before every
-  call, which the class's own comment says only works because one transport is active at a time. Two
-  adb servers at once would fight over it, so the address has to move onto the connection first.
-- **A serial isn't a unique key across connections.** `_devices` is keyed on serial, so is the
-  selection, so is `WindowManager.openOnce`. Two desks can each have an `emulator-5554`. Device
-  identity on mobile is *(connection id, serial)*, and the connection id has to be on `Device` before
-  a second connection is allowed to exist.
+- **A connection is identified by where it goes**, as a URI: `adb://10.0.0.4:5037`,
+  `server://imac.local:8765`, `test://0.0.0.0`. Derived rather than minted, so the same desk reached
+  twice is one connection — which is also what stops a saved server and a remote URL in Settings
+  showing every device twice. `DeviceTransport.id`.
+- **A device is identified by its connection *and* its serial**, written `<connection id>/<serial>`
+  — `Device.id`. Two desks can each have an `emulator-5554`, and `_devices`, the selection and
+  `WindowManager.openOnce` were all keyed on the serial alone. Everything above `DeviceManager` now
+  keys on the id; everything below it is handed the bare serial, which is all adb has ever known
+  about. `Device.connectionOf` / `Device.serialOf` split one back apart.
+
+The adb server's address moved with it: `AdbServer(host, port)` is passed into every call in `adb/`,
+where `AdbConnection.host` used to be a global that `AdbServerTransport.aim()` set before each one.
+`AdbFeatures` is keyed on the server as well as the serial for the same reason.
+
+**Which servers are attached is remembered.** `SavedServer.connected` says so, and
+`ServerManager.restore()` — called from `DeviceManager.start()` — re-attaches them one at a time at
+the next launch. A desk that doesn't answer keeps its flag and is tried again: being off is not the
+same as being forgotten.
+
+**Logcat goes through the transport too** (`DeviceTransport.logcat`), because a stream that found its
+own way to an adb server would happily read the other desk's `emulator-5554`. Only an adb server
+implements it; `canStreamLogs` is what a log window checks before it opens on a device it can't
+follow.
+
+What this leaves ready is the route that isn't written yet: a **direct `adbd` transport** is one more
+`DeviceTransport` with an id of its own, added with `DeviceManager.addConnection`, and every screen
+gets it alongside whatever else is attached.
 
 ## The device list
 
@@ -75,16 +96,16 @@ Two things block it right now, both worth knowing before any of this is written:
 ```
 
 **Grouped by the computer the devices came through.** Every remembered Device Manager server is a row
-in the list, and the one being read holds its devices inside it — `ui/screen/ServerGroup.kt`, drawn
-with the same `ExpandableBlock` the connect panel's routes use, so the phone has one expanding idiom
-rather than two. The connected computer opens itself and the rest stay shut; an explicit tap wins
+in the list, and each one being read holds its own devices inside it — `ui/screen/ServerGroup.kt`,
+drawn with the same `ExpandableBlock` the connect panel's routes use, so the phone has one expanding
+idiom rather than two. A connected computer opens itself and the rest stay shut; an explicit tap wins
 from then on. Anything no computer owns — a desk's adb server, the test fleet — is a plain row below
 the groups, and the connect panel is still the last item.
 
 A group rather than a column on the row, because a serial says nothing about which desk it arrived
-from and a remembered computer that isn't connected has nowhere else to be. At most one group is ever
-live, since `DeviceManager` holds a single transport — but the shape is already what several
-connections need, which is the point.
+from and a remembered computer that isn't connected has nowhere else to be. **Any number of groups
+can be live**: a row is placed by the connection it arrived on, so two desks fill two groups, and
+Disconnect on one leaves the other where it is.
 
 **A computer's row only opens and shuts.** Disconnect and Forget sit behind the ⓘ button on it, in a
 dialog: as links on the row they made it wider than a phone, and Forget one tap away from a row
@@ -129,7 +150,7 @@ of which the app has to remember for itself:
 | Remembered | Where it lives today | Tapping it |
 |---|---|---|
 | a device reached directly (`host:port`) | `WirelessManager` → `AppPref.RECENT_WIRELESS` | re-dial that address |
-| a Device Manager server | `ServerManager` → `AppPref.SAVED_SERVERS` | its group opens; Connect is inside it |
+| a Device Manager server | `ServerManager` → `AppPref.SAVED_SERVERS`, with `connected` | its group opens; Connect is inside it |
 | a device belonging to a connected desk, currently offline | the desk's own list | nothing; the desk owns it |
 
 The server half of that is built: **`AppPref.SAVED_SERVERS`** is a JSON list of `SavedServer`
@@ -155,31 +176,53 @@ straight to a 250ms screencap poll is an expensive guess.
 │ Pixel 10a                    ✕  │
 │ 192.168.0.147 · joe's imac      │
 ├─────────────────────────────────┤
-│ [ Mirror ] [ Screenshot ]       │
-│ [ Files  ] [ Logs       ]       │
-├─────────────────────────────────┤
+│ ┌─────────────┐┌──────────────┐ │
+│ │      ▶      ││      📷      │ │
+│ │   Mirror    ││  Screenshot  │ │
+│ └─────────────┘└──────────────┘ │
+│ ┌ ─ ─ ─ ─ ─ ─ ┐┌ ─ ─ ─ ─ ─ ─ ┐ │
+│ │      📁     ││      ≡      │ │
+│ │   Browse    ││    Logs     │ │
+│ └ ─ ─ ─ ─ ─ ─ ┘└ ─ ─ ─ ─ ─ ─ ┘ │
+│ DETAILS ────────────────────────│
 │ Serial      192.168.0.147:5555  │
+│ Name        Pixel 10a        ✎  │
 │ Model       Pixel 10a           │
 │ Android     16 (SDK 36)         │
-│ Carrier     …                   │
+│ STATUS ─────────────────────────│
 │ Storage     ▓▓▓▓▓▓░░░  62%      │
 │ Battery     ▓▓▓▓▓▓▓▓░  87% ⚡   │
-├─────────────────────────────────┤
-│ Rename · Restart · Disconnect   │
+│ ACTIONS ────────────────────────│
+│ ↻  Restart                      │
+│ ✕  Disconnect                   │
 └─────────────────────────────────┘
 ```
 
-- **The body is `DeviceInfoScreen`**, which already exists and already reads the live device rather
-  than a snapshot, so the numbers move while the sheet is open. It is 184 lines of properties list
-  and two gauges, written for the desktop's Info window; on a phone it is the same composable inside
-  the sheet.
+The title bar is the app's own `DialogTitle`: the whole band closes the sheet, the icon is the list
+row's device icon tinted by the same state colour, and the second line is where the device came from
+rather than its serial — a wireless serial eats the line to say nothing, and it is the first row of
+the list below.
+
+- **The body is `DeviceInfoContent`**, the rows the desktop's Device Details window draws, reading
+  the live device rather than a snapshot — so the free space and the battery move while the sheet is
+  open. `DeviceInfoScreen` is the desktop's scrolling wrapper around the same rows; the sheet has a
+  scroll of its own and calls the content directly. **Sections rather than cards on grey**: the same
+  `SectionHeader` and flat rows a settings screen uses, because two white cards floating on a band of
+  `headerBg` was the one part of the phone app that looked like a different product.
+- **A property row copies itself and says so.** The tap always put the value on the clipboard; it now
+  toasts what it copied, which is the difference between that and a tap that missed. Rename is a
+  pencil on the Name row, where a user looks for it.
 - **The actions above it are the desktop's row menu**, filtered to what a phone can do and ordered by
-  what a phone is for. Mirror and Screenshot are the two the user reaches for; Files and Logs come
-  when those screens exist. Rename, Restart and Disconnect go at the bottom as text, away from the
-  thumb.
+  what a phone is for. Mirror and Screenshot are the two the user reaches for; Browse and Logs are
+  **dashed outlines** until those screens exist — the shape is the real one, nothing moves when they
+  arrive, and an outline reads as not-yet where grey text read as broken. Restart and Disconnect are
+  `SettingItem` rows at the foot, away from the thumb.
 - **A destructive action still confirms** — `AppPref.CONFIRM_DESTRUCTIVE` is already the setting, and
   Restart on the wrong row is exactly the mistake a phone makes easier.
-- **The sheet is a `DialogContainer`**, whose phone actual is already an overlay rather than a window.
+- **The sheet is a `BaseDialog`** like every other dialog in the app, which is where its title band,
+  its rounded card and its place in the dialog stack come from. It hand-rolled all three over a bare
+  `DialogContainer` until 09/08, and read as a different product because of it — the confirmation it
+  raises now replaces it and hands the sheet back, rather than opening over the top of it.
 
 **Screenshot means something different on a phone.** The desktop writes a PNG to a folder. A phone
 has no folder anyone will find, so a screenshot opens full-screen with a **Share** button and goes
@@ -191,6 +234,12 @@ button. They already have names: `WindowContent` is a sealed interface in `Windo
 exactly these — Mirror, Logs, Files, Info, Connect, Settings, Message. Reuse it as the phone's route
 type and one enum names both a desktop window and a phone screen, so the shared action that opens a
 mirror doesn't need to know which it is.
+
+**A drag on the mirror is a swipe, not a tap.** `MirrorScreen` reads the whole gesture itself rather
+than through `detectTapGestures`, which reports a drag as a tap wherever the finger lifted — on a
+phone that turns every attempt to scroll the mirrored device into a click on whatever was under the
+thumb. Past the touch slop it becomes `input swipe`, replayed over the time the finger actually took
+so a flick reads as a flick, clamped to 50–2000 ms.
 
 ## Connecting a device
 
@@ -303,7 +352,7 @@ Auth is `Authorization: Bearer <token>` or a `token` query parameter, plus an `x
 the server shows in its own UI. The default port is 8765 (`RemoteServerManager.DEFAULT_PORT`), and
 the token is 16 random alphanumerics.
 
-Three things to get right:
+Four things to get right:
 
 - **Hit `/api/info` on Connect, not `/api/devices`.** It is the cheapest call, it proves the token,
   and it hands back the server's own name — which is what the row in the list is labelled with
@@ -317,6 +366,11 @@ Three things to get right:
   endpoint in the API, and the brief is not to change it. So when the active connection is a Device
   Manager server, the "connect a device by IP" option is about *this phone*, not about the desk — and
   the panel should say so rather than silently doing something else.
+- **`/api/execute` takes a JSON body**, `{"serial", "command"}`, and so does `/api/setproperty`. The
+  server reads the post body and never the query string, so the same two values as query parameters
+  come back as a 400 "Missing serial or command" — which was every tap on a mirrored screen. It
+  answers `{isSuccess, resultList}` rather than the command's raw output, and `isSuccess` is whether
+  it could *run* the command, not the command's exit status.
 
 **Nothing on this route runs a shell command.** `/api/devices` already carries the battery, the free
 space, the carrier, the phone number, the IMEI, the custom properties and the boot time — the server
@@ -522,27 +576,49 @@ desk it holds a slot. The rule:
 - **The notification says something true**: "2 devices connected · Pixel 10a", with a **Disconnect**
   action that actually disconnects rather than just hiding the notification.
 
-### What "reconnect on foreground" means, per transport
+### Closing on background, reopening on foreground — **built**
 
-There has to be a lifecycle signal in `commonMain` for any of this: one `expect` object exposing
-`StateFlow<Boolean> isForeground` — `ProcessLifecycleOwner` on Android, `UIApplication`'s
-notifications on iOS, and permanently `true` on desktop. Everything below hangs off it.
+`manager/AppLifecycle.kt` is the signal everything hangs off: a `StateFlow<Boolean> isForeground` in
+`commonMain`, fed by an `expect fun observeAppLifecycle()` that each `initApp` calls once.
+
+- **Android** — `Application.ActivityLifecycleCallbacks`, counting started activities.
+  `ProcessLifecycleOwner` is the canonical answer and needs `androidx.lifecycle:lifecycle-process`;
+  that is a whole artifact for a callback registered in ten lines against a class the app already
+  has. `onActivityStopped` is what fires when the screen goes off, which is the case this was
+  written for.
+- **iOS** — `UIApplicationDidEnterBackgroundNotification` and `WillEnterForeground`, *not* the
+  resign-active pair: pulling down Control Centre resigns active, and dropping every connection for
+  that only to dial the desk again a second later is worse than leaving them up.
+- **desktop** — a no-op, so the flag is true for the life of the process. A minimised window, or no
+  window at all under `MINIMIZE_TO_TRAY`, is still managing 45 devices; tying this to window focus
+  would break the workload the app exists for.
+
+Nothing reads the flag directly. `whileForeground { … }` wraps a body and is the only call site
+pattern: it cancels the body on the way out and re-enters it on the way back, so a caller's `launch`
+or `LaunchedEffect` owns the lifetime exactly as it did before. Three things are wrapped —
+`DeviceManager.track`, the details refresh timer, and `MirrorScreen`'s capture loop.
 
 | Transport | On background | On foreground |
 |---|---|---|
-| `AdbServerTransport` | close the tracker deliberately; left alone, the `host:track-devices-l` socket dies without erroring and the tracker just goes quiet | `DeviceManager.refresh()` already cancels and restarts the tracker — that is the hook, and it exists |
-| `RemoteHttpTransport` | stop the 3s poll | call `evictIdleConnections()` before the first request — APP-SERVICES.md documents this for exactly this case, and nothing calls it. The half-open socket after a wifi re-associate looks healthy and stalls ~14s |
-| direct to `adbd` | connection gone | full reconnect and re-auth |
+| `AdbServerTransport` | the tracker is closed deliberately by cancelling the collection — `AdbDevices.track`'s own `finally` closes the socket. Left alone, `host:track-devices-l` dies without erroring and the tracker just goes quiet | re-entering the collection opens a new one, which is what `DeviceManager.refresh()` does for a server restarted underneath us |
+| `RemoteHttpTransport` | the `/api/info` poll stops | `evictIdleConnections()` runs **before** the flag flips, so the first request of the new session can't be the one written to a half-open socket — that one looks healthy and stalls ~14s. See APP-SERVICES.md |
+| direct to `adbd` | connection gone | full reconnect and re-auth — not written, there is no such transport yet |
 
-And two things must **stop** when the app goes to the background, notification or not:
+Two things that must stop, and now do:
 
-- `MirrorSource` polls a screencap every 250ms (`AppPref.MIRROR_INTERVAL_MS`). A backgrounded mirror
-  is pure waste and, on a metered link, rude.
-- The details refresh timer (`AppPref.DETAILS_REFRESH_SECS`, 60s) — battery and free space on a
-  screen nobody is looking at.
+- `MirrorSource` polls a screencap every 250ms. A backgrounded mirror is pure waste and, on a
+  metered link, rude.
+- The details refresh timer (`AppPref.DETAILS_REFRESH_SECS`) — two shell commands per device per
+  minute for a battery percentage nobody is looking at.
 
-A device that fails to come back should show up in the **not connected** section with its last-seen
-time, not vanish. That is the section's whole purpose.
+The device rows are deliberately **not** cleared on the way out: a list nobody can see doesn't need
+blanking, and keeping it means coming back to the table that was there rather than to a frame of
+nothing. A device that then fails to come back shows up in the **not connected** section with its
+last-seen time rather than vanishing — that is the section's whole purpose.
+
+Still open: the log viewer's `logcat` stream and its `ps` poll are not wrapped. Pausing a capture
+loses the lines that arrived while the app was away, which is worse than the socket it saves, and
+the log viewer isn't reachable on a phone yet — so that is a decision to make when it is.
 
 ## Settings
 
@@ -582,11 +658,12 @@ Each step leaves the app usable and compiles on all three targets.
    `RemoteHttpTransport.info()` on `/api/info` as the thing Connect actually calls. The two QR rows
    are drawn disabled, so the panel is the real shape rather than a stub. `0.0.0.0` in either field
    loads `transport/FakeTransport.kt`.
-2. ~~**The device sheet.**~~ **Done.** `ui/screen/DeviceSheet.kt`: `DeviceInfoScreen` inside a
-   `DialogContainer`, the 2×2 action grid above it, and Copy serial / Rename / Restart / Disconnect
-   below. Mirror and Screenshot are wired; Files and Logs are drawn disabled. Restart confirms when
-   `CONFIRM_DESTRUCTIVE` is on. A screenshot is shown and thrown away — the share sheet is still
-   waiting on `shareImage`.
+2. ~~**The device sheet.**~~ **Done.** `ui/screen/DeviceSheet.kt`: `DeviceInfoContent` inside a
+   `BaseDialog`, the 2×2 grid of action tiles above it, and Restart / Disconnect as `SettingItem`
+   rows below. Mirror and Screenshot are wired; Browse and Logs are dashed outlines. Rename is a
+   pencil on the Name row and Copy serial is gone — every property row copies itself. Restart
+   confirms when `CONFIRM_DESTRUCTIVE` is on. A screenshot is shown and thrown away — the share sheet
+   is still waiting on `shareImage`.
 3. **The lifecycle seam.** `isForeground`, reconnect on return, stop polling on leave. iOS needs it
    and everything after it assumes it.
 4. **The list's two sections**, and remembered offline devices.

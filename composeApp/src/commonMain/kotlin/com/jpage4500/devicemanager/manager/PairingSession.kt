@@ -84,7 +84,12 @@ class PairingSession {
 
         // ask first. a phone left on the default 127.0.0.1 has no adb server at all, and finding
         // that out after someone has scanned a code is the whole failure this avoids
-        val transport = DeviceManager.transport.value
+        val transport = DeviceManager.pairer()
+        if (transport == null) {
+            log.w("run: nothing attached can pair")
+            _state.value = PairState.Failed("no adb server to pair through")
+            return
+        }
         val reachable = transport.probe()
         if (reachable.isFailure) {
             val why = reachable.exceptionOrNull()?.message ?: "unreachable"
@@ -123,7 +128,13 @@ class PairingSession {
         _state.value = PairState.Found("${service.host}:${service.port}")
         log.i("onFound: pairing with ${service.name} at ${service.host}:${service.port}")
 
-        DeviceManager.transport.value.pair(service.host, service.port, password)
+        val transport = DeviceManager.pairer()
+        if (transport == null) {
+            _state.value = PairState.Failed("no adb server to pair through")
+            attempting = false
+            return
+        }
+        transport.pair(service.host, service.port, password)
             .onSuccess {
                 log.i("onFound: paired: $it")
                 _state.value = PairState.Paired(it)

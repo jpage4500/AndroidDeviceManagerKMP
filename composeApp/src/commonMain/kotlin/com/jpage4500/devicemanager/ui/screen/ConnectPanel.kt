@@ -229,7 +229,9 @@ private fun ServerForm() {
  */
 @Composable
 private fun DeviceForm() {
-    val transport by DeviceManager.transport.collectAsState()
+    // any attached adb server will do the cryptography; a Device Manager server can't
+    val connections by DeviceManager.connections.collectAsState()
+    val canPair = connections.any { it.canPair }
     var pairing by remember { mutableStateOf(false) }
 
     Column(
@@ -244,13 +246,13 @@ private fun DeviceForm() {
                 icon = Res.drawable.qr_code,
                 // pairing needs an adb server behind us to do the cryptography, so the button is
                 // only offered where it can work — see PairingSession
-                enabled = transport.canPair,
+                enabled = canPair,
                 onClick = { pairing = true },
             )
             Spacer(Modifier.height(Dimens.gap))
             Text(
                 text = stringResource(
-                    if (transport.canPair) Res.string.connect_pair_steps else Res.string.connect_pair_needs_adb
+                    if (canPair) Res.string.connect_pair_steps else Res.string.connect_pair_needs_adb
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = Colors.secondaryText,

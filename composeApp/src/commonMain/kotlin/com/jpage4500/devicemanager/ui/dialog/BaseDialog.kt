@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.*
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.*
 import androidx.compose.ui.platform.*
@@ -41,6 +42,10 @@ fun BaseDialog(
     title: String? = null,
     titleRes: StringResource? = null,
     icon: DrawableResource? = null,
+    iconTint: Color? = null,            // null = the accent colour
+    // a dimmer second line under the title. only drawn where the panel draws its own heading, which
+    // is the phone: a desktop dialog's heading is the OS title bar, and that has room for one line
+    subtitle: String? = null,
     titleMaxLines: Int = 1,             // lines the title may wrap to before it ellipsizes
     okText: String? = null,             // optional OK button
     cancelText: String? = null,         // optional CANCEL button
@@ -100,6 +105,8 @@ fun BaseDialog(
                     .heightIn(max = Dimens.dialogWindowMaxHeight),
                 titleText = null,   // the OS title bar is the heading
                 icon = null,
+                iconTint = null,
+                subtitle = null,
                 titleMaxLines = titleMaxLines,
                 okText = okText,
                 cancelText = cancelText,
@@ -117,6 +124,8 @@ fun BaseDialog(
             OverlayCard(
                 titleText = titleText,
                 icon = icon,
+                iconTint = iconTint,
+                subtitle = subtitle,
                 titleMaxLines = titleMaxLines,
                 okText = okText,
                 cancelText = cancelText,
@@ -143,6 +152,8 @@ fun BaseDialog(
 private fun OverlayCard(
     titleText: String?,
     icon: DrawableResource?,
+    iconTint: Color?,
+    subtitle: String?,
     titleMaxLines: Int,
     okText: String?,
     cancelText: String?,
@@ -206,6 +217,8 @@ private fun OverlayCard(
                 modifier = Modifier.fillMaxWidth(),
                 titleText = titleText,
                 icon = icon,
+                iconTint = iconTint,
+                subtitle = subtitle,
                 titleMaxLines = titleMaxLines,
                 okText = okText,
                 cancelText = cancelText,
@@ -235,6 +248,8 @@ private fun DialogPanel(
     modifier: Modifier,
     titleText: String?,
     icon: DrawableResource?,
+    iconTint: Color?,
+    subtitle: String?,
     titleMaxLines: Int,
     okText: String?,
     cancelText: String?,
@@ -253,7 +268,14 @@ private fun DialogPanel(
         onShow?.let { LaunchedEffect(Unit) { it() } }
 
         if (titleText != null) {
-            DialogTitle(title = titleText, icon = icon, maxLines = titleMaxLines, onDismiss = onDismiss)
+            DialogTitle(
+                title = titleText,
+                icon = icon,
+                iconTint = iconTint,
+                subtitle = subtitle,
+                maxLines = titleMaxLines,
+                onDismiss = onDismiss,
+            )
         }
 
         val contentModifier = Modifier

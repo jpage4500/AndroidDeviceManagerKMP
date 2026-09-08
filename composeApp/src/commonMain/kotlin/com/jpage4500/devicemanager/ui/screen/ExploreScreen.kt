@@ -29,8 +29,8 @@ import org.jetbrains.compose.resources.stringResource
  * look at anyway. The status bar links to the folder.
  */
 @Composable
-fun ExploreScreen(serial: String, modifier: Modifier = Modifier) {
-    val browser = remember(serial) { FileBrowser(serial) }
+fun ExploreScreen(deviceId: String, modifier: Modifier = Modifier) {
+    val browser = remember(deviceId) { FileBrowser(deviceId) }
     val scope = rememberCoroutineScope()
     val path by browser.path.collectAsState()
     val files by browser.files.collectAsState()
@@ -57,7 +57,7 @@ fun ExploreScreen(serial: String, modifier: Modifier = Modifier) {
     val sorted = remember(files, sort) { browser.sorted(files) }
     val selected = remember(selection, files) { files.filter { it.path in selection.keys } }
 
-    LaunchedEffect(serial) { browser.open(scope) }
+    LaunchedEffect(deviceId) { browser.open(scope) }
 
     fun refresh() = browser.open(scope)
 

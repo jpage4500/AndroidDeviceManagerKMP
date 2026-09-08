@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.*
  * second; without a cap the app would run itself out of heap in minutes, and re-allocating a list of
  * 100,000 entries per batch would cost more than the parsing.
  */
-class LogsSource(private val serial: String) {
+class LogsSource(private val deviceId: String) {
     private val log = LoggerConfig.createLogger("LogsSource")
 
     private val maxLines = SettingsManager.getInt(AppPref.LOGS_MAX_LINES).coerceAtLeast(1_000)
@@ -163,10 +163,17 @@ class LogsSource(private val serial: String) {
     /** start reading, on [scope] so the window's lifetime owns the stream. */
     fun start(scope: CoroutineScope) {
         if (job != null) return
+        // only an adb server streams logcat; a Device Manager instance has no endpoint for it, and
+        // an empty window with no explanation is the worst way to say so
+        if (!DeviceManager.canStreamLogs(deviceId)) {
+            log.w("start: $deviceId can't stream logs")
+            ToastManager.showToast("logs need an adb server connection", success = false)
+            return
+        }
         _running.value = true
         startAppNames(scope)
         job = scope.launch {
-            adbLogcat(serial).collect { lines ->
+            DeviceManager.logcat(deviceId).collect { lines ->
                 var changed = false
                 lines.forEach { line ->
                     val entry = LogEntry.parse(line, nextId++)
@@ -196,7 +203,7 @@ class LogsSource(private val serial: String) {
         if (appsJob != null) return
         appsJob = scope.launch {
             while (isActive) {
-                val output = DeviceManager.exec(serial, CMD_PS).getOrNull()
+                val output = DeviceManager.exec(deviceId, CMD_PS).getOrNull()
                 if (output != null) _apps.value = parseProcessList(output)
                 delay(APPS_REFRESH_MS)
             }
@@ -204,7 +211,7 @@ class LogsSource(private val serial: String) {
     }
 
     fun stop() {
-        log.d("stop: $serial")
+        log.d("stop: $deviceId")
         job?.cancel()
         job = null
         appsJob?.cancel()

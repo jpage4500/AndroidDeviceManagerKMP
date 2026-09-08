@@ -25,9 +25,10 @@ import org.jetbrains.compose.resources.stringResource
  * follow a header read as more list rather than as that header's contents, and the point of the
  * group is to say *these* devices came through *that* desk.
  *
- * Only one computer can be the connected one — [DeviceManager] holds a single transport — so the
- * rest are remembered rather than live, and open onto a Connect button instead of rows. Their
- * devices are the desk's to know, not this app's.
+ * Any number of them can be connected at once — each is a connection of its own in [DeviceManager]
+ * — so a group is live when *this* computer is one of them, and the rest open onto a Connect button
+ * instead of rows. A computer that isn't connected has no devices to show: they are the desk's to
+ * know, not this app's.
  *
  * **The row itself only opens and shuts.** Disconnect and Forget live behind the info button, not
  * as links beside the name: two of them plus a Connect made a row wider than a phone, and Forget
@@ -143,9 +144,9 @@ private fun ServerNote(
 /**
  * what can be done to a computer, behind the info button on its row.
  *
- * Disconnect drops the app back onto whatever the settings describe — an adb server, usually — and
- * Forget also throws the auth token away, which is why it is the one that reads as destructive. A
- * forgotten computer is one QR scan from coming back.
+ * Disconnect stops reading this computer and takes its devices out of the list, leaving every other
+ * connection where it is; Forget also throws the auth token away, which is why it is the one that
+ * reads as destructive. A forgotten computer is one QR scan from coming back.
  */
 @Composable
 private fun ServerDialog(server: SavedServer, active: Boolean, onDismiss: () -> Unit) {
@@ -161,7 +162,7 @@ private fun ServerDialog(server: SavedServer, active: Boolean, onDismiss: () -> 
                 icon = Res.drawable.close,
                 labelRes = Res.string.disconnect,
                 onClick = {
-                    ServerManager.disconnect()
+                    ServerManager.disconnect(server.key)
                     onDismiss()
                 },
             )

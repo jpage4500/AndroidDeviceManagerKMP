@@ -128,7 +128,9 @@ signed. That is a trusted network only, which port 5037 already required of you.
 `evictIdleConnections()` exists for one specific stall: while backgrounded the wifi link drops and
 re-associates without the other end getting to send a FIN, so the pooled socket is half-open. It
 still looks healthy, the request gets written to it, and nothing comes back until TCP exhausts its
-retransmit backoff ~14s later. Call it when the app comes back to the foreground. It's a no-op on
+retransmit backoff ~14s later. `AppLifecycle` calls it on the way back to the foreground — before
+it flips its flag, so the first request of the new session can't be the one that finds the dead
+socket — and again on the way out, to let go of what it can while nobody is looking. It's a no-op on
 iOS, which tears its own connections down on suspend.
 
 **The adb routes do not come through here.** They speak adb's own framing over a raw socket.

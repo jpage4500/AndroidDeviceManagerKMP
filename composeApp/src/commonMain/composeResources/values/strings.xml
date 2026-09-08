@@ -44,7 +44,7 @@
     <string name="connect_direct_later">Connecting straight to another device, with no computer involved, is not built yet.</string>
     <string name="connect_forget">Forget</string>
     <string name="connect_host">Host</string>
-    <string name="connect_host_hint">192.168.0.12 — or 0.0.0.0 for test devices</string>
+    <string name="connect_host_hint">192.168.0.12</string>
     <string name="connect_later">Later</string>
     <string name="connect_manual">Manual entry</string>
     <string name="connect_name">Name</string>
@@ -70,7 +70,6 @@
     <string name="server_offline_msg">Its devices show up here once this computer is connected.</string>
 
     <!-- device sheet (mobile) -->
-    <string name="sheet_copy_serial">Copy serial</string>
     <string name="sheet_done">Done</string>
     <string name="sheet_rename_title">Device name</string>
     <string name="sheet_restart_msg">Restart %1$s? Anything running on it stops.</string>
@@ -184,9 +183,12 @@
     <!-- device info -->
     <string name="info_battery">Battery</string>
     <string name="info_booted">Booted</string>
+    <string name="info_actions">Actions</string>
     <string name="info_carrier">Carrier</string>
+    <string name="info_copied">Copied %1$s</string>
     <string name="info_custom_1">Custom 1</string>
     <string name="info_custom_2">Custom 2</string>
+    <string name="info_details">Details</string>
     <string name="info_gone">Device is gone</string>
     <string name="info_imei">IMEI</string>
     <string name="info_model">Model</string>
@@ -194,6 +196,7 @@
     <string name="info_os">OS</string>
     <string name="info_phone">Phone</string>
     <string name="info_serial">Serial</string>
+    <string name="info_status">Status</string>
     <string name="info_storage">Internal Storage</string>
     <string name="info_timezone">Timezone</string>
 

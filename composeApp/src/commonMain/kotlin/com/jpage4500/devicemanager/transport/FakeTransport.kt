@@ -20,6 +20,8 @@ import kotlin.math.*
 class FakeTransport : DeviceTransport {
     private val log = LoggerConfig.createLogger("FakeTransport")
 
+    override val id: String get() = "test://${HOST}"
+
     override val label: String get() = "test devices"
 
     override fun devices(): Flow<List<Device>> = flowOf(FLEET)

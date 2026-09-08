@@ -42,7 +42,7 @@ enum class FileColumn(val label: String, val defaultWidth: Int) {
  * **Directories sort before files**, always, whichever column is sorted — that is what makes a deep
  * tree navigable, and no file manager does it any other way.
  */
-class FileBrowser(private val serial: String) {
+class FileBrowser(private val deviceId: String) {
     private val log = LoggerConfig.createLogger("FileBrowser")
 
     private val _path = MutableStateFlow(START_PATH)
@@ -68,7 +68,7 @@ class FileBrowser(private val serial: String) {
             _loading.value = true
             _error.value = null
             val target = normalise(to)
-            DeviceManager.listFiles(serial, target)
+            DeviceManager.listFiles(deviceId, target)
                 .onSuccess {
                     _path.value = target
                     // "." and ".." come back as ordinary entries; nothing wants to see them
@@ -107,7 +107,7 @@ class FileBrowser(private val serial: String) {
     /** save a file into the app's own download folder. @return the name it was saved as */
     suspend fun download(file: DeviceFile): Result<String> {
         StatusManager.post("Downloading ${file.name}", progress = 0)
-        return DeviceManager.pullFile(serial, file.path)
+        return DeviceManager.pullFile(deviceId, file.path)
             .mapCatching { bytes ->
                 val ok = StorageManager.writeBytes(PATH_DOWNLOADS, file.name, bytes)
                 if (!ok) throw IllegalStateException("couldn't write ${file.name}")
@@ -119,12 +119,12 @@ class FileBrowser(private val serial: String) {
 
     suspend fun delete(files: List<DeviceFile>): Result<Unit> {
         val quoted = files.joinToString(" ") { Utils.shellQuote(it.path) }
-        return DeviceManager.runCommand(serial, "rm -rf $quoted", "Deleting on").map { }
+        return DeviceManager.runCommand(deviceId, "rm -rf $quoted", "Deleting on").map { }
     }
 
     suspend fun newFolder(name: String): Result<Unit> {
         val target = Utils.shellQuote("${_path.value.trimEnd('/')}/$name")
-        return DeviceManager.runCommand(serial, "mkdir -p $target", "Creating folder on").map { }
+        return DeviceManager.runCommand(deviceId, "mkdir -p $target", "Creating folder on").map { }
     }
 
     /** what a path is once the slashes are tidy — `/sdcard/` and `//sdcard` are the same folder. */

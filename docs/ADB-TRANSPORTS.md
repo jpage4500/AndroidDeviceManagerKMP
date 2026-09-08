@@ -85,19 +85,32 @@ permanently.
 | Device Manager's HTTP API (`:8765`) | yes | yes | **done** — `RemoteHttpTransport` |
 | direct to `adbd` on 5555 | no | no | not written |
 
-Which of these is used is normally **inferred**: a remote URL filled in under Settings ▸ Connection
-means the HTTP API, otherwise the adb server at whatever host and port are set. Settings ▸ Connection
-▸ *Reading devices from* overrides that (`AppPref.TRANSPORT`, `TransportChoice`), and the only override that changes
-anything is **adb server**, which ignores a remote URL that is still filled in — so a desktop
-configured for both can switch back without clearing a field to do it. `AUTO` is the default and is
-the behaviour that predates the setting. A choice with nothing behind it still falls back to the adb
-server: a transport that can't reach anything is worse than the wrong one.
+**They are not exclusive.** `DeviceManager` holds a *list* of transports and the device list is the
+union of what they all report — a desk at the office and a desk at home are two connections and one
+table. A device is identified by its connection and its serial (`Device.id`), because two desks can
+each have an `emulator-5554`. See docs/MOBILE-UI.md for the shape.
+
+What the settings describe is **one** of those connections — the one this install is pointed at by
+default — and it is inferred the same way it always was: a remote URL filled in under Settings ▸
+Connection means the HTTP API, otherwise the adb server at whatever host and port are set. Settings ▸
+Connection ▸ *Reading devices from* overrides that (`AppPref.TRANSPORT`, `TransportChoice`), and the
+only override that changes anything is **adb server**, which ignores a remote URL that is still
+filled in — so a desktop configured for both can switch back without clearing a field to do it.
+`AUTO` is the default and is the behaviour that predates the setting. A choice with nothing behind it
+still falls back to the adb server: a transport that can't reach anything is worse than the wrong
+one.
+
+Saved Device Manager servers are connections **in addition** to that one, connected and disconnected
+from the device list rather than from Settings; `SavedServer.connected` is what brings them back at
+the next launch. `DeviceManager.applySettings()` replaces only the settings' own connection, so
+changing the adb host on a phone doesn't drop the desk it is reading.
 
 ### The route that's easy to overlook
 
-Port 5037 is a TCP port, and `AdbConnection.host` is a `var`. Start the desktop's server listening on
-the network and a phone drives all 45 USB devices through the transport that already exists — no new
-protocol, no crypto, no pairing:
+Port 5037 is a TCP port, and the address is a value (`AdbServer`) carried into every call rather than
+a fixed constant — several servers can be read at once, each with its own. Start the desktop's server
+listening on the network and a phone drives all 45 USB devices through the transport that already
+exists — no new protocol, no crypto, no pairing:
 
 ```sh
 adb kill-server

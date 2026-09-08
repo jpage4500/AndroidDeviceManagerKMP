@@ -48,8 +48,8 @@ import org.jetbrains.compose.resources.stringResource
  *   a log you have to keep dragging down is nearly as bad.
  */
 @Composable
-fun LogsScreen(serial: String, modifier: Modifier = Modifier) {
-    val source = remember(serial) { LogsSource(serial) }
+fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
+    val source = remember(deviceId) { LogsSource(deviceId) }
     val scope = rememberCoroutineScope()
     val page by source.entries.collectAsState()
     val shown = page.entries
@@ -113,8 +113,8 @@ fun LogsScreen(serial: String, modifier: Modifier = Modifier) {
         source.setFilter(if (terms.isEmpty()) null else { entry -> terms.all { it.accepts(entry) } })
     }
 
-    LaunchedEffect(serial) { source.start(scope) }
-    DisposableEffect(serial) { onDispose { source.stop() } }
+    LaunchedEffect(deviceId) { source.start(scope) }
+    DisposableEffect(deviceId) { onDispose { source.stop() } }
 
     /**
      * hold the oldest lines while they are being read.
@@ -305,7 +305,7 @@ fun LogsScreen(serial: String, modifier: Modifier = Modifier) {
             onHide = { LogsTableState.toggleCompact() },
             onSave = {
                 scope.launch {
-                    source.save(shown, DeviceManager.nameOf(serial).replace(Regex("[^A-Za-z0-9_-]"), "_"))
+                    source.save(shown, DeviceManager.nameOf(deviceId).replace(Regex("[^A-Za-z0-9_-]"), "_"))
                         ?.let { saved ->
                             StorageManager.getAbsolutePath(PATH_LOGS, saved)?.let(PlatformUtils::openUrl)
                         }

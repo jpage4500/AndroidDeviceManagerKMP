@@ -18,11 +18,12 @@ private val log = LoggerConfig.createLogger("AdbLogcat")
  * closed when the collector goes away, which is what stops `logcat` on the device.
  */
 fun adbLogcat(
+    server: AdbServer,
     serial: String,
     args: String = "-v threadtime",
     flushMs: Long = 100,
 ): Flow<List<String>> = channelFlow {
-    val opened = AdbConnection.toDevice(serial)
+    val opened = AdbConnection.toDevice(server, serial)
     val connection = when (opened) {
         is AdbOutcome.Err -> {
             log.w("adbLogcat: $serial: ${opened.message}")

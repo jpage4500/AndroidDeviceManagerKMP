@@ -91,9 +91,62 @@ offers no config key for either path.
 The jar is ~85 MB because it carries **every** platform's skiko natives, so one artifact runs
 everywhere — see `buildExecutableJar` in `composeApp/build.gradle.kts`.
 
-`icon.png` came across from the Swing app, same icon for the same app. The Compose desktop
-distribution (`Dmg`/`Msi`/`Deb` via `nativeDistributions`) still has no icon wired up — that path
-isn't what ships, jDeploy is.
+`icon.png` is generated, not hand-placed — see [Icons](#icons) below.
+
+## Icons
+
+`scripts/generate-icons.sh` writes every launcher icon in the repo from one source,
+`resources/images/logo.png` — the 1024² artwork the Swing app has always shipped, pixel for pixel.
+Nothing under an icon path is hand-edited: change that file, re-run the script, commit what it
+wrote. It is idempotent, so a re-run with no artwork change produces byte-identical files and no
+diff.
+
+Needs `cwebp`, `magick` and `iconutil` — `brew install webp imagemagick`, and `iconutil` ships
+with the Xcode command line tools.
+
+| Output | Consumed by |
+|---|---|
+| `androidApp/…/mipmap-*/ic_launcher.webp` | `android:icon` in `AndroidManifest.xml` — pre-Oreo and the fallback |
+| `androidApp/…/mipmap-*/ic_launcher_round.webp` | `android:roundIcon`, circle-masked |
+| `androidApp/…/mipmap-*/ic_launcher_foreground.webp` | the `<foreground>` in `mipmap-anydpi-v26/ic_launcher{,_round}.xml`, over `@color/ic_launcher_background` |
+| `iosApp/Assets.xcassets/AppIcon.appiconset/*.png` | `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`, already set in `iosApp.xcodeproj` |
+| `composeApp/…/desktopMain/resources/icon.{icns,ico,png}` | `nativeDistributions`' `macOS`/`windows`/`linux` `iconFile` |
+| `icon.png` (repo root) | jDeploy, which always reads `./icon.png` and offers no config key |
+
+Two files hold values that have to stay in step with the script, and each says so in a comment:
+`ic_launcher_background.xml` (the adaptive background color) and `AppIcon.appiconset/Contents.json`
+(the iOS slot table — the script errors if a slot it can't fill appears there). `gradle` guards
+each desktop `iconFile` behind an `exists()` check, so a checkout that hasn't run the script still
+packages.
+
+### Why a PNG source and not an SVG
+
+DashboardWeatherKMP runs the same pipeline off two SVGs, which is better in every way this artwork
+can't support. It's a raster illustration — soft gradients, gloss, translucent glass, blurred
+beams. Traced it posterizes: even a 128-colour undithered quantisation, the ceiling a potrace
+layer-stack could reach, bands across the background gradient and steps the beam glow, and costs
+tens of thousands of path nodes to do it. Wrapping the PNG in an `<image>` element would be an SVG
+in name only. So the raster is the source, and the two things vector bought are handled in the
+script: every output is a downscale of a 1024 master and never an upscale, and `square_fill()`
+synthesises the corners.
+
+That corner fill is the one non-obvious step. iOS and adaptive-Android composite the icon onto
+their own background and then apply their own corner mask, so both need a source that runs edge to
+edge — give either a tile that's already rounded and the corners get rounded twice, with a gap
+showing through. `logo.png`'s corners are transparent, so the script fills them from the artwork
+itself, enlarged and blurred, rather than from an invented gradient — that keeps the real
+background including its slight edge lift. It then lays the artwork back over that through a
+squircle eroded 26px, which is what drops the tile's pale bevel rim; skip the erosion and the rim
+reads as an arc stranded inside the square.
+
+The Android adaptive foreground is drawn at 667‰ of the 108dp canvas — exactly the 72dp viewport,
+so it covers every mask shape and `@color/ic_launcher_background` shows only while a launcher
+parallaxes the layers apart. A circular mask still trims the corners, which is unavoidable for
+full-bleed artwork; the phones at the bottom corners are what goes first.
+
+There's no macOS Tahoe `Icon.icon` bundle. It wants a background-free foreground to sit over its
+procedural gradient, and this artwork has its background baked in, so there's nothing honest to
+put in it. Nothing bundles it today either — Compose Desktop packages `icon.icns`.
 
 ## CI
 

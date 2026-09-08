@@ -241,8 +241,17 @@ compose.desktop {
             packageName = brandAppName
             packageVersion = appVersion
 
+            // written by scripts/generate-icons.sh — guarded so a checkout that hasn't run it
+            // still packages, just with jpackage's default icon
+            val macOSIcon = project.file("src/desktopMain/resources/icon.icns")
+            val windowsIcon = project.file("src/desktopMain/resources/icon.ico")
+            val linuxIcon = project.file("src/desktopMain/resources/icon.png")
+
             macOS {
                 bundleID = brandBundleId
+                if (macOSIcon.exists()) {
+                    iconFile.set(macOSIcon)
+                }
                 // the traffic lights and the AWT file dialogs are drawn by AppKit; this is what
                 // makes them follow the system appearance
                 infoPlist {
@@ -250,6 +259,18 @@ compose.desktop {
                         <key>NSHighResolutionCapable</key>
                         <true/>
                     """.trimIndent()
+                }
+            }
+
+            if (windowsIcon.exists()) {
+                windows {
+                    iconFile.set(windowsIcon)
+                }
+            }
+
+            if (linuxIcon.exists()) {
+                linux {
+                    iconFile.set(linuxIcon)
                 }
             }
         }

@@ -37,22 +37,28 @@ enum class WindowKind(val defaultWidth: Dp, val defaultHeight: Dp) {
     MESSAGE(Dimens.messageWindowWidth, Dimens.messageWindowHeight),
 }
 
-/** what a window opens on. */
+/**
+ * what a window opens on.
+ *
+ * A device is named by its [com.jpage4500.devicemanager.data.Device.id] rather than by its serial,
+ * so two desks each holding an `emulator-5554` open two windows and not one — which is also what
+ * [WindowManager.openOnce] compares.
+ */
 sealed interface WindowContent {
     /** the device list, and whatever is selected in it. */
     data object DeviceList : WindowContent
 
     /** one device on its own — a mirror torn off into a window of its own. */
-    data class Mirror(val serial: String) : WindowContent
+    data class Mirror(val deviceId: String) : WindowContent
 
     /** one device's logcat. */
-    data class Logs(val serial: String) : WindowContent
+    data class Logs(val deviceId: String) : WindowContent
 
     /** one device's filesystem. */
-    data class Files(val serial: String) : WindowContent
+    data class Files(val deviceId: String) : WindowContent
 
     /** everything known about one device. */
-    data class Info(val serial: String) : WindowContent
+    data class Info(val deviceId: String) : WindowContent
 
     /** reach a device over the network. */
     data object Connect : WindowContent
@@ -135,17 +141,17 @@ object WindowManager {
     }
 
     /** a mirror in a window of its own, beside the one it was opened from. */
-    fun openMirror(serial: String, from: Long? = activeWindowId): Long =
-        openOnce(WindowContent.Mirror(serial), from)
+    fun openMirror(deviceId: String, from: Long? = activeWindowId): Long =
+        openOnce(WindowContent.Mirror(deviceId), from)
 
-    fun openLogs(serial: String, from: Long? = activeWindowId): Long =
-        openOnce(WindowContent.Logs(serial), from)
+    fun openLogs(deviceId: String, from: Long? = activeWindowId): Long =
+        openOnce(WindowContent.Logs(deviceId), from)
 
-    fun openFiles(serial: String, from: Long? = activeWindowId): Long =
-        openOnce(WindowContent.Files(serial), from)
+    fun openFiles(deviceId: String, from: Long? = activeWindowId): Long =
+        openOnce(WindowContent.Files(deviceId), from)
 
-    fun openInfo(serial: String, from: Long? = activeWindowId): Long =
-        openOnce(WindowContent.Info(serial), from)
+    fun openInfo(deviceId: String, from: Long? = activeWindowId): Long =
+        openOnce(WindowContent.Info(deviceId), from)
 
     fun openConnect(from: Long? = activeWindowId): Long = openOnce(WindowContent.Connect, from)
 

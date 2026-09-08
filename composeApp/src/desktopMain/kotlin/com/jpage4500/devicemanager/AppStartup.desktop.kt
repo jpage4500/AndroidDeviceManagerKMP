@@ -13,5 +13,8 @@ import com.jpage4500.devicemanager.util.*
 fun initApp() {
     LoggerConfig.initialize(DesktopLogWriter())
     installCrashHandler()
+    // before the first composable, so nothing has started polling by the time the callbacks are
+    // registered — see AppLifecycle
+    observeAppLifecycle()
     LogManager.onAppStart()
 }

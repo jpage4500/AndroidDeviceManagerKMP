@@ -69,15 +69,15 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     // the first device to arrive is selected, so the toolbar has something to act on straight away.
     // only once — re-selecting on every change would fight the user
     var autoSelected by remember { mutableStateOf(false) }
-    LaunchedEffect(sorted.firstOrNull()?.serial) {
+    LaunchedEffect(sorted.firstOrNull()?.id) {
         val first = sorted.firstOrNull() ?: return@LaunchedEffect
         if (autoSelected) return@LaunchedEffect
         autoSelected = true
-        if (selection.isEmpty) DeviceManager.select(first.serial)
+        if (selection.isEmpty) DeviceManager.select(first.id)
     }
     // the lead is the device the toolbar acts on; the rest of the selection is what a menu offers to
     // act on in bulk
-    val device = devices.firstOrNull { it.serial == selection.lead }
+    val device = devices.firstOrNull { it.id == selection.lead }
 
 
     Column(
@@ -96,13 +96,13 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
             filter = filter,
             onFilterChange = { filter = it },
             filterFocus = filterFocus,
-            onMirror = { it?.let { d -> WindowManager.openMirror(d.serial) } },
+            onMirror = { it?.let { d -> WindowManager.openMirror(d.id) } },
             onScreenshot = { d -> scope.launch { saveScreenshot(d) } },
-            onInput = { inputFor = DeviceManager.selectedSerials.value },
+            onInput = { inputFor = DeviceManager.selectedIds.value },
             onInstall = {
                 scope.launch {
                     val files = pickLocalFiles(installTitle, extensions = listOf("apk"))
-                    if (files.isNotEmpty()) InstallManager.send(DeviceManager.selectedSerials.value, files)
+                    if (files.isNotEmpty()) InstallManager.send(DeviceManager.selectedIds.value, files)
                 }
             },
             onCommands = { commandsOpen = true },
@@ -119,7 +119,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                     enabled = selection.size > 0,
                     onDragChanged = { dropping = it },
                     onDrop = { files ->
-                        scope.launch { InstallManager.send(DeviceManager.selectedSerials.value, files) }
+                        scope.launch { InstallManager.send(DeviceManager.selectedIds.value, files) }
                     },
                 )
                 .then(
@@ -143,7 +143,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                     sortedBy = sort.column,
                     sortAscending = sort.ascending,
                     selection = selection,
-                    rowKey = { it.serial },
+                    rowKey = { it.id },
                     header = { it.label },
                     rowHeight = Dimens.tableRowHeight,
                     // typing "gal" jumps to the Galaxy, the way it does in any file manager
@@ -152,7 +152,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                     onSort = { DeviceTableState.sortBy(it) },
                     onResize = { column, width -> DeviceTableState.resize(column, width) },
                     onReorder = { from, to -> DeviceTableState.moveColumn(from, to) },
-                    onActivate = { row -> WindowManager.openMirror(row.serial) },
+                    onActivate = { row -> WindowManager.openMirror(row.id) },
                     tooltip = cellTooltip.takeIf { showTooltips },
                     rowMenu = { row, column ->
                         DeviceMenu(
@@ -178,7 +178,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                         )
                     },
                 ) { row, column ->
-                    DeviceCell(row, column, busy = row.serial in busy)
+                    DeviceCell(row, column, busy = row.id in busy)
                 }
             }
         }
@@ -193,7 +193,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     }
 
     InputDialog(input) { input = null }
-    InputDialog(serials = inputFor, onDismiss = { inputFor = emptyList() })
+    InputDialog(deviceIds = inputFor, onDismiss = { inputFor = emptyList() })
     StatusHistoryDialog(open = historyOpen, onDismiss = { historyOpen = false })
     CommandDialog(open = commandsOpen, onDismiss = { commandsOpen = false })
     if (settingsOpen) SettingsDialog(onDismiss = { settingsOpen = false })
@@ -391,16 +391,16 @@ private fun AppMenuScope.DeviceMenu(
     onEdit: (InputRequest) -> Unit,
     onAction: (suspend () -> Unit) -> Unit,
 ) {
-    val serial = device.serial
+    val deviceId = device.id
     val installMenuTitle = stringResource(Res.string.install_title)
 
     if (!device.isOnline) {
         if (device.isWireless) {
             Item(stringResource(Res.string.reconnect)) {
-                onAction { DeviceManager.reconnect(serial).toast() }
+                onAction { DeviceManager.reconnect(deviceId).toast() }
             }
         }
-        Item(stringResource(Res.string.remove)) { DeviceManager.remove(serial) }
+        Item(stringResource(Res.string.remove)) { DeviceManager.remove(deviceId) }
         return
     }
 
@@ -411,22 +411,22 @@ private fun AppMenuScope.DeviceMenu(
 
     Item(editName) {
         onEdit(InputRequest(editName, device.nickname.orEmpty()) { name ->
-            onAction { DeviceManager.setNickname(serial, name).toast() }
+            onAction { DeviceManager.setNickname(deviceId, name).toast() }
         })
     }
     Item(editPhone) {
         onEdit(InputRequest(editPhone, device.customProperty(Device.CUST_PROP_PHONE).orEmpty()) { value ->
-            onAction { DeviceManager.setCustomProperty(serial, Device.CUST_PROP_PHONE, value).toast() }
+            onAction { DeviceManager.setCustomProperty(deviceId, Device.CUST_PROP_PHONE, value).toast() }
         })
     }
     Item(editCustom1) {
         onEdit(InputRequest(editCustom1, device.customProperty(Device.CUST_PROP_1).orEmpty()) { value ->
-            onAction { DeviceManager.setCustomProperty(serial, Device.CUST_PROP_1, value).toast() }
+            onAction { DeviceManager.setCustomProperty(deviceId, Device.CUST_PROP_1, value).toast() }
         })
     }
     Item(editCustom2) {
         onEdit(InputRequest(editCustom2, device.customProperty(Device.CUST_PROP_2).orEmpty()) { value ->
-            onAction { DeviceManager.setCustomProperty(serial, Device.CUST_PROP_2, value).toast() }
+            onAction { DeviceManager.setCustomProperty(deviceId, Device.CUST_PROP_2, value).toast() }
         })
     }
     Separator()
@@ -435,25 +435,25 @@ private fun AppMenuScope.DeviceMenu(
     Item(stringResource(Res.string.copy_line)) { onCopy(device.asLine()) }
     Separator()
 
-    Item(stringResource(Res.string.device_details)) { WindowManager.openInfo(serial) }
-    Item(stringResource(Res.string.action_browse)) { WindowManager.openFiles(serial) }
-    Item(stringResource(Res.string.action_view_logs)) { WindowManager.openLogs(serial) }
-    Item(stringResource(Res.string.action_mirror)) { WindowManager.openMirror(serial) }
+    Item(stringResource(Res.string.device_details)) { WindowManager.openInfo(deviceId) }
+    Item(stringResource(Res.string.action_browse)) { WindowManager.openFiles(deviceId) }
+    Item(stringResource(Res.string.action_view_logs)) { WindowManager.openLogs(deviceId) }
+    Item(stringResource(Res.string.action_mirror)) { WindowManager.openMirror(deviceId) }
     Item(stringResource(Res.string.action_screenshot)) { onAction { saveScreenshot(device) } }
     Item(stringResource(Res.string.action_install)) {
         onAction {
             val files = pickLocalFiles(installMenuTitle, extensions = listOf("apk"))
-            if (files.isNotEmpty()) InstallManager.send(listOf(serial), files)
+            if (files.isNotEmpty()) InstallManager.send(listOf(deviceId), files)
         }
     }
-    Item(stringResource(Res.string.restart)) { onAction { DeviceManager.reboot(serial).toast() } }
+    Item(stringResource(Res.string.restart)) { onAction { DeviceManager.reboot(deviceId).toast() } }
 
     val commands by CommandStore.commands.collectAsState()
     if (commands.isNotEmpty()) {
         Separator()
         commands.forEach { entry ->
             Item(entry.name) {
-                onAction { DeviceManager.runCommand(serial, entry.command, entry.name + " on").toast() }
+                onAction { DeviceManager.runCommand(deviceId, entry.command, entry.name + " on").toast() }
             }
         }
     }
@@ -461,7 +461,7 @@ private fun AppMenuScope.DeviceMenu(
     if (device.isWireless) {
         Separator()
         Item(stringResource(Res.string.disconnect)) {
-            onAction { DeviceManager.disconnect(serial).toast() }
+            onAction { DeviceManager.disconnect(deviceId).toast() }
         }
     }
 }
@@ -625,7 +625,7 @@ private fun StatusText(text: String) {
 /** a screenshot, straight to the desktop's home dir. */
 private suspend fun saveScreenshot(device: Device) {
     val log = LoggerConfig.createLogger("DeviceScreen")
-    DeviceManager.screenshot(device.serial)
+    DeviceManager.screenshot(device.id)
         .onSuccess { bytes ->
             val name = "${device.displayName}-${DateUtils.formatDate("yyyyMMdd-HHmmss")}.png"
             val ok = StorageManager.writeBytes(PATH_SCREENSHOTS, name, bytes)

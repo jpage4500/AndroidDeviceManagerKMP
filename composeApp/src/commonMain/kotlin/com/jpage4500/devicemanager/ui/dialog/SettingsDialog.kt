@@ -204,8 +204,14 @@ private fun CategoryDialog(
     )
 }
 
-/** point the device list at whatever the settings now say. */
-private fun applyTransport() = DeviceManager.useTransport(DeviceManager.transportFromSettings())
+/**
+ * point the settings' own connection at whatever the settings now say.
+ *
+ * only that one: a Device Manager server connected from the device list is a connection of its own
+ * and is left where it is, which is what lets a phone read a desk and change its adb host without
+ * losing the desk.
+ */
+private fun applyTransport() = DeviceManager.applySettings()
 
 // ---------------------------------------------------------------------------------------------
 // the row shapes. each owns the dialog it opens, so a category dialog is a list and nothing else,
@@ -217,12 +223,12 @@ private fun applyTransport() = DeviceManager.useTransport(DeviceManager.transpor
 private fun TransportSetting() {
     SettingsManager.observePref(AppPref.TRANSPORT)
     var picking by remember { mutableStateOf(false) }
-    val transport by DeviceManager.transport.collectAsState()
+    val settings by DeviceManager.settingsConnection.collectAsState()
 
     SettingItem(
         icon = Res.drawable.server,
         labelRes = Res.string.settings_transport,
-        valueText = transport.label,
+        valueText = settings?.label,
         onClick = { picking = true },
     )
 

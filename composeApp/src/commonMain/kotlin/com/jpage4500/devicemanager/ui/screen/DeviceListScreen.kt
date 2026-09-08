@@ -31,7 +31,9 @@ import org.jetbrains.compose.resources.stringResource
  *
  * **A device belonging to a computer is drawn inside it**, in a [ServerGroup] that expands the way
  * the connect panel's routes do. Which desk a device came through is otherwise invisible until the
- * sheet is open, and a remembered computer that isn't connected has nowhere else to be.
+ * sheet is open, and a remembered computer that isn't connected has nowhere else to be. Several
+ * computers can be connected at once, so several groups can be live — the list is the union of what
+ * all of them report, and a row is placed by the connection it arrived on.
  */
 @Composable
 fun DeviceListScreen(
@@ -40,14 +42,18 @@ fun DeviceListScreen(
     modifier: Modifier = Modifier,
 ) {
     val servers by ServerManager.servers.collectAsState()
-    val activeKey by ServerManager.activeKey.collectAsState()
+    val connectedKeys by ServerManager.connectedKeys.collectAsState()
 
-    // which computer the devices on screen belong to: at most one, since DeviceManager holds a
-    // single transport. null — an adb server, or the test fleet — leaves them ungrouped
-    val ownerKey = activeKey?.takeIf { key -> servers.any { it.key == key } }
-    // the connected computer opens itself and the rest stay shut; a tap wins from then on
+    // a device is placed by the connection it came in on, so two desks put their rows in two groups
+    val byConnection = remember(devices) { devices.groupBy { it.connectionId } }
+    // whatever no remembered computer owns: a desk's adb server, or the test fleet
+    val ungrouped = remember(devices, servers) {
+        val owned = servers.mapTo(mutableSetOf()) { it.connectionId }
+        devices.filterNot { it.connectionId in owned }
+    }
+    // a connected computer opens itself and the rest stay shut; a tap wins from then on
     val toggled = remember { mutableStateMapOf<String, Boolean>() }
-    fun isOpen(server: SavedServer): Boolean = toggled[server.key] ?: (server.key == ownerKey)
+    fun isOpen(server: SavedServer): Boolean = toggled[server.key] ?: (server.key in connectedKeys)
 
     if (devices.isEmpty() && servers.isEmpty()) {
         Column(
@@ -75,8 +81,8 @@ fun DeviceListScreen(
             }
             ServerGroup(
                 server = server,
-                devices = if (server.key == ownerKey) devices else emptyList(),
-                active = server.key == ownerKey,
+                devices = byConnection[server.connectionId].orEmpty(),
+                active = server.key in connectedKeys,
                 open = isOpen(server),
                 onToggle = { toggled[server.key] = !isOpen(server) },
                 onSelect = onSelect,
@@ -84,11 +90,9 @@ fun DeviceListScreen(
         }
 
         // whatever no computer owns: a desk's adb server, or the invented fleet
-        if (ownerKey == null) {
-            items(devices, key = { "device:${it.serial}" }) { device ->
-                DeviceRow(device = device, onClick = { onSelect(device) })
-                HorizontalDivider(thickness = Dimens.listSpacing)
-            }
+        items(ungrouped, key = { "device:${it.id}" }) { device ->
+            DeviceRow(device = device, onClick = { onSelect(device) })
+            HorizontalDivider(thickness = Dimens.listSpacing)
         }
 
         // the same panel, collapsed — the last item rather than a floating button, so it scrolls

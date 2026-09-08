@@ -262,8 +262,9 @@ drawing your own close/minimise/maximise buttons.
 
 Everything in the table past the model comes from `data/DeviceDetails.kt`, ported from the Swing
 app's `fetchDeviceDetails`: nickname, phone, IMEI, free space, battery level and charging source.
-The parsers are pure functions; `DeviceManager` runs the commands through whichever transport is set,
-so both the adb and HTTP routes get them.
+The parsers are pure functions; `DeviceManager` runs the commands through the connection each row
+came in on, so both the adb and HTTP routes get them — and a table holding two desks' devices asks
+each device's own desk.
 
 | Value | Command |
 |---|---|
@@ -332,6 +333,7 @@ matters most, because a dialog is now the app's main way of showing a form:
 |---|---|---|
 | what it is | a real OS window | an overlay over the app |
 | heading | the window's own title bar | a coloured title band with a close X |
+| subtitle | — (one line is all a title bar has) | a dimmer second line inside the same band |
 | shape | flat, square, a fixed `dialogWindowWidth` | rounded card, fills the width |
 | buttons | bottom-right, natural width | split half and half |
 | moving it | drag it anywhere, off the app if you like | nowhere to move to |
@@ -604,13 +606,19 @@ print the JSON on open) and **Edit** (hand the text to whatever opens `.txt`). B
 remembered. `TextUtils.formatJson` is a character walk rather than parse-and-re-serialise, because
 the input is a log *sentence* with a payload in the middle and the prose either side has to survive.
 
-**Device Details** (`DeviceInfoScreen`) — the properties card plus storage and battery gauges.
+**Device Details** (`DeviceInfoScreen`) — the properties list plus storage and battery gauges, under
+`SectionHeader`s rather than in cards, so the window reads like the settings forms beside it. The
+rows themselves are `DeviceInfoContent`, which the phone's `DeviceSheet` drops into its own scroll;
+the screen is the scrolling wrapper around them, and owns the empty state for a device that is gone —
+nothing can fill an unbounded height, so that check has to sit outside the scroll.
 
-**Settings** (`SettingsScreen`) — and one section with no Swing equivalent: **which transport the
+**Settings** (`SettingsDialog`) — and one section with no Swing equivalent: **which transport the
 device list reads from**. That app is always a client of a local adb server; this one can also point
 at a server across the LAN, or at another instance's HTTP API. A remote URL wins when one is set,
-because it is a deliberate choice where the adb host always has a default. `DeviceManager.transportFromSettings()`
-is read once at startup and again whenever Settings changes it.
+because it is a deliberate choice where the adb host always has a default.
+`DeviceManager.transportFromSettings()` is read once at startup and again whenever Settings changes
+it — and it describes **one** of the connections the app holds, so `applySettings()` replaces that
+one and leaves any Device Manager servers connected from the device list where they are.
 
 ### Installing, and files dragged in
 

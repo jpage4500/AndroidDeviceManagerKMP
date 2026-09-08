@@ -18,7 +18,7 @@ import kotlin.time.*
  * Android, VideoToolbox on iOS. Deliberately not attempted here.
  */
 class MirrorSource(
-    private val serial: String,
+    private val deviceId: String,
     private val intervalMs: Long = DEFAULT_INTERVAL_MS,
 ) {
     private val log = LoggerConfig.createLogger("MirrorSource")
@@ -38,10 +38,10 @@ class MirrorSource(
      * catch up with.
      */
     suspend fun run() {
-        log.d("run: $serial every ${intervalMs}ms")
+        log.d("run: $deviceId every ${intervalMs}ms")
         while (currentCoroutineContext().isActive) {
             val started = TimeSource.Monotonic.markNow()
-            DeviceManager.screenshot(serial)
+            DeviceManager.screenshot(deviceId)
                 .onSuccess {
                     _frame.value = it
                     _error.value = null
@@ -62,7 +62,7 @@ class MirrorSource(
     suspend fun key(keyCode: Int) = send(DeviceInput.keyEvent(keyCode))
 
     private suspend fun send(command: String) {
-        DeviceManager.sendInput(serial, command)
+        DeviceManager.sendInput(deviceId, command)
     }
 
     companion object {

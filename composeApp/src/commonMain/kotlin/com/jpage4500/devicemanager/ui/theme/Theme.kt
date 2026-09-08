@@ -58,6 +58,12 @@ object Dimens {
     val gapLarge = 16.dp
     val corner = 6.dp
 
+    // the device sheet's four action tiles. taller than a touch row on purpose: the icon sits over
+    // the label rather than beside it, and a square-ish tile is what says "tap me"
+    val tileHeight = 82.dp
+    val tileIcon = 30.dp
+    val tileCorner = 12.dp
+
     /**
      * settings rows and dialogs — see `ui/setting/` and `ui/dialog/`.
      *

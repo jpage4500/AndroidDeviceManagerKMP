@@ -12,15 +12,15 @@ private val log = LoggerConfig.createLogger("AdbHost")
  */
 
 /** `adb connect host:port`. @return what the server said, or an error */
-suspend fun adbConnect(host: String, port: Int): AdbOutcome<String> =
-    hostCommand("host:connect:$host:$port")
+suspend fun adbConnect(server: AdbServer, host: String, port: Int): AdbOutcome<String> =
+    hostCommand(server, "host:connect:$host:$port")
 
 /** `adb version` — the cheapest question the server answers, so the one that asks if it is there. */
-suspend fun adbVersion(): AdbOutcome<String> = hostCommand("host:version")
+suspend fun adbVersion(server: AdbServer): AdbOutcome<String> = hostCommand(server, "host:version")
 
 /** `adb disconnect <serial>`. */
-suspend fun adbDisconnect(serial: String): AdbOutcome<String> =
-    hostCommand("host:disconnect:$serial")
+suspend fun adbDisconnect(server: AdbServer, serial: String): AdbOutcome<String> =
+    hostCommand(server, "host:disconnect:$serial")
 
 /**
  * `adb pair <host>:<port> <code>` — Android 11+ wireless pairing.
@@ -33,8 +33,8 @@ suspend fun adbDisconnect(serial: String): AdbOutcome<String> =
  * implementation of the first half. The server already holds the key material and speaks both.
  * See docs/MOBILE-UI.md.
  */
-suspend fun adbPair(host: String, port: Int, code: String): AdbOutcome<String> =
-    when (val outcome = hostCommand("host:pair:$code:$host:$port")) {
+suspend fun adbPair(server: AdbServer, host: String, port: Int, code: String): AdbOutcome<String> =
+    when (val outcome = hostCommand(server, "host:pair:$code:$host:$port")) {
         is AdbOutcome.Err -> outcome
         // the server answers OKAY either way and says so in the sentence, as it does for connect —
         // but here the failure wording is "Failed: ..." rather than "failed to ..."
@@ -46,9 +46,9 @@ suspend fun adbPair(host: String, port: Int, code: String): AdbOutcome<String> =
             }
     }
 
-private suspend fun hostCommand(command: String): AdbOutcome<String> {
-    val connection = AdbConnection.openOrNull()
-        ?: return AdbOutcome.Err(AdbError.NO_SERVER, "no adb server on ${AdbConnection.host}")
+private suspend fun hostCommand(server: AdbServer, command: String): AdbOutcome<String> {
+    val connection = AdbConnection.openOrNull(server)
+        ?: return AdbOutcome.Err(AdbError.NO_SERVER, "no adb server on ${server.host}")
     return connection.use {
         when (val outcome = it.request(command)) {
             is AdbOutcome.Err -> outcome
@@ -74,8 +74,8 @@ private suspend fun hostCommand(command: String): AdbOutcome<String> {
  * `exec:reboot` would also work on most devices, but only because the shell user happens to hold
  * the permission — this is the route `adb reboot` itself takes.
  */
-suspend fun adbReboot(serial: String): AdbOutcome<Unit> {
-    val opened = AdbConnection.toDevice(serial)
+suspend fun adbReboot(server: AdbServer, serial: String): AdbOutcome<Unit> {
+    val opened = AdbConnection.toDevice(server, serial)
     val connection = when (opened) {
         is AdbOutcome.Err -> return opened
         is AdbOutcome.Ok -> opened.value

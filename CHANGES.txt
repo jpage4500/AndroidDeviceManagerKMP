@@ -57,3 +57,12 @@
 - new About section: support, updates, debug mode and the app log
 - send a description with your logs, so support knows what to look for
 - desktop: every dialog is a real window you can drag out of the way
+- phone: connections close when you leave the app and reopen when you return
+- connect to several computers at once, and see all their devices in one list
+- the app icon now shows on Android, iOS and the desktop installer
+- taps and swipes reach a device mirrored through a computer again
+- drag the mirrored screen to swipe it, instead of tapping where you let go
+- phone: a device's page has the same title bar as every other dialog
+- phone: the four device actions are tiles, and the ones still to come say so
+- phone: rename from the name row, and restart or disconnect from the bottom
+- tapping any device property tells you it copied it

@@ -25,8 +25,8 @@ import org.jetbrains.compose.resources.stringResource
  * Recent entries are kept so the same string can be sent again without retyping.
  */
 @Composable
-fun InputDialog(serials: List<String>, onDismiss: () -> Unit) {
-    if (serials.isEmpty()) return
+fun InputDialog(deviceIds: List<String>, onDismiss: () -> Unit) {
+    if (deviceIds.isEmpty()) return
     val scope = rememberCoroutineScope()
     var text by remember { mutableStateOf("") }
     val recent = remember { SettingsManager.getStringOrEmpty(AppPref.RECENT_INPUT).split('\n').filter { it.isNotBlank() } }
@@ -36,19 +36,19 @@ fun InputDialog(serials: List<String>, onDismiss: () -> Unit) {
         if (value.isBlank()) return
         rememberRecent(value)
         scope.launch {
-            serials.forEach { serial -> DeviceManager.runCommand(serial, DeviceInput.text(value), "Typing on") }
+            deviceIds.forEach { id -> DeviceManager.runCommand(id, DeviceInput.text(value), "Typing on") }
         }
         onDismiss()
     }
 
     fun key(code: Int, label: String) {
         scope.launch {
-            serials.forEach { serial -> DeviceManager.runCommand(serial, DeviceInput.keyEvent(code), "$label on") }
+            deviceIds.forEach { id -> DeviceManager.runCommand(id, DeviceInput.keyEvent(code), "$label on") }
         }
     }
 
     AppDialog(
-        title = stringResource(Res.string.input_title, serials.size),
+        title = stringResource(Res.string.input_title, deviceIds.size),
         onDismiss = onDismiss,
         confirmLabel = stringResource(Res.string.input_send),
         confirmEnabled = text.isNotBlank(),

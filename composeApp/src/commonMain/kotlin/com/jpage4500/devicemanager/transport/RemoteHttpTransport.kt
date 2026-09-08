@@ -39,7 +39,9 @@ class RemoteHttpTransport(
     // "HttpLog" tag with the token redacted out of the URL. see docs/APP-SERVICES.md
     private val client = createHttpClient(useCookies = false)
 
-    override val label: String get() = baseUrl.removePrefix("http://").removePrefix("https://")
+    override val id: String get() = idOf(baseUrl)
+
+    override val label: String get() = SavedServer.keyOf(baseUrl)
 
     private fun HttpRequestBuilder.auth() {
         header(HttpHeaders.Authorization, "Bearer $authToken")
@@ -105,12 +107,28 @@ class RemoteHttpTransport(
         parseDevices(body)
     }
 
+    /**
+     * `/api/execute`, whose two arguments go in a **JSON body** and not on the query string.
+     *
+     * The server reads the post body and nothing else, so query parameters come back as a 400
+     * "Missing serial or command" — which was every tap on a mirrored screen. It answers with its
+     * own `{isSuccess, resultList}` rather than the command's raw output, and this interface's
+     * contract is what the command printed, so [parseShellResult] joins the lines back up.
+     */
     override suspend fun exec(serial: String, command: String): Result<String> = runCatching {
-        client.post("$baseUrl/api/execute") {
+        val body = buildJsonObject {
+            put("serial", serial)
+            put("command", command)
+        }
+        val response = client.post("$baseUrl/api/execute") {
             auth()
-            parameter("serial", serial)
-            parameter("command", command)
-        }.bodyAsText()
+            contentType(ContentType.Application.Json)
+            setBody(body.toString())
+        }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("$command: server answered ${response.status.value}")
+        }
+        parseShellResult(response.bodyAsText())
     }
 
     override suspend fun properties(serial: String): Result<Map<String, String>> = runCatching {
@@ -183,6 +201,26 @@ class RemoteHttpTransport(
         }
     }
 
+    /**
+     * what a command printed, out of the server's `{isSuccess, resultList}`.
+     *
+     * `isSuccess` is whether the server could *run* the command, not the command's exit status, so
+     * a false is a failure of this call and whatever it did print is the message. A body that isn't
+     * that shape is handed back as-is rather than thrown away.
+     */
+    private fun parseShellResult(body: String): String {
+        val root = runCatching { Json.parseToJsonElement(body) }.getOrNull() as? JsonObject
+            ?: return body
+        val output = (root["resultList"] as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            ?.joinToString("\n")
+            .orEmpty()
+        if (root.bool("isSuccess") == false) {
+            throw IllegalStateException(output.ifEmpty { "the server couldn't run it" })
+        }
+        return output
+    }
+
     private fun parseFiles(parent: String, body: String): List<DeviceFile> {
         val root = Json.parseToJsonElement(body)
         val array = when {
@@ -231,13 +269,16 @@ class RemoteHttpTransport(
             .getOrDefault(PowerStatus.NONE)
     }
 
-    private companion object {
+    companion object {
+        /** the connection id a Device Manager instance at [baseUrl] has, without building one. */
+        fun idOf(baseUrl: String): String = SavedServer.connectionIdOf(SavedServer.keyOf(baseUrl))
+
         /**
          * how often the server is asked how many devices it has.
          *
          * cheap enough to do often — it is an in-memory count — and it is what makes a device
          * plugged in at the desk appear here within a few seconds rather than on the slow timer.
          */
-        const val INFO_POLL_MS = 5_000L
+        private const val INFO_POLL_MS = 5_000L
     }
 }

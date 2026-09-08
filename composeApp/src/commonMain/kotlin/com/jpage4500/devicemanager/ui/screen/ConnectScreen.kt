@@ -85,7 +85,11 @@ fun ConnectScreen(onClose: () -> Unit) {
                             connected = entry.serial in connected,
                             busy = busy,
                             onConnect = { connect(entry.host, entry.port) },
-                            onDisconnect = { scope.launch { DeviceManager.disconnect(entry.serial) } },
+                            onDisconnect = {
+                                // the row is an address; what disconnects is the device at it
+                                val device = devices.firstOrNull { it.serial == entry.serial }
+                                if (device != null) scope.launch { DeviceManager.disconnect(device.id) }
+                            },
                             onForget = { WirelessManager.forget(entry.serial) },
                         )
                         HorizontalDivider(color = Colors.divider)

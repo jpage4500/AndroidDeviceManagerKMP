@@ -63,7 +63,7 @@ private fun AppContent(compact: Boolean) {
 @Composable
 private fun CompactLayout() {
     val devices by DeviceManager.devices.collectAsState()
-    val selected by DeviceManager.selectedSerial.collectAsState()
+    val selected by DeviceManager.selectedId.collectAsState()
     var mirroring by remember { mutableStateOf<String?>(null) }
     var settingsOpen by remember { mutableStateOf(false) }
 
@@ -73,7 +73,7 @@ private fun CompactLayout() {
         Column(Modifier.safeInsets()) {
             AppBar(
                 title = DeviceManager.nameOf(mirrored),
-                subtitle = mirrored,
+                subtitle = Device.serialOf(mirrored),
                 onBack = { mirroring = null },
             )
             MirrorScreen(mirrored)
@@ -89,7 +89,7 @@ private fun CompactLayout() {
         )
         DeviceListScreen(
             devices = devices,
-            onSelect = { device -> DeviceManager.select(device.serial) },
+            onSelect = { device -> DeviceManager.select(device.id) },
             modifier = Modifier.weight(1f),
         )
     }
@@ -98,14 +98,14 @@ private fun CompactLayout() {
     // without it a phone can only ever read the loopback server it doesn't have
     if (settingsOpen) SettingsDialog(onDismiss = { settingsOpen = false })
 
-    val openSerial = selected
-    if (openSerial != null) {
+    val openDevice = selected
+    if (openDevice != null) {
         DeviceSheet(
-            serial = openSerial,
+            deviceId = openDevice,
             onDismiss = { DeviceManager.select(null) },
-            onMirror = { serial ->
+            onMirror = { deviceId ->
                 DeviceManager.select(null)
-                mirroring = serial
+                mirroring = deviceId
             },
         )
     }
