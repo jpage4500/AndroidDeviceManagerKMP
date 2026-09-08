@@ -19,6 +19,7 @@ import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.manager.*
 import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.components.*
+import com.jpage4500.devicemanager.ui.dialog.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
@@ -47,6 +48,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     var historyOpen by remember { mutableStateOf(false) }
     var inputFor by remember { mutableStateOf<List<String>>(emptyList()) }
     var commandsOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
     var dropping by remember { mutableStateOf(false) }
     val installTitle = stringResource(Res.string.install_title)
     val measurer = rememberTextMeasurer()
@@ -104,6 +106,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                 }
             },
             onCommands = { commandsOpen = true },
+            onSettings = { settingsOpen = true },
             onRefresh = { DeviceManager.refresh() },
         )
         HorizontalDivider(color = Colors.divider)
@@ -193,6 +196,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     InputDialog(serials = inputFor, onDismiss = { inputFor = emptyList() })
     StatusHistoryDialog(open = historyOpen, onDismiss = { historyOpen = false })
     CommandDialog(open = commandsOpen, onDismiss = { commandsOpen = false })
+    if (settingsOpen) SettingsDialog(onDismiss = { settingsOpen = false })
 }
 
 /** free-text filter: any field, case-insensitive — the Swing toolbar's search box. */
@@ -264,6 +268,7 @@ private fun DeviceToolbar(
     onInput: () -> Unit,
     onInstall: () -> Unit,
     onCommands: () -> Unit,
+    onSettings: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     val hasDevice = device != null && device.isOnline
@@ -362,7 +367,7 @@ private fun DeviceToolbar(
         ToolbarButton(
             res = Res.drawable.settings,
             label = stringResource(Res.string.action_settings),
-            onClick = { WindowManager.openSettings() },
+            onClick = onSettings,
             tint = iconTint,
         )
     }

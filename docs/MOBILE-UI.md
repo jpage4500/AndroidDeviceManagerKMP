@@ -53,23 +53,20 @@ Two things block it right now, both worth knowing before any of this is written:
 
 ```
 ┌─────────────────────────────────┐
-│ Devices                    ⟳ ⚙  │
+│ Devices                      ⚙  │
+│ 2 attached                      │
 ├─────────────────────────────────┤
-│ CONNECTED · 2                   │
-│                            87%  │
-│ ● joe's pixel (Pixel 10a) [==]⚡│
-│   555-0101 · Android 16 · 21.4G │
+│ ┃ ▤ joe's imac           ⓘ  ▾   │
+│ ┃   192.168.0.12:8765 · 2 att.  │
+│ ┃                          87%  │
+│ ┃  ● joe's pixel (Pixel 10a)[==]│
+│ ┃    555-0101 · Android 16      │
+│ ┃                          46%  │
+│ ┃  ● kitchen 7 (Pixel 8 Pro)[= ]│
+│ ┃    Android 15 · 3.6G          │
 ├─────────────────────────────────┤
-│                            46%  │
-│ ● kitchen 7 (Pixel 8 Pro) [=  ] │
-│   Android 15 · 3.6G             │
-├─────────────────────────────────┤
-│ NOT CONNECTED · 3               │
-│ ○ Pixel 8                       │
-│   192.168.0.171 · 2 days ago    │
-├─────────────────────────────────┤
-│ ○ joe's imac                    │
-│   192.168.0.12:8765 · a server  │
+│   ▤ home imac            ⓘ  ▸   │
+│     192.168.0.31:8765 · not co… │
 ├─────────────────────────────────┤
 │ ┌─────────────────────────────┐ │
 │ │ + Add a device              │ │  ← the same panel the empty state shows
@@ -77,10 +74,23 @@ Two things block it right now, both worth knowing before any of this is written:
 └─────────────────────────────────┘
 ```
 
-**Two sections, one list.** Connected on top, everything remembered but not currently reachable
-below it, and the connect panel as the last item. One `LazyColumn` with sticky headers, not two
-lists — the sections are a grouping of one collection, and a phone that shows an empty "CONNECTED"
-header above a full "NOT CONNECTED" one has told the user everything they need in one glance.
+**Grouped by the computer the devices came through.** Every remembered Device Manager server is a row
+in the list, and the one being read holds its devices inside it — `ui/screen/ServerGroup.kt`, drawn
+with the same `ExpandableBlock` the connect panel's routes use, so the phone has one expanding idiom
+rather than two. The connected computer opens itself and the rest stay shut; an explicit tap wins
+from then on. Anything no computer owns — a desk's adb server, the test fleet — is a plain row below
+the groups, and the connect panel is still the last item.
+
+A group rather than a column on the row, because a serial says nothing about which desk it arrived
+from and a remembered computer that isn't connected has nowhere else to be. At most one group is ever
+live, since `DeviceManager` holds a single transport — but the shape is already what several
+connections need, which is the point.
+
+**A computer's row only opens and shuts.** Disconnect and Forget sit behind the ⓘ button on it, in a
+dialog: as links on the row they made it wider than a phone, and Forget one tap away from a row
+someone is trying to expand is a mistake waiting to happen. An open computer that isn't connected
+shows a Connect button in place of rows, and a connected one with nothing attached says so — an empty
+block that just sits there tells nobody anything.
 
 **A row is two lines, not ten columns**, in 68dp (`Dimens.touchRowHeight`).
 
@@ -105,9 +115,10 @@ header above a full "NOT CONNECTED" one has told the user everything they need i
   `status: 2` (CHARGING) or `5` (FULL) is the fallback, and without it the bolt was missing on
   exactly the devices most likely to be on a charger permanently.
 
-**Which connection a device came through** belongs on the sheet, not the row. It is in the sheet's
-subtitle next to the serial: with two lines and a battery there is no room for a fourth thing, and a
-desk's name is not what anyone is scanning the list for.
+**Which connection a device came through** is the group it sits in rather than a fourth thing on the
+row: two lines and a battery leave no room for it, and a desk's name is not what anyone scans a list
+for. The sheet says it too, in its subtitle next to the serial, which is where a device reached some
+other way answers the same question.
 
 ### The "not connected" half
 
@@ -118,35 +129,20 @@ of which the app has to remember for itself:
 | Remembered | Where it lives today | Tapping it |
 |---|---|---|
 | a device reached directly (`host:port`) | `WirelessManager` → `AppPref.RECENT_WIRELESS` | re-dial that address |
-| a Device Manager server | nowhere — `AppPref.REMOTE_URL`/`REMOTE_TOKEN` hold **one** | reconnect to that server |
+| a Device Manager server | `ServerManager` → `AppPref.SAVED_SERVERS` | its group opens; Connect is inside it |
 | a device belonging to a connected desk, currently offline | the desk's own list | nothing; the desk owns it |
 
-So two changes: `WirelessManager`'s cap of ten (`WirelessDevice.MAX_RECENT`) is the Swing app's
-number for a dialog's history list and is too small for a phone's whole list — raise it and let the
-user forget entries — and a **`SAVED_SERVERS` pref** has to exist, a JSON list mirroring the Swing
-app's `RemoteServerConfig` (`id`, `name`, `host`, `port`, `token`, `enabled`), because the phone will
-have more than one desk.
+The server half of that is built: **`AppPref.SAVED_SERVERS`** is a JSON list of `SavedServer`
+mirroring the Swing app's `RemoteServerConfig`, `ServerManager` owns it, and it is what the groups
+above are drawn from. What is left is the device half — `WirelessManager`'s cap of ten
+(`WirelessDevice.MAX_RECENT`) is the Swing app's number for a dialog's history list and is too small
+for a phone's whole list; raise it and let the user forget entries.
 
 A remembered entry keeps the friendliest name it ever had and when it was last seen, which is what
 makes the offline row readable — `WirelessDevice` already carries `name` and `lastSeenMs`.
 
 **Long-press an offline row** to Forget it. **Tap it** to reconnect. Nothing else: an offline device
 can't be mirrored or browsed, and offering the action is worse than not having it.
-
-### Picking several at once
-
-A **long press on any row** turns the list into a picker. In it a tap toggles a row rather than
-opening it, a check appears on the right, and **back leaves the mode before it leaves the app** —
-which is the one thing a mode like this owes the person in it. The title bar counts what is picked
-and its back arrow is the way out for a platform with no back key.
-
-The actions live behind a **FAB in the bottom-right** rather than in the title bar, because that is
-the corner a thumb reaches without crossing the screen: Remove Device, then Exit. The connect panel
-is hidden while the picker is up — it is not one of the things being picked.
-
-The selection itself is `DeviceManager.selection`, the same `TableSelection` the desktop table
-multi-selects into, so an action written against it works on both. Taking the last row out of the
-selection ends the mode rather than leaving an empty picker.
 
 ## Tapping a device: the detail sheet
 
@@ -200,9 +196,10 @@ mirror doesn't need to know which it is.
 
 The screen a first-run user sees, and the one that decides whether the app is any good.
 
-**One `ConnectPanel` composable, two placements.** With no devices it is the empty state, centred and
-expanded. With devices it is the last item of the list, collapsed to a single "+ Add a device" card
-that expands in place. The same composable in both cases, so the two can never drift apart.
+**One `ConnectPanel` composable, two placements.** With nothing to show at all — no devices and no
+remembered computer — it is the empty state, centred and expanded. Otherwise it is the last item of
+the list, collapsed to a single "+ Add a device" card that expands in place. The same composable in
+both cases, so the two can never drift apart.
 
 **An open section has to look like part of the row that opened it.** A form that simply appears
 underneath reads as the next item in the list, which is what the first version did wrong. Open, a
@@ -212,6 +209,11 @@ painted with `drawBehind` rather than laid out as a sibling, because it has to b
 halves and nothing can know that height while the form is still animating. The chevron turns rather
 than swapping icon, and the form expands and fades rather than appearing, so the eye follows where
 the content came from.
+
+That drawing is `ui/components/ExpandableBlock.kt`, not this file's own: the device list's computers
+expand the same way, and a phone with two expanding idioms has one of them drawn slightly wrong.
+Remembered computers themselves are **not** on this panel — they are rows of the device list, next to
+the devices they own. Two places listing the same server is one of them going stale.
 
 The block's **inset does not change with its state**. Insetting only when open moved the row's icon
 and title down and to the right at the instant the form appeared, and that one-frame shift was the
@@ -550,12 +552,20 @@ there**: a phone's `AdbServerTransport` defaults to `127.0.0.1:5037`, which on a
 all, so until that host is set to a desk the app can only read a Device Manager server or the test
 devices — and pairing, which needs an adb server behind it, can never be offered.
 
-It is now one screen at two sizes rather than a desktop form squeezed onto a phone. The rows come
-from `ui/setting/` (ported from DashboardWeatherKMP) and read `LocalCompactUi` through `Dimens`, so
-the phone gets a 26dp icon and a 20sp label against the desktop's 18dp and 14sp — see the Dialogs
-section of [UI-PORT.md](UI-PORT.md). Tapping a row opens the control that fits what it holds: a
-slider for a duration, +/- for a small count, a list of radio buttons for the transport, a field for
-an address, all of them at touch size.
+It is no longer a desktop form squeezed onto a phone. Settings is a **drill-down of dialogs**:
+`SettingsDialog` is five rows — Connection, Device list, Logs, App, About — each opening a dialog of
+its own, and a row in one of those opens the control that fits what it holds: a slider for a
+duration, +/- for a small count, radio buttons for the transport, a field for an address. On a phone
+each level replaces the one before it and comes back when the inner one closes, so there is only ever
+one card on screen; on the desktop each is its own window. The rows come from `ui/setting/` (ported
+from DashboardWeatherKMP) and read `LocalCompactUi` through `Dimens`, so the phone gets a 26dp icon
+and a 20sp label against the desktop's 18dp and 14sp. See the Dialogs section of
+[UI-PORT.md](UI-PORT.md) for the rest of what differs between the two.
+
+**About is the phone's whole support story**, and the order of its rows is the order to work through
+when something is wrong: turn Debug Mode on, reproduce it, then Support / Feedback — which asks what
+happened and sends the app log with it. View Logs shows the tail of that same file on the device,
+which is the only way to read it on a phone at all.
 
 Still missing on the phone: which connections are saved (with Edit and Forget), Keep connected, and
 mirror quality.
@@ -567,7 +577,8 @@ Each step leaves the app usable and compiles on all three targets.
 1. ~~**The connect panel, and Device Manager servers.**~~ **Done.** `ui/screen/ConnectPanel.kt` in
    both placements — expanded as the empty state, collapsed as the list's last item —
    `data/SavedServer.kt` (the `adm://` connection string, read and written),
-   `manager/ServerManager.kt` over a new `AppPref.SAVED_SERVERS`, and
+   `manager/ServerManager.kt` over a new `AppPref.SAVED_SERVERS` — drawn in the device list as
+   `ui/screen/ServerGroup.kt`, a computer with its devices inside it — and
    `RemoteHttpTransport.info()` on `/api/info` as the thing Connect actually calls. The two QR rows
    are drawn disabled, so the panel is the real shape rather than a stub. `0.0.0.0` in either field
    loads `transport/FakeTransport.kt`.
@@ -612,7 +623,9 @@ Each step leaves the app usable and compiles on all three targets.
 
 - **`DataTable` on a phone.** The file explorer and the log viewer reuse it on the desktop; on a
   phone both want a list with a path bar or a filter bar, not a table.
-- **Multi-select and bulk actions.** The desktop's reason for existing; a phone has no fleet.
+- **Multi-select and bulk actions.** The desktop's reason for existing; a phone has no fleet. Built
+  once — long press for a picker, a FAB, Remove Device — and taken back out: it was a mode to get
+  into and out of, over a list of three rows, for one action nobody was asking a phone for.
 - **Standalone pairing (SPAKE2).** See above, and ADB-TRANSPORTS.md.
 - **Tier III live video.** ~70% of the total work, per ADB-TRANSPORTS.md, on the platform least able
   to spare it.

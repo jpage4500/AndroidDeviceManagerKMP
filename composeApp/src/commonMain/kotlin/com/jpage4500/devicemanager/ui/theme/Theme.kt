@@ -79,6 +79,9 @@ object Dimens {
     val dialogTextSize: TextUnit @Composable get() = if (LocalCompactUi.current) 16.sp else 14.sp
     val dialogButtonSize: TextUnit @Composable get() = if (LocalCompactUi.current) 18.sp else 14.sp
     val dialogCorner = 16.dp
+    // how much of the app log the viewer shows at once before it scrolls. deliberately less
+    // than the dialog's own ceiling, so the Close button is always on screen under it
+    val logViewHeight = 420.dp
     /** how much of the screen a dialog takes on a desktop or a tablet; a phone always fills it. */
     const val dialogWidthFraction = 0.5f
     /** and how much of its height, at most — the rest is what says there is an app behind it. */
@@ -106,6 +109,11 @@ object Dimens {
     // width is a column of labels with a screen of nothing after it
     val formWindowWidth = 560.dp
     val formWindowHeight = 620.dp
+    // a dialog that is its own window is a form too, so it opens at the same width. the height caps
+    // rather than fills: the window packs to whatever its form needs, and only a long one (the app
+    // log) reaches the ceiling and scrolls inside it
+    val dialogWindowWidth = formWindowWidth
+    val dialogWindowMaxHeight = 640.dp
     val messageWindowWidth = 760.dp
     val messageWindowHeight = 520.dp
     val toolbarHeight = 44.dp

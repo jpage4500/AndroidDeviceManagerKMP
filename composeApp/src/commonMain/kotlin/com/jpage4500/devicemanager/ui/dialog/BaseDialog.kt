@@ -11,7 +11,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.window.*
+import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.theme.*
 import org.jetbrains.compose.resources.DrawableResource
@@ -19,15 +19,22 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * a title bar, a scrolling body, and an optional CANCEL/OK row — every dialog in the app.
+ * a title, a scrolling body, and an optional CANCEL/OK row — every dialog in the app.
  *
  * Ported from DashboardWeatherKMP, and the shape all three of Joe's KMP apps now share. **Not
- * [com.jpage4500.devicemanager.ui.components.AppDialog]**, which is still what the desktop-only
- * windows (Command, Logs, Send Input) use: that one is a plain panel inside a real OS window, this
- * one is a card drawn over the app on every platform. New dialogs go here.
+ * [com.jpage4500.devicemanager.ui.components.AppDialog]**, which is what the older desktop-only
+ * forms (Command, Logs, Send Input) still use. New dialogs go here.
  *
- * Enter confirms and Escape cancels, which the weather app leaves to the platform and a desktop
- * does not.
+ * **The same dialog is two different things on the two platforms**, and everything about that comes
+ * from [dialogsAreWindows]:
+ *
+ * - **Desktop** — a real OS window. It has a title bar, it can be dragged anywhere, and it stays up
+ *   when a second dialog opens from it, so a drill-down leaves both levels on screen side by side.
+ *   The window's own title bar is the heading, so the panel inside is flat and square: no coloured
+ *   title band, no rounded card, and Escape/Enter answered by the window.
+ * - **Phone** — an overlay: a rounded card with the coloured title bar and its close X, filling the
+ *   width, one on screen at a time. A dialog opened from another replaces it and comes back when
+ *   the inner one closes.
  */
 @Composable
 fun BaseDialog(
@@ -47,21 +54,15 @@ fun BaseDialog(
     // false = omit the parent verticalScroll. needed when the content embeds its own
     // scrollable/gesture-consuming child, since the parent scroll otherwise steals drag events
     scrollable: Boolean = true,
-    // true = shrink the dialog to its measured content instead of a fixed screen fraction. for
-    // content that sizes itself (a mirrored screen, say), which would otherwise sit in side gaps
+    // true = shrink the dialog to its measured content instead of a fixed width. for content that
+    // sizes itself (a mirrored screen, say), which would otherwise sit in side gaps
     fitContentWidth: Boolean = false,
-    // fraction of the screen width the dialog takes on a desktop or tablet. compact screens always
-    // fill the width; ignored when fitContentWidth is set
+    // fraction of the screen width the dialog takes on a tablet. compact screens always fill the
+    // width; ignored when fitContentWidth is set, and on a desktop, where a window has its own size
     widthFraction: Float = Dimens.dialogWidthFraction,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val titleText = title ?: titleRes?.let { stringResource(it) }
-
-    val properties = DialogProperties(
-        dismissOnBackPress = true,
-        dismissOnClickOutside = true,
-        usePlatformDefaultWidth = false,
-    )
 
     fun confirm() {
         onConfirm?.invoke()
@@ -69,98 +70,217 @@ fun BaseDialog(
         if (dismissOnConfirm) onDismiss()
     }
 
-    // both hoisted above the [isTopDialog] check, so a dialog waiting behind an inner one comes
-    // back scrolled where the user left it and at the width it already measured
+    // hoisted above the [isTopDialog] check, so a dialog waiting behind an inner one comes back
+    // scrolled where the user left it and at the width it already measured
     val scrollState = rememberScrollState()
-    // when fitting content width, we measure the content once and snap the dialog to it. null until
-    // that first measure, which falls back to the max height below (a good guess for square
-    // content) so there's no visible wide-then-shrink flash
     var contentWidthPx by remember { mutableStateOf<Int?>(null) }
 
-    // a dialog opened from another one is a step deeper into one flow, not a second thing on
-    // screen: only the innermost one draws. every level stays composed either way, so nothing it
-    // holds is lost
-    if (!isTopDialog()) return
+    // called unconditionally — the registration is what keeps the stack honest — but only a phone
+    // acts on it. a desktop gives every level its own window and leaves them all up, which is what
+    // a window manager is for
+    val isTop = isTopDialog()
+    if (!dialogsAreWindows && !isTop) return
 
+    DialogContainer(
+        title = titleText ?: Branding.shortName,
+        onDismiss = onDismiss,
+        // the desktop window answers Enter even when nothing inside has focus; the phone's overlay
+        // ignores this and the panel below handles its own keys
+        onEnter = if (okText != null && okEnabled) ({ confirm() }) else null,
+    ) {
+        if (dialogsAreWindows) {
+            DialogPanel(
+                // a fixed width rather than wrap-content: the title row and the button row both
+                // fill their width, so a wrapping column would snap to whatever the widest of them
+                // asked for. the height caps and the content scrolls, which is what keeps a long
+                // form from asking for a window taller than the screen
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.surface)
+                    .then(if (fitContentWidth) Modifier else Modifier.width(Dimens.dialogWindowWidth))
+                    .heightIn(max = Dimens.dialogWindowMaxHeight),
+                titleText = null,   // the OS title bar is the heading
+                icon = null,
+                titleMaxLines = titleMaxLines,
+                okText = okText,
+                cancelText = cancelText,
+                okEnabled = okEnabled,
+                onOk = { confirm() },
+                onDismiss = onDismiss,
+                horizontalAlignment = horizontalAlignment,
+                contentPadding = contentPadding,
+                scrollable = scrollable,
+                scrollState = scrollState,
+                onContentWidth = null,
+                content = content,
+            )
+        } else {
+            OverlayCard(
+                titleText = titleText,
+                icon = icon,
+                titleMaxLines = titleMaxLines,
+                okText = okText,
+                cancelText = cancelText,
+                okEnabled = okEnabled,
+                onOk = { confirm() },
+                onDismiss = onDismiss,
+                horizontalAlignment = horizontalAlignment,
+                modifier = modifier,
+                contentPadding = contentPadding,
+                scrollable = scrollable,
+                scrollState = scrollState,
+                fitContentWidth = fitContentWidth,
+                contentWidthPx = contentWidthPx,
+                onContentWidth = { contentWidthPx = it },
+                widthFraction = widthFraction,
+                content = content,
+            )
+        }
+    }
+}
+
+/** the phone's dialog: a rounded card over the app, with its own title bar. */
+@Composable
+private fun OverlayCard(
+    titleText: String?,
+    icon: DrawableResource?,
+    titleMaxLines: Int,
+    okText: String?,
+    cancelText: String?,
+    okEnabled: Boolean,
+    onOk: () -> Unit,
+    onDismiss: () -> Unit,
+    horizontalAlignment: Alignment.Horizontal,
+    modifier: Modifier,
+    contentPadding: PaddingValues,
+    scrollable: Boolean,
+    scrollState: ScrollState,
+    fitContentWidth: Boolean,
+    contentWidthPx: Int?,
+    onContentWidth: (Int) -> Unit,
+    widthFraction: Float,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val focus = remember { FocusRequester() }
 
-    Dialog(onDismissRequest = onDismiss, properties = properties) {
-        // measured inside the Dialog window so a nested dialog sees the actual screen size rather
-        // than its parent's content width — without this a BoxWithConstraints would inherit the
-        // call site's constraints and misread a narrow parent card as a compact screen
-        BoxWithConstraints {
-            val isCompactScreen = maxWidth < 600.dp
-            val screenWidth = maxWidth
-            val maxDialogHeight = maxHeight * Dimens.dialogHeightFraction
+    // measured inside the Dialog window so a nested dialog sees the actual screen size rather than
+    // its parent's content width — without this a BoxWithConstraints would inherit the call site's
+    // constraints and misread a narrow parent card as a compact screen.
+    //
+    // safeDrawing is the union of the system bars, the cutout *and* the keyboard, so this is both
+    // what keeps a tall dialog's title out from under the clock and what keeps the field in a
+    // TextInputDialog above the soft keyboard: the measured height shrinks when the keyboard opens
+    BoxWithConstraints(Modifier.safeDrawingPadding()) {
+        val isCompactScreen = maxWidth < 600.dp
+        val screenWidth = maxWidth
+        val maxDialogHeight = maxHeight * Dimens.dialogHeightFraction
 
-            val density = LocalDensity.current
-            val baseModifier = when {
-                fitContentWidth -> {
-                    val fitWidth = contentWidthPx?.let { with(density) { it.toDp() } } ?: maxDialogHeight
-                    modifier.width(fitWidth.coerceIn(0.dp, screenWidth * 0.9f))
-                }
-                isCompactScreen -> modifier.fillMaxWidth()
-                else -> modifier.width(screenWidth * widthFraction)
+        val density = LocalDensity.current
+        val sized = when {
+            fitContentWidth -> {
+                val fitWidth = contentWidthPx?.let { with(density) { it.toDp() } } ?: maxDialogHeight
+                modifier.width(fitWidth.coerceIn(0.dp, screenWidth * 0.9f))
             }
-            Card(
-                modifier = baseModifier
-                    .heightIn(max = maxDialogHeight)
-                    // focusable so the keys below arrive even when nothing inside has taken focus —
-                    // a confirmation with no fields in it, say. preview order runs root-to-leaf, so
-                    // a focused field inside still lets Enter through to here first
-                    .focusRequester(focus)
-                    .focusable()
-                    .onPreviewKeyEvent { event ->
-                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        when (event.key) {
-                            Key.Escape -> { onDismiss(); true }
-                            Key.Enter, Key.NumPadEnter ->
-                                if (okText != null && okEnabled) { confirm(); true } else false
-                            else -> false
-                        }
-                    },
-                shape = RoundedCornerShape(Dimens.dialogCorner),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
+            isCompactScreen -> modifier.fillMaxWidth()
+            else -> modifier.width(screenWidth * widthFraction)
+        }
+        Card(
+            modifier = sized
+                .heightIn(max = maxDialogHeight)
+                // focusable so the keys below arrive even when nothing inside has taken focus — a
+                // confirmation with no fields in it, say
+                .focusRequester(focus)
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Escape -> { onDismiss(); true }
+                        Key.Enter, Key.NumPadEnter ->
+                            if (okText != null && okEnabled) { onOk(); true } else false
+                        else -> false
+                    }
+                },
+            shape = RoundedCornerShape(Dimens.dialogCorner),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        ) {
+            DialogPanel(
+                modifier = Modifier.fillMaxWidth(),
+                titleText = titleText,
+                icon = icon,
+                titleMaxLines = titleMaxLines,
+                okText = okText,
+                cancelText = cancelText,
+                okEnabled = okEnabled,
+                onOk = onOk,
+                onDismiss = onDismiss,
+                horizontalAlignment = horizontalAlignment,
+                contentPadding = contentPadding,
+                scrollable = scrollable,
+                scrollState = scrollState,
+                onContentWidth = if (fitContentWidth) onContentWidth else null,
+                onShow = {
                     // declared before the content, so a field inside that asks for focus of its own
                     // runs later and wins — effects fire in composition order, and the last request
-                    // is the one that sticks. this is only the fallback for a dialog with nothing
-                    // focusable in it, which is most of them
-                    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+                    // is the one that sticks
+                    runCatching { focus.requestFocus() }
+                },
+                content = content,
+            )
+        }
+    }
+}
 
-                    if (titleText != null) {
-                        DialogTitle(title = titleText, icon = icon, maxLines = titleMaxLines, onDismiss = onDismiss)
-                    }
+/** the title, the body and the buttons, laid out the same whichever container is around them. */
+@Composable
+private fun DialogPanel(
+    modifier: Modifier,
+    titleText: String?,
+    icon: DrawableResource?,
+    titleMaxLines: Int,
+    okText: String?,
+    cancelText: String?,
+    okEnabled: Boolean,
+    onOk: () -> Unit,
+    onDismiss: () -> Unit,
+    horizontalAlignment: Alignment.Horizontal,
+    contentPadding: PaddingValues,
+    scrollable: Boolean,
+    scrollState: ScrollState,
+    onContentWidth: ((Int) -> Unit)?,
+    onShow: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(modifier) {
+        onShow?.let { LaunchedEffect(Unit) { it() } }
 
-                    val contentModifier = Modifier
-                        // measures the full content width including padding, so the card can shrink
-                        // to it. must be outermost: measuring inside .padding() reports the
-                        // padding-less width, and re-subtracting padding each pass shrinks to zero
-                        .let { if (fitContentWidth) it.onSizeChanged { size -> contentWidthPx = size.width } else it }
-                        .padding(contentPadding)
-                        .weight(1f, fill = false)
-                        .let { if (scrollable) it.verticalScroll(scrollState) else it }
+        if (titleText != null) {
+            DialogTitle(title = titleText, icon = icon, maxLines = titleMaxLines, onDismiss = onDismiss)
+        }
 
-                    Column(
-                        horizontalAlignment = horizontalAlignment,
-                        verticalArrangement = Arrangement.Top,
-                        modifier = contentModifier,
-                        content = content,
-                    )
+        val contentModifier = Modifier
+            // measures the full content width including padding, so the card can shrink to it. must
+            // be outermost: measuring inside .padding() reports the padding-less width, and
+            // re-subtracting padding each pass shrinks to zero
+            .let { if (onContentWidth != null) it.onSizeChanged { size -> onContentWidth(size.width) } else it }
+            .padding(contentPadding)
+            .weight(1f, fill = false)
+            .let { if (scrollable) it.verticalScroll(scrollState) else it }
 
-                    if (okText != null || cancelText != null) {
-                        DialogButtons(
-                            okText = okText,
-                            cancelText = cancelText,
-                            okEnabled = okEnabled,
-                            onOk = { confirm() },
-                            onCancel = onDismiss,
-                            modifier = Modifier.padding(horizontal = Dimens.gapLarge, vertical = Dimens.gap),
-                        )
-                    }
-                }
-            }
+        Column(
+            horizontalAlignment = horizontalAlignment,
+            verticalArrangement = Arrangement.Top,
+            modifier = contentModifier,
+            content = content,
+        )
+
+        if (okText != null || cancelText != null) {
+            DialogButtons(
+                okText = okText,
+                cancelText = cancelText,
+                okEnabled = okEnabled,
+                onOk = onOk,
+                onCancel = onDismiss,
+                modifier = Modifier.padding(horizontal = Dimens.gapLarge, vertical = Dimens.gap),
+            )
         }
     }
 }

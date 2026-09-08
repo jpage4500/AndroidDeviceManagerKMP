@@ -85,7 +85,6 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
         is WindowContent.Files -> "Files — ${DeviceManager.nameOf(content.serial)}"
         is WindowContent.Info -> DeviceManager.nameOf(content.serial)
         is WindowContent.Connect -> "Connect"
-        is WindowContent.Settings -> "Settings"
         is WindowContent.Message -> "Message Viewer"
     }
 
@@ -140,9 +139,6 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
             is WindowContent.Info -> AppTheme { DeviceInfoScreen(content.serial) }
             is WindowContent.Connect -> AppTheme {
                 ConnectScreen(onClose = { WindowManager.close(appWindow.id) })
-            }
-            is WindowContent.Settings -> AppTheme {
-                SettingsScreen(onClose = { WindowManager.close(appWindow.id) })
             }
             is WindowContent.Message -> AppTheme { MessageScreen(content.text) }
         }

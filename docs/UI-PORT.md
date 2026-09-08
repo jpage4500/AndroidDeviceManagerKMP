@@ -307,18 +307,16 @@ differently on a bench.
 
 **There are two families, and new work belongs in the second one.**
 
-`BaseDialog` (`ui/dialog/`) is the one ported from DashboardWeatherKMP and the shape all three of
-Joe's KMP apps now share: a coloured title bar with an icon and a close X, a scrolling body, and a
-full-width CANCEL / OK row. Around it sit the generic dialogs in `ui/dialog/common/` —
-`ConfirmationDialog`, `TextInputDialog`, `OptionsDialog` (radio buttons), `MultiSelectOptionsDialog`
-(checkboxes), `SliderDialog`, `StepperDialog` — and the settings rows in `ui/setting/` that open
-them. **A new dialog goes here.** `ConfirmDialog` / `InputDialog` are thin request-shaped wrappers
-over the first two, so every existing `ConfirmRequest` and `InputRequest` call site draws the new
-one without knowing.
+`BaseDialog` (`ui/dialog/`) is the one ported from DashboardWeatherKMP. Around it sit the generic
+dialogs in `ui/dialog/common/` — `ConfirmationDialog`, `TextInputDialog`, `OptionsDialog` (radio
+buttons), `MultiSelectOptionsDialog` (checkboxes), `SliderDialog`, `StepperDialog` — and the settings
+rows in `ui/setting/` that open them. **A new dialog goes here.** `ConfirmDialog` / `InputDialog` are
+thin request-shaped wrappers over the first two, so every existing `ConfirmRequest` and
+`InputRequest` call site draws the new one without knowing.
 
 `AppDialog` (`ui/components/`) is the older desktop-only panel and is what Command, Logs and Send
 Input still use. It is a plain panel with the buttons bottom-right where a desktop puts them, inside
-a real OS window — see the next two paragraphs, which still describe it exactly.
+a real OS window.
 
 **Nothing in either family uses Material3's `AlertDialog`.** It draws a 28dp-radius floating card
 with 24dp padding and pill buttons — a phone dialog on a desktop — and it doesn't answer Enter or
@@ -326,16 +324,43 @@ Escape. `AppTextField` replaces `OutlinedTextField` for the same reason (floatin
 minimum height, Material's focus animation), and `AppCheckbox` replaces `Checkbox`, which is 48dp of
 touch target.
 
-**`BaseDialog` draws in-window on every platform**, unlike `AppDialog`. Two things make that work:
+**The same `BaseDialog` is two different things on the two platforms.** Everything about that comes
+from one `expect val` — `dialogsAreWindows` in `DialogContainer.kt` — and it is the difference that
+matters most, because a dialog is now the app's main way of showing a form:
 
-- **`isTopDialog()`** (`ui/dialog/DialogStack.kt`). A dialog opened from another one is a step
-  deeper into one flow, not a second thing on screen, so only the innermost one draws. The levels
-  behind it stay composed and keep their scroll position. This is what lets a `SliderDialog` open a
-  type-a-value `TextInputDialog` over itself.
-- **The card takes focus, but yields it.** `BaseDialog` requests focus on its own card so Enter and
-  Escape work in a dialog with nothing focusable in it. That request is declared *before* the
-  content, so a field inside that asks for focus runs later and wins — get the order wrong and the
-  soft keyboard never comes up on a phone.
+| | desktop | phone |
+|---|---|---|
+| what it is | a real OS window | an overlay over the app |
+| heading | the window's own title bar | a coloured title band with a close X |
+| shape | flat, square, a fixed `dialogWindowWidth` | rounded card, fills the width |
+| buttons | bottom-right, natural width | split half and half |
+| moving it | drag it anywhere, off the app if you like | nowhere to move to |
+| a second dialog | its own window; the first stays up | replaces the first, which comes back after |
+| Escape / Enter | the window handles them | the card handles them |
+
+Three things make that work:
+
+- **`isTopDialog()`** (`ui/dialog/DialogStack.kt`) — only consulted where dialogs are *not* windows.
+  On a phone a dialog opened from another is a step deeper into one flow, not a second thing on
+  screen, so only the innermost draws; the levels behind stay composed and keep their scroll
+  position. On the desktop every level gets a window and they all stay up, which is what a window
+  manager is for. Both paths call it, because the registration is what keeps the stack honest.
+- **The card takes focus, but yields it.** On the overlay path `BaseDialog` requests focus on its own
+  card so Enter and Escape work in a dialog with nothing focusable in it. That request is declared
+  *before* the content, so a field inside that asks for focus runs later and wins — get the order
+  wrong and the soft keyboard never comes up on a phone. The window path doesn't need it: the
+  desktop container answers both keys itself.
+- **The overlay measures inside `safeDrawingPadding()`.** That is the union of the system bars, the
+  cutout *and* the keyboard, so it is both what keeps a tall dialog's title out from under the clock
+  and what keeps a `TextInputDialog`'s field above the soft keyboard — the dialog's measured height
+  shrinks when the keyboard opens rather than the field sliding under it.
+
+**Settings is a drill-down, not a page.** `SettingsDialog` is five rows — Connection, Device list,
+Logs, App, About — each opening a dialog of its own, and a row in *those* opens the control that
+fits what it holds. It was one long scroll of every pref (the Swing app's shape, and this app's until
+now); it broke on the phone, where the same list is a page and a half of scrolling with no room for
+the section headings that made it readable. There is no `SettingsScreen` and no `WindowKind.SETTINGS`
+any more: on the desktop the dialog *is* the window.
 
 **Settings rows are sized twice.** `SettingItem`, `SettingSwitchItem`, `SettingSliderItem` and
 `SettingStepperItem` read `LocalCompactUi` (provided by `App(compact)`) through `Dimens`. The
@@ -344,12 +369,12 @@ desktop form window is cartoonish, and the desktop is the workload that matters.
 right is red on purpose and is the one place in the app that uses red for something that isn't
 wrong — in a list of thirty rows it is the only part anyone scans.
 
-**A dialog is a real window on the desktop.** `DialogContainer` is an `expect`: the desktop actual is
-a `DialogWindow` with a title bar and a close button, auto-sized to its form, which is what the Swing
-app's `JDialog`s were; a phone gets an overlay, because a phone has no windows. The panel draws its
-own heading only when the container has none (`LocalDialogTitled`). Escape and Enter are handled by
-the *window* as well as by the panel, so the default button answers Enter in a dialog with no fields
-in it — anything focused inside sees the key first and can consume it.
+**`DialogContainer` is the `expect` under both families.** The desktop actual is a `DialogWindow`
+sized to its content (`DpSize.Unspecified`), which is what the Swing app's `JDialog`s were; a phone
+gets an overlay, because a phone has no windows. `AppDialog` draws its own heading only when the
+container has none (`LocalDialogTitled`). Escape and Enter are handled by the *window* as well as by
+the panel, so the default button answers Enter in a dialog with no fields in it — anything focused
+inside sees the key first and can consume it.
 
 This has one consequence worth knowing: a `Popup` is drawn inside its own window's layer, so a menu
 opened in a dialog is clipped to that dialog, which is only as tall as its form. `AppPopupMenu`

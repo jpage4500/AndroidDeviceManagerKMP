@@ -3,17 +3,14 @@ package com.jpage4500.devicemanager.ui.screen
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.shape.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.draw.*
-import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
-import androidx.compose.ui.unit.*
 import com.jpage4500.devicemanager.data.*
+import com.jpage4500.devicemanager.manager.*
 import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.theme.*
@@ -32,20 +29,27 @@ import org.jetbrains.compose.resources.stringResource
  * full — so [ConnectPanel] is here in both of its placements: expanded as the empty state, and
  * collapsed under the rows once there is something to show.
  *
- * **Except in [multiSelect]**, which a long press starts: there a tap toggles the row instead of
- * opening it, and the check on the right is the only thing that changes about the layout — a list
- * that grows a column of checkboxes when a mode turns on is a list that jumps.
+ * **A device belonging to a computer is drawn inside it**, in a [ServerGroup] that expands the way
+ * the connect panel's routes do. Which desk a device came through is otherwise invisible until the
+ * sheet is open, and a remembered computer that isn't connected has nowhere else to be.
  */
 @Composable
 fun DeviceListScreen(
     devices: List<Device>,
-    selectedSerials: Set<String>,
-    multiSelect: Boolean,
     onSelect: (Device) -> Unit,
-    onLongPress: (Device) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (devices.isEmpty()) {
+    val servers by ServerManager.servers.collectAsState()
+    val activeKey by ServerManager.activeKey.collectAsState()
+
+    // which computer the devices on screen belong to: at most one, since DeviceManager holds a
+    // single transport. null — an adb server, or the test fleet — leaves them ungrouped
+    val ownerKey = activeKey?.takeIf { key -> servers.any { it.key == key } }
+    // the connected computer opens itself and the rest stay shut; a tap wins from then on
+    val toggled = remember { mutableStateMapOf<String, Boolean>() }
+    fun isOpen(server: SavedServer): Boolean = toggled[server.key] ?: (server.key == ownerKey)
+
+    if (devices.isEmpty() && servers.isEmpty()) {
         Column(
             modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.Center,
@@ -59,39 +63,54 @@ fun DeviceListScreen(
         return
     }
 
+    // newest first, the order the connect panel listed them in
+    val ordered = servers.asReversed()
+
     LazyColumn(modifier.fillMaxSize()) {
-        items(devices, key = { it.serial }) { device ->
-            DeviceRow(
-                device = device,
-                selected = device.serial in selectedSerials,
-                multiSelect = multiSelect,
-                onClick = { onSelect(device) },
-                onLongClick = { onLongPress(device) },
+        itemsIndexed(ordered, key = { _, server -> "server:${server.key}" }) { index, server ->
+            // a rule only *between* shut blocks, the connect panel's rule: one drawn against an open
+            // block would cut a computer off from the devices it just showed
+            if (index > 0 && !isOpen(server) && !isOpen(ordered[index - 1])) {
+                HorizontalDivider(color = Colors.divider)
+            }
+            ServerGroup(
+                server = server,
+                devices = if (server.key == ownerKey) devices else emptyList(),
+                active = server.key == ownerKey,
+                open = isOpen(server),
+                onToggle = { toggled[server.key] = !isOpen(server) },
+                onSelect = onSelect,
             )
-            HorizontalDivider(thickness = Dimens.listSpacing)
         }
+
+        // whatever no computer owns: a desk's adb server, or the invented fleet
+        if (ownerKey == null) {
+            items(devices, key = { "device:${it.serial}" }) { device ->
+                DeviceRow(device = device, onClick = { onSelect(device) })
+                HorizontalDivider(thickness = Dimens.listSpacing)
+            }
+        }
+
         // the same panel, collapsed — the last item rather than a floating button, so it scrolls
-        // away with the list it belongs to. Out of the way while rows are being picked
-        if (!multiSelect) item { ConnectPanel() }
+        // away with the list it belongs to
+        item { ConnectPanel() }
     }
 }
 
+/**
+ * one device, on two lines.
+ *
+ * Drawn the same inside a [ServerGroup] as outside one, so a list that groups half its rows still
+ * reads as one list; the group insets it far enough to leave its own accent stripe showing.
+ */
 @Composable
-private fun DeviceRow(
-    device: Device,
-    selected: Boolean,
-    multiSelect: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-) {
-    val background =
-        if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+fun DeviceRow(device: Device, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .height(Dimens.touchRowHeight)
-            .background(background)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
             .padding(horizontal = Dimens.rowPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -140,24 +159,6 @@ private fun DeviceRow(
                 level = device.batteryLevel,
                 charging = device.powerStatus.isCharging,
             )
-        }
-
-        if (multiSelect) {
-            Spacer(Modifier.width(Dimens.gap))
-            // the mark AppCheckbox draws, at a phone's size and with no click target of its own —
-            // the row is the target, and a second one inside it is a way to miss
-            Box(
-                Modifier
-                    .size(Dimens.iconLarge)
-                    .clip(CircleShape)
-                    .background(if (selected) Colors.accent else Color.Transparent)
-                    .border(Dp.Hairline, if (selected) Colors.accent else Colors.secondaryText, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (selected) {
-                    AppIcon(Res.drawable.success, size = Dimens.icon, tint = Colors.rowSelectedText)
-                }
-            }
         }
     }
 }

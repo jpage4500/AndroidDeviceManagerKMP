@@ -85,9 +85,9 @@ permanently.
 | Device Manager's HTTP API (`:8765`) | yes | yes | **done** — `RemoteHttpTransport` |
 | direct to `adbd` on 5555 | no | no | not written |
 
-Which of these is used is normally **inferred**: a remote URL filled in on the settings screen means
-the HTTP API, otherwise the adb server at whatever host and port are set. Settings → *Reading devices
-from* overrides that (`AppPref.TRANSPORT`, `TransportChoice`), and the only override that changes
+Which of these is used is normally **inferred**: a remote URL filled in under Settings ▸ Connection
+means the HTTP API, otherwise the adb server at whatever host and port are set. Settings ▸ Connection
+▸ *Reading devices from* overrides that (`AppPref.TRANSPORT`, `TransportChoice`), and the only override that changes
 anything is **adb server**, which ignores a remote URL that is still filled in — so a desktop
 configured for both can switch back without clearing a field to do it. `AUTO` is the default and is
 the behaviour that predates the setting. A choice with nothing behind it still falls back to the adb

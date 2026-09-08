@@ -34,7 +34,6 @@ enum class WindowKind(val defaultWidth: Dp, val defaultHeight: Dp) {
     FILES(Dimens.filesWindowWidth, Dimens.filesWindowHeight),
     INFO(Dimens.formWindowWidth, Dimens.formWindowHeight),
     CONNECT(Dimens.formWindowWidth, Dimens.formWindowHeight),
-    SETTINGS(Dimens.formWindowWidth, Dimens.formWindowHeight),
     MESSAGE(Dimens.messageWindowWidth, Dimens.messageWindowHeight),
 }
 
@@ -58,8 +57,6 @@ sealed interface WindowContent {
     /** reach a device over the network. */
     data object Connect : WindowContent
 
-    data object Settings : WindowContent
-
     /** one log line, in full. */
     data class Message(val text: String) : WindowContent
 }
@@ -73,7 +70,6 @@ val WindowContent.kind: WindowKind
         is WindowContent.Files -> WindowKind.FILES
         is WindowContent.Info -> WindowKind.INFO
         is WindowContent.Connect -> WindowKind.CONNECT
-        is WindowContent.Settings -> WindowKind.SETTINGS
         is WindowContent.Message -> WindowKind.MESSAGE
     }
 
@@ -153,7 +149,6 @@ object WindowManager {
 
     fun openConnect(from: Long? = activeWindowId): Long = openOnce(WindowContent.Connect, from)
 
-    fun openSettings(from: Long? = activeWindowId): Long = openOnce(WindowContent.Settings, from)
 
     fun openMessage(text: String, from: Long? = activeWindowId): Long =
         openOnce(WindowContent.Message(text), from)

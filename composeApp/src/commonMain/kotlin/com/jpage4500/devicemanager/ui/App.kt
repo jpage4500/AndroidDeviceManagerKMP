@@ -9,6 +9,7 @@ import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.manager.*
 import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.components.*
+import com.jpage4500.devicemanager.ui.dialog.*
 import com.jpage4500.devicemanager.ui.screen.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
@@ -56,26 +57,15 @@ private fun AppContent(compact: Boolean) {
  * action inside the sheet pushes a screen of its own. See docs/MOBILE-UI.md for why the tap doesn't
  * go straight to the mirror it used to.
  *
- * A long press turns the list into a picker instead. The selection itself lives in [DeviceManager],
- * the same set the desktop table multi-selects into, so an action written against it works on both.
+ * A tap is the only gesture the list has. Picking several rows at once — and Remove, the one action
+ * that needed it — was the desktop's reason for existing rather than the phone's.
  */
 @Composable
 private fun CompactLayout() {
     val devices by DeviceManager.devices.collectAsState()
     val selected by DeviceManager.selectedSerial.collectAsState()
-    val selection by DeviceManager.selection.collectAsState()
     var mirroring by remember { mutableStateOf<String?>(null) }
-    var multiSelect by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
-
-    val serials = remember(selection) { selection.keys.filterIsInstance<String>().toSet() }
-
-    fun exitMultiSelect() {
-        multiSelect = false
-        menuOpen = false
-        DeviceManager.select(null)
-    }
 
     val mirrored = mirroring
     if (mirrored != null) {
@@ -91,74 +81,25 @@ private fun CompactLayout() {
         return
     }
 
-    // back leaves the picker before it leaves the app, which is the one thing a mode like this owes
-    // the person in it
-    OnBack(enabled = multiSelect) { exitMultiSelect() }
-
     Column(Modifier.safeInsets()) {
         AppBar(
             title = stringResource(Res.string.devices),
-            subtitle = if (multiSelect) {
-                stringResource(Res.string.devices_selected, serials.size)
-            } else {
-                stringResource(Res.string.devices_attached, devices.size)
-            },
-            onBack = if (multiSelect) ({ exitMultiSelect() }) else null,
-            onSettings = if (multiSelect) null else ({ settingsOpen = true }),
+            subtitle = stringResource(Res.string.devices_attached, devices.size),
+            onSettings = { settingsOpen = true },
         )
-        Box(Modifier.weight(1f)) {
-            DeviceListScreen(
-                devices = devices,
-                selectedSerials = serials,
-                multiSelect = multiSelect,
-                onSelect = { device ->
-                    if (multiSelect) {
-                        val next = DeviceManager.selection.value.onPress(
-                            key = device.serial,
-                            rows = devices.map { it.serial },
-                            toggle = true,
-                            range = false,
-                        )
-                        // picking the last one off ends the mode rather than leaving an empty picker
-                        if (next.isEmpty) exitMultiSelect() else DeviceManager.setSelection(next)
-                    } else {
-                        DeviceManager.select(device.serial)
-                    }
-                },
-                onLongPress = { device ->
-                    multiSelect = true
-                    DeviceManager.select(device.serial)
-                },
-            )
-            if (multiSelect) {
-                SelectionMenu(
-                    expanded = menuOpen,
-                    onExpandedChange = { menuOpen = it },
-                    onRemove = {
-                        serials.forEach(DeviceManager::remove)
-                        exitMultiSelect()
-                    },
-                    onExit = { exitMultiSelect() },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(Dimens.gapLarge),
-                )
-            }
-        }
+        DeviceListScreen(
+            devices = devices,
+            onSelect = { device -> DeviceManager.select(device.serial) },
+            modifier = Modifier.weight(1f),
+        )
     }
 
-    if (settingsOpen) {
-        // the phone had no way in at all before this: the adb server address lives in settings, and
-        // without it a phone can only ever read the loopback server it doesn't have
-        DialogContainer(
-            title = stringResource(Res.string.action_settings),
-            onDismiss = { settingsOpen = false },
-            onEnter = null,
-        ) {
-            SettingsScreen(onClose = { settingsOpen = false }, modifier = Modifier.safeInsets())
-        }
-    }
+    // the phone had no way in at all before this: the adb server address lives in settings, and
+    // without it a phone can only ever read the loopback server it doesn't have
+    if (settingsOpen) SettingsDialog(onDismiss = { settingsOpen = false })
 
     val openSerial = selected
-    if (!multiSelect && openSerial != null) {
+    if (openSerial != null) {
         DeviceSheet(
             serial = openSerial,
             onDismiss = { DeviceManager.select(null) },
@@ -182,33 +123,6 @@ private fun CompactLayout() {
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun OnBack(enabled: Boolean, onBack: () -> Unit) = BackHandler(enabled, onBack)
-
-/** what the picker can do, behind the one button a thumb can reach without crossing the screen. */
-@Composable
-private fun SelectionMenu(
-    expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit,
-    onRemove: () -> Unit,
-    onExit: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(modifier) {
-        // the palette's own blue: Material's primaryContainer isn't in the scheme this app builds,
-        // so the default FAB would arrive in a colour nothing else here uses
-        FloatingActionButton(
-            onClick = { onExpandedChange(true) },
-            containerColor = Colors.accent,
-            contentColor = Colors.rowSelectedText,
-        ) {
-            AppIcon(Res.drawable.menu, size = Dimens.iconLarge, tint = Colors.rowSelectedText)
-        }
-        AppPopupMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
-            Item(stringResource(Res.string.action_remove_device)) { onRemove() }
-            Separator()
-            Item(stringResource(Res.string.action_exit_select)) { onExit() }
-        }
-    }
-}
 
 /**
  * keep the content out from under the system.

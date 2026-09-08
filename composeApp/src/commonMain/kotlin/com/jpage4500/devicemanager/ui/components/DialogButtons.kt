@@ -11,11 +11,12 @@ import androidx.compose.ui.text.style.*
 import com.jpage4500.devicemanager.ui.theme.*
 
 /**
- * a dialog's CANCEL / OK row, each button taking half the width.
+ * a dialog's CANCEL / OK row.
  *
- * Full-width rather than a pair huddled bottom-right: on a phone the two buttons *are* the reachable
- * part of the dialog, and the desktop reads them fine at the same weight. ported from
- * DashboardWeatherKMP.
+ * **Split half and half on a phone**, where the two buttons are the reachable part of the dialog and
+ * a thumb should not have to aim; **bottom-right at their natural width on a desktop**, which is
+ * where a desktop puts them and where a single CLOSE would otherwise be a grey bar across the whole
+ * form. ported from DashboardWeatherKMP, which is a phone and only ever needed the first.
  */
 @Composable
 fun DialogButtons(
@@ -26,14 +27,15 @@ fun DialogButtons(
     okEnabled: Boolean = true,      // only applies when okText is not null
     modifier: Modifier = Modifier,
 ) {
+    val stretch = !dialogsAreWindows
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.gap),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.gap, Alignment.End),
     ) {
         if (cancelText != null) {
             Button(
                 onClick = onCancel,
-                modifier = Modifier.weight(1f),
+                modifier = if (stretch) Modifier.weight(1f) else Modifier,
                 colors = ButtonDefaults.buttonColors(containerColor = Colors.offline),
                 shape = RoundedCornerShape(Dimens.gap),
             ) {
@@ -44,7 +46,7 @@ fun DialogButtons(
             Button(
                 onClick = onOk,
                 enabled = okEnabled,
-                modifier = Modifier.weight(1f),
+                modifier = if (stretch) Modifier.weight(1f) else Modifier,
                 shape = RoundedCornerShape(Dimens.gap),
             ) {
                 DialogButtonLabel(okText, LocalContentColor.current)

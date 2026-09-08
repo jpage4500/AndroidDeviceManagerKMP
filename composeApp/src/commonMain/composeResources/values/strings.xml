@@ -8,7 +8,6 @@
     <!-- device list -->
     <string name="devices">Devices</string>
     <string name="devices_attached">%1$d attached</string>
-    <string name="devices_selected">%1$d selected</string>
     <string name="no_devices">No devices</string>
     <string name="no_devices_msg">Attach a device over USB, or start an adb server for this app to read.\nNothing here starts one for you.</string>
     <string name="no_matches">No matches</string>
@@ -57,7 +56,6 @@
     <string name="connect_pair_retry">Try again</string>
     <string name="connect_pair_steps">On the other device: Settings ▸ Developer options ▸ Wireless debugging ▸ Pair device with QR code, then scan this.</string>
     <string name="connect_pair_waiting">Waiting for a device to scan…</string>
-    <string name="connect_saved">SAVED</string>
     <string name="connect_scan_none">That QR code is not a Device Manager connection</string>
     <string name="connect_scan_qr">Scan a QR code</string>
     <string name="connect_scan_qr_msg">Device Manager on your computer shows one under Server ▸ Share</string>
@@ -65,6 +63,11 @@
     <string name="connect_server">Connect to a computer</string>
     <string name="connect_server_msg">Running Device Manager on your network</string>
     <string name="connect_token">Auth token</string>
+
+    <!-- a computer's group in the device list (mobile) -->
+    <string name="server_none">Nothing attached to this computer</string>
+    <string name="server_not_connected">Not connected</string>
+    <string name="server_offline_msg">Its devices show up here once this computer is connected.</string>
 
     <!-- device sheet (mobile) -->
     <string name="sheet_copy_serial">Copy serial</string>
@@ -118,21 +121,18 @@
     <!-- settings -->
     <string name="settings_adb_host">adb server host</string>
     <string name="settings_adb_port">adb server port</string>
-    <string name="settings_app">APP</string>
+    <string name="settings_app">App</string>
     <string name="settings_confirm">Confirm destructive commands</string>
-    <string name="settings_connection">CONNECTION</string>
-    <string name="settings_debug">Debug logging</string>
-    <string name="settings_device_list">DEVICE LIST</string>
+    <string name="settings_connection">Connection</string>
+    <string name="settings_device_list">Device list</string>
     <string name="settings_full_refresh">Full refresh (mins)</string>
     <string name="settings_log_buffer">Log buffer (lines)</string>
     <string name="settings_log_font">Log font size (⌘+ / ⌘-)</string>
     <string name="settings_log_hold">Hold while scrolled up (lines)</string>
-    <string name="settings_logs">LOGS</string>
+    <string name="settings_logs">Logs</string>
     <string name="settings_mirror_ms">Mirror interval (ms)</string>
     <string name="settings_not_set">Not set</string>
     <string name="settings_on_top">Keep windows on top</string>
-    <string name="settings_open">OPEN</string>
-    <string name="settings_open_folder">App log file</string>
     <string name="settings_refresh_secs">Refresh battery/disk (secs)</string>
     <string name="settings_remote_token">Remote token</string>
     <string name="settings_remote_url">Remote Device Manager URL</string>
@@ -144,8 +144,8 @@
     <string name="settings_transport">Reading devices from</string>
     <string name="settings_tooltips">Show Tooltips</string>
     <string name="settings_tray">Stay in the menu bar when closed</string>
-    <string name="settings_upload_logs">Send app logs to support</string>
     <string name="settings_max_mirrors">Mirror windows at once</string>
+    <string name="settings_about">About</string>
     <string name="settings_enter_ms">Value in milliseconds</string>
     <string name="settings_enter_secs">Value in seconds</string>
     <string name="settings_enter_mins">Value in minutes</string>
@@ -230,8 +230,6 @@
 
     <!-- toolbar -->
     <string name="action_adb">ADB</string>
-    <string name="action_exit_select">Exit</string>
-    <string name="action_remove_device">Remove Device</string>
     <string name="action_browse">Browse</string>
     <string name="action_connect">Connect</string>
     <string name="action_input">Input</string>
@@ -272,5 +270,23 @@
     <string name="log_upload_failed">Couldn't send the logs</string>
     <string name="log_upload_not_configured">Logging isn't configured in this build</string>
     <string name="log_upload_ok">Logs sent</string>
+
+    <!-- about -->
+    <string name="about_support">Support / Feedback</string>
+    <string name="about_support_desc">Tell us what happened. Your app log is sent along with it.</string>
+    <string name="about_support_hint">What went wrong?</string>
+    <string name="about_support_sending">Sending logs…</string>
+    <string name="about_updates">Check for updates</string>
+    <string name="about_checking">Checking for updates</string>
+    <string name="about_up_to_date_title">No update available</string>
+    <string name="about_up_to_date">You are on the latest version (%1$s).</string>
+    <string name="about_update_title">Update available</string>
+    <string name="about_update_available">Version %1$s is available.</string>
+    <string name="about_update_failed">Couldn't check for updates: %1$s</string>
+    <string name="about_open">Open</string>
+    <string name="about_debug">Debug Mode</string>
+    <string name="about_view_logs">View Logs</string>
+    <string name="about_no_logs">Nothing logged yet.</string>
+    <string name="about_open_file">Open File</string>
     <string name="reporting_crash">Reporting a crash from last time</string>
 </resources>

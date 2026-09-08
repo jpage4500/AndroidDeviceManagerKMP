@@ -93,6 +93,24 @@ The upload needs `LOGGING_URL` and `LOGGING_API`, read at build time from the en
 and runs; the upload refuses and says so. An uploaded log is prefixed with `Branding.analyticsId`,
 because the bucket is shared with the other apps and every upload is an upsert.
 
+**Settings ▸ About is the front end for all of this**: Debug Mode (which is what raises the file's
+level from Info to Debug), View Logs, and Support / Feedback. Support takes a description and hands
+it to `uploadLogs(text = …)`, which writes it into the log as a `SUPPORT:` line *before* uploading —
+so it arrives at the top of the file it describes and nothing has to be correlated by timestamp
+afterwards.
+
+## Updates
+
+`UpdateManager.checkForUpdates()` reads the GitHub releases API for `latest` on the **public release
+repo** — this one is private, and an API call against it would need a token no install has. See
+[RELEASING.md](RELEASING.md). `latest` skips drafts and prereleases, so the rolling `0.0.0-<branch>`
+build a branch push publishes never offers itself as an update.
+
+It only ever *reports*, and `isNewer` compares the `1.0.<commit count>` scheme segment by segment as
+numbers — a string compare puts 1.0.100 before 1.0.99, and the third segment passes 99 quickly.
+Nothing downloads or installs: jDeploy's launcher updates the desktop app on its next start and there
+is no store channel for the phone builds, so the offer is a link to the release page.
+
 ## HTTP
 
 `NetworkManager` holds **one** client for the whole app — a client owns a connection pool and a

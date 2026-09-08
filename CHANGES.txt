@@ -40,7 +40,6 @@
 - phone: the keyboard no longer covers the connect fields
 - phone: an open connect section is drawn as part of the row above it
 - enter 0.0.0.0 in either connect field to load test devices
-- phone: long-press a device to pick several, and remove them together
 - phone: connecting to a computer leads with paste, and hides manual entry
 - phone: pair a new device by showing it a QR code
 - phone: reach settings from the device list
@@ -52,3 +51,9 @@
 - settings are a list of icon rows, each opening the control that fits it
 - pick a slider, a stepper or a typed value for any numeric setting
 - choose which route devices are read over, instead of it being inferred
+- phone: devices are grouped under the computer they're attached to
+- phone: disconnect or forget a computer from the info button on its row
+- settings is a menu now: pick a section, then the setting inside it
+- new About section: support, updates, debug mode and the app log
+- send a description with your logs, so support knows what to look for
+- desktop: every dialog is a real window you can drag out of the way
