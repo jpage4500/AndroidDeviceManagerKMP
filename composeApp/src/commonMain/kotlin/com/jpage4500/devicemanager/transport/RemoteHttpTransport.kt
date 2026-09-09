@@ -21,8 +21,10 @@ import kotlinx.serialization.json.*
  * on port 8765 — `/api/devices`, `/api/execute`, `/api/files/list`, `/api/screenshot` — so a phone
  * speaking this protocol works against today's app before any of it is ported.
  *
- * Polls rather than subscribes. The server also has a `/screen` websocket that pushes JPEG frames,
- * which is what a mirror view should use — see docs/ADB-TRANSPORTS.md.
+ * The device list is polled — `/api/info` is a count the server already holds, and `/api/devices` is
+ * re-read only when that count moves. A mirrored screen is the one thing here that is **not** polled:
+ * it goes over the `/ws/screen` websocket, frames down and taps up on one connection, which is
+ * [screenStream]. See docs/ADB-TRANSPORTS.md.
  */
 class RemoteHttpTransport(
     /** `http://host:port`, readable so [com.jpage4500.devicemanager.manager.ServerManager] can say
@@ -40,6 +42,20 @@ class RemoteHttpTransport(
     private val client = createHttpClient(useCookies = false)
 
     override val id: String get() = idOf(baseUrl)
+
+    /**
+     * the same host and port as a websocket address.
+     *
+     * The scheme is not cosmetic: ktor's HttpTimeout plugin leaves a `ws://` request out of the 20s
+     * request timeout it applies to everything else, so a stream held open for an hour is a stream
+     * and not a failure. A [baseUrl] typed with no scheme at all is one someone entered in Settings.
+     */
+    private val wsUrl: String
+        get() = when {
+            baseUrl.startsWith("https://") -> "wss://" + baseUrl.removePrefix("https://")
+            baseUrl.startsWith("http://") -> "ws://" + baseUrl.removePrefix("http://")
+            else -> "ws://$baseUrl"
+        }
 
     override val label: String get() = SavedServer.keyOf(baseUrl)
 
@@ -131,6 +147,21 @@ class RemoteHttpTransport(
         parseShellResult(response.bodyAsText())
     }
 
+    /**
+     * `logcat` over `/ws/logs`, gzipped, with the process map on the same socket — [remoteLogcat].
+     *
+     * This route has no other way to follow a log: `/api/execute` runs a command and answers when it
+     * finishes, and `logcat` never finishes. It is also the reason a log window on a phone costs no
+     * shell commands at all, since the names for its App column arrive with the lines.
+     */
+    override fun logcat(serial: String): Flow<LogBatch> =
+        remoteLogcat(client, wsUrl, serial) { auth() }
+
+    override val canStreamLogs: Boolean get() = true
+
+    /** the log socket sends pid -> name itself — see [DeviceTransport.hasProcessNames]. */
+    override val hasProcessNames: Boolean get() = true
+
     override suspend fun properties(serial: String): Result<Map<String, String>> = runCatching {
         val body = client.get("$baseUrl/api/properties") {
             auth()
@@ -146,6 +177,17 @@ class RemoteHttpTransport(
             parameter("serial", serial)
         }.body<ByteArray>()
     }
+
+    /**
+     * frames over `/ws/screen`, which is what a mirror on this route should use.
+     *
+     * [screenshot] above is the same picture asked for one frame at a time: a request, a capture and
+     * a full-size PNG, four times a second, with every tap a POST of its own behind them. The
+     * websocket is one connection carrying JPEG at an interval the server keeps, and input rides
+     * back up it — so a tap costs no round trip at all. See [RemoteScreenStream].
+     */
+    override fun screenStream(serial: String, intervalMs: Long): ScreenStream =
+        RemoteScreenStream(client, wsUrl, serial, intervalMs) { auth() }
 
     override suspend fun listFiles(serial: String, path: String): Result<List<DeviceFile>> =
         runCatching {

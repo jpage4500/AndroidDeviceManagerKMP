@@ -133,6 +133,21 @@ it flips its flag, so the first request of the new session can't be the one that
 socket — and again on the way out, to let go of what it can while nobody is looking. It's a no-op on
 iOS, which tears its own connections down on suspend.
 
+**Websockets share that client**, and there are two: a Device Manager server's mirrored screen and
+its log stream. `install(WebSockets)` is in both platform halves, the keepalive ping is 30s — on
+**OkHttp's own engine config**, since the OkHttp engine ignores `install(WebSockets){pingInterval}`
+and without it a half-open socket never errors — and `HttpLog` knows to leave a 101 response's body
+alone, because reading it would consume the live socket. ktor's `HttpTimeout` exempts a `ws://` URL
+from the request timeout, which is why those URLs carry the scheme rather than being `http://` with
+an upgrade header.
+
+`gunzip()` in `util/` is there for the log stream: batches arrive as gzipped JSON, because log lines
+compress to about a tenth and a busy device prints thousands of them a second. Desktop and android
+share `GZIPInputStream`; iOS calls **zlib**, which is in its SDK, with the window-bits value that
+says "read whichever header this is" — Foundation's own `decompressed(using:)` speaks raw DEFLATE and
+would leave the gzip container to be unpicked by hand. It never throws: a batch that won't decompress
+is a batch to drop.
+
 **The adb routes do not come through here.** They speak adb's own framing over a raw socket.
 
 ## Strings

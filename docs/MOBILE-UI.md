@@ -62,9 +62,10 @@ the next launch. A desk that doesn't answer keeps its flag and is tried again: b
 same as being forgotten.
 
 **Logcat goes through the transport too** (`DeviceTransport.logcat`), because a stream that found its
-own way to an adb server would happily read the other desk's `emulator-5554`. Only an adb server
-implements it; `canStreamLogs` is what a log window checks before it opens on a device it can't
-follow.
+own way to an adb server would happily read the other desk's `emulator-5554`. Both real routes
+implement it — an adb server runs `logcat` over `exec:`, a Device Manager server pushes it over
+`/ws/logs` — and `canStreamLogs` is what a log window checks before it opens on a device it can't
+follow, which now means only the test devices.
 
 What this leaves ready is the route that isn't written yet: a **direct `adbd` transport** is one more
 `DeviceTransport` with an id of its own, added with `DeviceManager.addConnection`, and every screen
@@ -227,15 +228,25 @@ the list below.
   today, since the Swing app's row menu has a dozen more to come.
 - **A destructive action still confirms** — `AppPref.CONFIRM_DESTRUCTIVE` is already the setting, and
   Restart on the wrong row is exactly the mistake a phone makes easier.
-- **The sheet is a `BaseDialog`** like every other dialog in the app, which is where its title band,
-  its rounded card and its place in the dialog stack come from. It hand-rolled all three over a bare
-  `DialogContainer` until 09/08, and read as a different product because of it — the confirmation it
-  raises now replaces it and hands the sheet back, rather than opening over the top of it.
+- **The sheet is a `BaseDialog`** like every other dialog in the app, which is where its title band
+  and its place in the dialog stack come from. It hand-rolled both over a bare `DialogContainer`
+  until 09/08, and read as a different product because of it — the confirmation it raises now
+  replaces it and hands the sheet back, rather than opening over the top of it.
+- **It fills the screen rather than floating in a card.** `BaseDialog(fullScreen = true)`: on the
+  phone's overlay path the card becomes the whole screen inside the safe insets — square corners, no
+  side gaps, no strip of the list showing above and below. This is a device's *page*, not a prompt
+  over the list, and the mirror it opens is drawn exactly this way, so the title bar doesn't jump
+  when you go from one to the other. The flag is the phone's only; a desktop dialog is an OS window
+  the user sizes, and ignores it.
 
 **Screenshot means something different on a phone.** The desktop writes a PNG to a folder. A phone
-has no folder anyone will find, so a screenshot opens full-screen with a **Share** button and goes
-through the system share sheet — that needs no permission on either platform, where saving to Photos
-or the gallery does. One new `expect fun shareImage(bytes: ByteArray, name: String)`.
+has no folder anyone will find, so the shot takes over the sheet's body full-screen — letterboxed
+into what is left below the title bar the way the mirror is, with the dialog's own OK reading **Done**
+and clearing it rather than closing the sheet. `BaseDialog`'s scroll is off in that state, since a
+child that fits itself to the height needs a bounded one to fit into; at the full width a phone's
+own aspect ratio is taller than the phone. What is still missing is **Share** — one new
+`expect fun shareImage(bytes: ByteArray, name: String)` through the system share sheet, which needs
+no permission on either platform where saving to Photos or the gallery does.
 
 **Mirror, Files and Logs are full screens, not sheets**, pushed on top of the list with a back
 button. They already have names: `WindowContent` is a sealed interface in `WindowManager.kt` naming
@@ -249,12 +260,21 @@ phone that turns every attempt to scroll the mirrored device into a click on wha
 thumb. Past the touch slop it becomes `input swipe`, replayed over the time the finger actually took
 so a flick reads as a flick, clamped to 50–2000 ms.
 
-**And the gesture is drawn where it landed, straight away.** A frame arrives every 250ms at best and
-the device takes longer than that to react, so a tap with no local feedback is a second of nothing —
-and the natural response to that is to tap again, which is what a run of identical taps in the logs
-is. `MirrorFeedback` draws the Swing window's own mint ring and arrow (`Animations.java`, timings
-included) over the frame the instant the finger lifts, on a frame loop that runs only while something
-is animating.
+**A press held in place is a long press.** adb has no such command — `DeviceInput.longPress` is an
+`input swipe` from a point to itself over 650ms, which is what the Swing window sends. It fires at
+500ms **while the finger is still down**, not on release: the whole point of the feedback is saying
+"you can let go now", and one that waits for the lift says nothing. Past the touch slop first, it is
+a swipe instead.
+
+**And every one of them is drawn where it landed, straight away.** A frame arrives every 250ms at
+best and the device takes longer than that to react, so a tap with no local feedback is a second of
+nothing — and the natural response to that is to tap again, which is what a run of identical taps in
+the logs is. `MirrorFeedback` draws the Swing window's own four (`Animations.java`, timings included):
+a mint ring for a tap, a bigger warmer one with its middle filled for a hold, an arrow for a swipe,
+and a bubble in the centre naming the key for Back / Home / Recents / Power. All of it at roughly
+twice the Swing app's sizes — those are desktop pixels over a small window, and this is read at arm's
+length over a screenshot of anything — with every figure in `Dimens`. The frame loop runs only while
+something is animating.
 
 **The mirror wears the dialog title bar**, not the device list's. It is a thing opened over the app
 the way a dialog is, so it gets `DialogTitle` — the accent band, the device's name over its serial,
@@ -411,10 +431,13 @@ which is an in-memory device count and nothing more; `/api/devices` is re-read o
 changes, or when `DETAILS_REFRESH_SECS` elapses. A device plugged in at the desk still appears within
 seconds, without the phone asking the desk to survey its whole bench every three.
 
-**Mirroring over this route should use `/ws/screen`, not polled `/api/screenshot`.** The websocket
-pushes JPEG at a server-controlled interval with `intervalMs` and `quality` messages back;
-`RemoteHttpTransport` currently polls, which on a phone is a round trip and a fresh JPEG decision
-every 250ms. That is the mobile mirror's path, not a nice-to-have.
+**Mirroring over this route goes down `/ws/screen`, not polled `/api/screenshot`** —
+`RemoteScreenStream`, reached through `DeviceTransport.screenStream`. One connection carrying JPEG at
+an interval the server keeps, with every tap a text frame back up it instead of a POST of its own:
+on a phone the polled version was a round trip and a fresh full-size PNG every 250ms, and each
+gesture queued behind one. `/api/screenshot` is still what the device sheet's single screenshot uses,
+and still the fallback when a stream never delivers a frame. The protocol details, and why a scaled
+frame changes where a tap lands, are in docs/ADB-TRANSPORTS.md.
 
 ### Route 3b: scan a QR code from the computer — **built**
 
@@ -631,8 +654,9 @@ or `LaunchedEffect` owns the lifetime exactly as it did before. Three things are
 
 Two things that must stop, and now do:
 
-- `MirrorSource` polls a screencap every 250ms. A backgrounded mirror is pure waste and, on a
-  metered link, rude.
+- `MirrorSource` is a frame every 250ms, whether it polls for one or has one pushed. A backgrounded
+  mirror is pure waste and, on a metered link, rude — and leaving the `/ws/screen` socket open would
+  also keep the device's screen awake at the other end.
 - The details refresh timer (`AppPref.DETAILS_REFRESH_SECS`) — two shell commands per device per
   minute for a battery percentage nobody is looking at.
 
@@ -641,9 +665,10 @@ blanking, and keeping it means coming back to the table that was there rather th
 nothing. A device that then fails to come back shows up in the **not connected** section with its
 last-seen time rather than vanishing — that is the section's whole purpose.
 
-Still open: the log viewer's `logcat` stream and its `ps` poll are not wrapped. Pausing a capture
-loses the lines that arrived while the app was away, which is worse than the socket it saves, and
-the log viewer isn't reachable on a phone yet — so that is a decision to make when it is.
+Still open: the log viewer's stream is not wrapped (nor the `ps` poll behind its App column, on the
+route that still has one). Pausing a capture loses the lines that arrived while the app was away,
+which is worse than the socket it saves, and the log viewer isn't reachable on a phone yet — so that
+is a decision to make when it is.
 
 ## Settings
 

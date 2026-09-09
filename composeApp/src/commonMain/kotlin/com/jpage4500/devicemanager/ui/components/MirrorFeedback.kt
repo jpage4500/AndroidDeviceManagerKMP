@@ -60,17 +60,27 @@ fun MirrorFeedbackOverlay(feedback: MirrorFeedback, modifier: Modifier = Modifie
     if (feedback.active.isNotEmpty()) {
         LaunchedEffect(feedback) {
             while (feedback.active.isNotEmpty()) {
-                withFrameMillis { feedback.frameMs = it }
-                feedback.active.removeAll { it.isFinished(feedback.frameMs) }
+                // the frame callback is where a new one starts its clock, **not** the draw. a draw
+                // can happen before the loop's first frame — and [frameMs] is 0 until then, while a
+                // real frame time is milliseconds-since-boot — so seeding from the draw made every
+                // animation start out already expired and vanish in one invisible frame
+                withFrameMillis { frame ->
+                    feedback.frameMs = frame
+                    feedback.active.forEach { it.startAt(frame) }
+                }
+                feedback.active.removeAll { it.isFinishedAt(feedback.frameMs) }
             }
         }
     }
     val measurer = rememberTextMeasurer()
+    // read here, in composition, and handed to the canvas below: every frame is then a new draw
+    // lambda and a repaint that follows from it, rather than one riding on the draw phase noticing
+    // a state read of its own
+    val now = feedback.frameMs
     Canvas(modifier) {
-        // read in the draw phase: a new frame repaints this without recomposing anything above it
-        val now = feedback.frameMs
         feedback.active.forEach { item ->
-            val elapsed = item.elapsedAt(now)
+            // null until the loop's next frame has started it, which is a frame away at most
+            val elapsed = item.elapsedAt(now) ?: return@forEach
             when (item) {
                 is Feedback.Tap -> drawTap(item.at, elapsed)
                 is Feedback.Hold -> drawHold(item.at, elapsed)
@@ -82,14 +92,14 @@ fun MirrorFeedbackOverlay(feedback: MirrorFeedback, modifier: Modifier = Modifie
 }
 
 /**
- * one thing to draw, timed from the first frame it is drawn on.
+ * one thing to draw, timed from the first *frame* after it was added.
  *
- * The frame clock rather than a wall clock: it is the only one the draw phase is handed, and timing
- * from the first frame means one added while the loop was stopped still starts at zero rather than
- * partway through itself.
+ * The frame clock rather than a wall clock, so that everything on screen is timed by the same thing
+ * that repaints it. [startAt] is called from the frame loop and nowhere else — see the loop for what
+ * happens when a draw seeds it instead.
  */
 internal sealed class Feedback(private val durationMs: Int) {
-    private var startMs = UNDRAWN
+    private var startMs = UNSTARTED
 
     class Tap(val at: Offset) : Feedback(TAP_GROW_MS + TAP_HOLD_MS + TAP_FADE_MS)
     class Hold(val at: Offset) : Feedback(HOLD_GROW_MS + HOLD_HOLD_MS + HOLD_FADE_MS)
@@ -98,16 +108,21 @@ internal sealed class Feedback(private val durationMs: Int) {
 
     class Key(val label: String) : Feedback(KEY_HOLD_MS + KEY_FADE_MS)
 
-    fun elapsedAt(frameMs: Long): Long {
-        if (startMs == UNDRAWN) startMs = frameMs
-        return frameMs - startMs
+    /** start the clock, on the first frame this is seen by the loop. does nothing after that. */
+    fun startAt(frameMs: Long) {
+        if (startMs == UNSTARTED) startMs = frameMs
     }
 
-    /** never finished before it has been drawn once, however long it has been in the list. */
-    fun isFinished(frameMs: Long): Boolean = startMs != UNDRAWN && frameMs - startMs >= durationMs
+    /** null until it has started, which is what says there is nothing to draw yet. */
+    fun elapsedAt(frameMs: Long): Long? =
+        if (startMs == UNSTARTED) null else frameMs - startMs
+
+    /** never finished before it has started, however long it has been in the list. */
+    fun isFinishedAt(frameMs: Long): Boolean =
+        startMs != UNSTARTED && frameMs - startMs >= durationMs
 
     private companion object {
-        const val UNDRAWN = -1L
+        const val UNSTARTED = -1L
     }
 }
 
@@ -248,7 +263,9 @@ private fun fadeAlpha(elapsed: Long, holdMs: Int, fadeMs: Int): Float =
 
 // the Swing window's own timings, in ms — Animations.java
 private const val TAP_GROW_MS = 200
-private const val TAP_HOLD_MS = 50
+// the Swing tap holds for 50ms; this one lingers, because a mirrored screen is watched rather than
+// operated and the ring is the only thing saying the tap was sent at all
+private const val TAP_HOLD_MS = 350
 private const val TAP_FADE_MS = 350
 private const val HOLD_GROW_MS = 400
 private const val HOLD_HOLD_MS = 400

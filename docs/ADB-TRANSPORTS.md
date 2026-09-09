@@ -165,15 +165,69 @@ all three targets.
 | Tier | What it is | Cost |
 |---|---|---|
 | I | Shell, files, install, logcat | low — pure adb services |
-| II | Screenshot-poll mirror with `input tap/swipe/text/keyevent` | low-medium — **implemented**, `manager/MirrorSource.kt` |
+| II | Still-image mirror with `input tap/swipe/text/keyevent` | low-medium — **implemented**, `manager/MirrorSource.kt` |
 | III | scrcpy-grade live video | high — roughly 70% of the total work |
 
 Tier II is why a useful app is close: at ~4 fps it is a real remote control, and no video decoder is
 needed on either platform. The lag it costs is paid for on the client: `ui/components/MirrorFeedback.kt`
-draws the tap or the swipe locally the moment it happens, so the wait for the next frame doesn't read
-as the tap having missed. The Swing app's built-in mirror window is exactly this — `LocalScreenSource`
-polls on a fixed delay and `ScreenStreamWebSocket` streams JPEG at a 250 ms default with JSON control
-actions for tap, swipe, text, keyevent, quality and interval.
+draws the tap, hold, swipe or key locally the moment it happens, so the wait for the next frame
+doesn't read as the input having missed. The Swing app's built-in mirror window is exactly this —
+`LocalScreenSource` polls on a fixed delay and `ScreenStreamWebSocket` streams JPEG at a 250 ms
+default with JSON control actions for tap, swipe, text, keyevent, quality and interval.
+
+**How the frames arrive depends on the route, and `MirrorSource` takes whichever the device came in
+on.** `DeviceTransport.screenStream` is the seam: a transport that can push frames returns a
+`ScreenStream`, and one that can't returns null and gets polled.
+
+| Route | Frames | Input |
+|---|---|---|
+| adb server | `screencap` asked for again each time the last one arrived — a command answering a PNG, with nothing to subscribe to | `input tap` in a shell, one command per gesture |
+| Device Manager server | pushed over `/ws/screen`, JPEG, at an interval the server keeps — `transport/RemoteScreenStream.kt` | a text frame up the same socket; no request of its own |
+
+Three things about that websocket are worth knowing before touching it, and all three are in
+`AndroidDeviceManager/docs/SERVER_API.md`:
+
+- **The frame header carries the *device's* size, which is not always the image's.** Below the top
+  quality the server scales the JPEG down and says so in the header, so a gesture is mapped against
+  the header's dimensions — `ScreenFrame`, and `MirrorScreen`'s `toDevice`. Against the bitmap it
+  would land in the wrong place on any scaled frame.
+- **`intervalMs` in the URL is ignored** — the handshake reads only `serial` and `compress` — so the
+  interval is asked for with a `setInterval` message once the socket is up.
+- **A refusal arrives *after* the upgrade succeeds.** A bad token, an unknown serial and an unknown
+  path all complete the handshake and then send an error and close, so a server too old to have
+  `/ws/screen` looks exactly like a connection that dropped. `MirrorSource` tells them apart by
+  trying twice: a stream that delivers nothing twice running is demoted to polling for the rest of
+  that mirror, since the same server still answers `/api/screenshot` and a slow mirror beats a
+  reconnect loop. A stream that has delivered frames is reconnected for as long as it is open.
+
+Text is the one input that differs by more than syntax between the two: the shell needs its spaces
+as `%s` and the server does that escaping itself. That is why `DeviceInput.Event` is a value and
+`DeviceInput.shell` is only one of its two renderings.
+
+### Tier I's one stream: logcat
+
+Everything else in tier I is a command that finishes, so it is one call on either route. `logcat`
+isn't, and it takes the same two shapes as a mirror — `DeviceTransport.logcat`, a `Flow<LogBatch>`
+the log window can't tell apart:
+
+| Route | Lines | Process names for the App column |
+|---|---|---|
+| adb server | `logcat -v threadtime` over `exec:`, socket drained and flushed every 100ms — `adb/AdbLogcat.kt` | the log window runs `ps` every 30s |
+| Device Manager server | pushed over `/ws/logs` every 500ms as **gzipped JSON** — `transport/RemoteLogcat.kt` | the server sends pid -> name down the same socket every 5s, so no `ps` runs at all |
+
+- **Every batch is gzipped, always.** The plain JSON `logs` message the server's own client can also
+  parse is dead code on the server side, so only the binary path is implemented. `util/gunzip` is
+  what reads it: `GZIPInputStream` on desktop and android, zlib on iOS.
+- **No server-side `filter` is sent**, though the endpoint takes one. The log window filters the
+  buffer it already holds, so a filter typed there re-reads thousands of held lines at once and
+  clearing it brings them straight back; filtering at the far end would throw those lines away before
+  they arrived. That is what the gzip pays for.
+- **A line the server couldn't parse comes back as `null null null null null: <line>`** — its
+  `LogEntry.toString` doesn't know its own fields are missing. Those are logcat's own
+  `--------- beginning of main` separators, and `remoteLogcat` hands on just the line, which is where
+  the adb route puts them too.
+- **Neither route reconnects.** A stream that ends is a log that stopped, and the window says so —
+  resuming by itself would leave a silent gap in the middle of a log somebody is reading.
 
 Tier III means pushing `scrcpy-server.jar`, running it via `app_process`, opening two adb streams and
 decoding H.264 through MediaCodec on Android and VideoToolbox on iOS. Deliberately not attempted.

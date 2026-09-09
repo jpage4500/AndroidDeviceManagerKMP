@@ -490,7 +490,10 @@ Three things carry most of its usefulness:
   which `TableText` reports through `onTextLayout`.
 - **The App column resolves the pid** through `ps -A -o PID,NAME`, re-read on a slow timer. logcat
   only carries the pid; resolving at *display* time rather than at parse means a name that arrives
-  late appears on lines already on screen.
+  late appears on lines already on screen. A device reached through a Device Manager server sends the
+  map down the log socket itself every few seconds (`LogBatch.processes`), so `ps` doesn't run there
+  at all — asking would be a shell command on someone else's machine for an answer already on its
+  way.
 - **⌘+ / ⌘- / ⌘0** scale the row text, and the row height follows it — a fixed row clips bigger text.
   Handled with `onPreviewKeyEvent` on the window, since the table owns the keyboard once focused.
   **⌘Enter** toggles Auto Scroll and **⌘G** walks the search hits, both from the same handler.
@@ -503,6 +506,20 @@ Three things carry most of its usefulness:
   them already has it.
 
 ### Bugs worth remembering
+
+**An animation clock has to start on a frame, not in a draw.** The mirror's tap and swipe marks
+(`MirrorFeedback`) time themselves from `withFrameMillis`, and the first version let whichever came
+first — the frame loop or a draw — start the clock. A draw usually came first, and the value it
+seeded from was the state's initial `0` where a real frame time is milliseconds since boot: every
+animation was born a few hundred thousand seconds old, drew one invisible frame and was swept up as
+finished. Nothing appeared at all, which reads as "the overlay isn't wired up" rather than as a
+clock bug. Seeding happens in the frame callback now, and an unstarted mark draws nothing.
+
+**`Modifier.pointerInput(frame)` is a gesture detector that restarts four times a second.** The
+mirror decodes a new `ImageBitmap` every 250ms, so keying the handler on it tore the handler down
+mid-press: a long press never survived to its threshold, and a tap or a drag that spanned a frame
+was cancelled before its up ever arrived. Key it on the *dimensions* the maths needs — `Size` and
+`IntSize` compare equal frame to frame — and not on the frame itself.
 
 **Following the tail must not be a scroll.** `scrollToItem` runs one: it takes the list's scroll
 mutex and sets `isScrollInProgress`, ten times a second on a busy device. That is a scroll the user
@@ -574,7 +591,9 @@ line and stays there instead of resuming the chase; ⌘Enter re-arms following, 
 back to the bottom. The log viewer's `onPreviewKeyEvent` deliberately does not claim these two, and
 its ⌘G jump is a `requestScrollToItem` for the same reason the table's reveal is.
 
-It reads `logcat -v threadtime` over `exec:` through `adbLogcat`, which **batches lines rather than
+It reads `logcat -v threadtime` over `exec:` through `adbLogcat` — or, for a device on a Device
+Manager server, takes the batches that server pushes over `/ws/logs` through `remoteLogcat`; either
+way what arrives is a `LogBatch`, and the window can't tell which. Both **batch lines rather than
 emitting one at a time**: a busy device prints thousands a second, and an emission
 per line would recompose the table thousands of times a second. The buffer is a ring of
 `LOGS_MAX_LINES` (stretching by `LOGS_HOLD_LINES` while a window reads history — see above), not a

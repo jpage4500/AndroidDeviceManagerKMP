@@ -35,9 +35,11 @@ import org.jetbrains.compose.resources.stringResource
  * what it is, and going straight to a four-frames-a-second screencap poll is an expensive guess.
  * See docs/MOBILE-UI.md.
  *
- * **A [BaseDialog] like every other dialog in the app**, which is where its title bar, its rounded
- * card and its place in the dialog stack come from — it used to hand-roll all three on top of a bare
- * `DialogContainer`, and read as a different product because of it. What is its own is the grid of
+ * **A [BaseDialog] like every other dialog in the app**, which is where its title bar and its place
+ * in the dialog stack come from — it used to hand-roll both on top of a bare `DialogContainer`, and
+ * read as a different product because of it. It asks for the full screen rather than a card: on a
+ * phone this is the device's page, not a prompt over the list, and the mirror it opens is drawn the
+ * same way — so the title bar stays put between the two. What is its own is the grid of
  * actions at the top, which is the desktop's right-click menu filtered to what a finger can reach
  * for; the body under it is [DeviceInfoContent], the same rows the desktop's Device Details window
  * draws, and the rest of that menu is the rows at the foot.
@@ -83,6 +85,11 @@ fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> U
         onConfirm = { shot = null },
         dismissOnConfirm = false,
         onDismiss = onDismiss,
+        // the shot fills whatever is left below the title bar rather than hanging in a scroll, which
+        // is the only way a portrait screenshot fits on a portrait screen; the properties list under
+        // it is longer than the screen and keeps its own scroll
+        scrollable = shot == null && !busy,
+        fullScreen = true,
     ) {
         if (busy || shot != null) {
             Screenshot(shot)
@@ -257,27 +264,24 @@ private fun Modifier.dashedOutline(color: Color, corner: Dp) = drawBehind {
  * it shows the shot and throws it away. Handing it to the system share sheet is the next step, and
  * needs a platform seam this app doesn't have yet.
  *
- * Sized by the image's own aspect ratio rather than by a weight: it hangs in the dialog's scroll,
- * and a child that fills the height of a scroll is a child asking to be measured against infinity.
+ * Letterboxed into the space the dialog has left, the way the mirror is, rather than sized to its
+ * own aspect ratio at the full width — a phone's screenshot is a phone's aspect, so at full width it
+ * is taller than the screen it is being looked at on. The dialog turns its scroll off for this, so
+ * there is a bounded height here to fit into.
  */
 @Composable
 private fun Screenshot(bytes: ByteArray?) {
     val image = remember(bytes) { bytes?.let { decodeImage(it) } }
-    if (image == null) {
-        Box(
-            Modifier.fillMaxWidth().height(Dimens.tileHeight * 2),
-            contentAlignment = Alignment.Center,
-        ) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (image == null) {
             CircularProgressIndicator()
+        } else {
+            Image(
+                bitmap = image,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
-        return
     }
-    Image(
-        bitmap = image,
-        contentDescription = null,
-        contentScale = ContentScale.Fit,
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(image.width.toFloat() / image.height.toFloat()),
-    )
 }

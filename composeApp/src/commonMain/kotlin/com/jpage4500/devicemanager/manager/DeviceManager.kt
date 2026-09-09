@@ -289,14 +289,32 @@ object DeviceManager {
      * routed here rather than opened by the log window itself: with two desks attached, a stream
      * that found its own way to an adb server would happily read the other one's `emulator-5554`.
      */
-    fun logcat(deviceId: String): Flow<List<String>> =
+    fun logcat(deviceId: String): Flow<LogBatch> =
         connectionFor(deviceId)?.logcat(Device.serialOf(deviceId)) ?: emptyFlow()
 
     /** whether [logcat] will produce anything for this device. */
     fun canStreamLogs(deviceId: String): Boolean = connectionFor(deviceId)?.canStreamLogs == true
 
-    /** one input event on the mirrored screen. nothing to show for it, but a refusal is worth saying. */
-    suspend fun sendInput(deviceId: String, command: String) {
+    /** whether [logcat] brings process names with it — see [DeviceTransport.hasProcessNames]. */
+    fun hasProcessNames(deviceId: String): Boolean =
+        connectionFor(deviceId)?.hasProcessNames == true
+
+    /**
+     * a mirrored screen pushed off the connection this device came in on, or null when the only way
+     * to see one is to ask for a frame at a time — see [MirrorSource], which does both.
+     */
+    fun screenStream(deviceId: String, intervalMs: Long): ScreenStream? =
+        connectionFor(deviceId)?.screenStream(Device.serialOf(deviceId), intervalMs)
+
+    /**
+     * one input event, as a shell command.
+     *
+     * The route of last resort for a gesture: a connection with a [ScreenStream] carries its own
+     * input, and this is what an adb server has instead. Nothing to show for it, but a refusal is
+     * worth saying.
+     */
+    suspend fun sendInput(deviceId: String, event: DeviceInput.Event) {
+        val command = DeviceInput.shell(event)
         exec(deviceId, command).onFailure { log.w("sendInput: $command: ${it.message}") }
     }
 

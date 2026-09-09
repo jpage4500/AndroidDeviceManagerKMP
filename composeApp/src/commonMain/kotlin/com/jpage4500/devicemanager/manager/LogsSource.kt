@@ -3,9 +3,12 @@ package com.jpage4500.devicemanager.manager
 import androidx.compose.ui.unit.*
 import com.jpage4500.devicemanager.adb.*
 import com.jpage4500.devicemanager.data.*
+import com.jpage4500.devicemanager.resources.*
+import com.jpage4500.devicemanager.transport.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import org.jetbrains.compose.resources.getString
 
 /**
  * one device's `logcat`, buffered and filtered.
@@ -163,19 +166,26 @@ class LogsSource(private val deviceId: String) {
     /** start reading, on [scope] so the window's lifetime owns the stream. */
     fun start(scope: CoroutineScope) {
         if (job != null) return
-        // only an adb server streams logcat; a Device Manager instance has no endpoint for it, and
-        // an empty window with no explanation is the worst way to say so
+        // an adb server runs `logcat` and a Device Manager server pushes it over /ws/logs; a
+        // connection with neither — the test devices — has no log to show, and an empty window with
+        // no explanation is the worst way to say so
         if (!DeviceManager.canStreamLogs(deviceId)) {
             log.w("start: $deviceId can't stream logs")
-            ToastManager.showToast("logs need an adb server connection", success = false)
+            scope.launch {
+                ToastManager.showToast(getString(Res.string.logs_no_stream), success = false)
+            }
             return
         }
         _running.value = true
         startAppNames(scope)
         job = scope.launch {
-            DeviceManager.logcat(deviceId).collect { lines ->
+            DeviceManager.logcat(deviceId).collect { batch ->
+                // merged rather than replaced: a map that arrives mid-batch is what the far end knew
+                // a moment ago, and a name already resolved is better than no name
+                if (batch.processes.isNotEmpty()) _apps.value = _apps.value + batch.processes
+                if (batch.lines.isEmpty()) return@collect
                 var changed = false
-                lines.forEach { line ->
+                batch.lines.forEach { line ->
                     val entry = LogEntry.parse(line, nextId++)
                     buffer.addLast(entry)
                     if (filter?.invoke(entry) != false) {
@@ -194,13 +204,21 @@ class LogsSource(private val deviceId: String) {
     }
 
     /**
-     * keep the pid table fresh.
+     * keep the pid table fresh, for a connection that doesn't send it.
      *
      * processes start and die while a log runs, so one read at the beginning goes stale — but `ps`
      * on a busy device isn't free either, so it is re-read on a slow timer rather than per batch.
+     *
+     * A Device Manager server puts the map on the log socket itself, so this doesn't run there:
+     * `ps` through `/api/execute` would be a shell command on someone else's machine, twice a
+     * minute, for an answer already arriving with the lines.
      */
     private fun startAppNames(scope: CoroutineScope) {
         if (appsJob != null) return
+        if (DeviceManager.hasProcessNames(deviceId)) {
+            log.d("startAppNames: $deviceId sends its own")
+            return
+        }
         appsJob = scope.launch {
             while (isActive) {
                 val output = DeviceManager.exec(deviceId, CMD_PS).getOrNull()

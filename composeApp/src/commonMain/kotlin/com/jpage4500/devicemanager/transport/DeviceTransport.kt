@@ -68,23 +68,53 @@ interface DeviceTransport {
     suspend fun exec(serial: String, command: String): Result<String>
 
     /**
-     * `logcat` as it arrives, a batch of lines at a time.
+     * `logcat` as it arrives, a batch at a time.
      *
      * Here rather than in the log window because a batch has to come off *this* connection: with
      * two desks attached, a stream that found its own way to an adb server would read the wrong
      * `emulator-5554`. A transport with no way to stream refuses by saying nothing, which is what a
      * log window draws as an empty buffer.
+     *
+     * An adb server runs `logcat` on the device and this drains the socket; a Device Manager server
+     * has already got the stream open and pushes it over `/ws/logs`, gzipped — see [remoteLogcat].
+     * Neither reconnects on its own: a stream that ends is a log that has stopped, and the window
+     * says so rather than resuming with a silent gap in the middle.
      */
-    fun logcat(serial: String): Flow<List<String>> = emptyFlow()
+    fun logcat(serial: String): Flow<LogBatch> = emptyFlow()
 
     /** whether [logcat] will produce anything — what a log window checks before it says "no logs". */
     val canStreamLogs: Boolean get() = false
+
+    /**
+     * whether [logcat] resolves pids to process names itself.
+     *
+     * logcat carries a pid and nothing else, so the App column's names have to come from somewhere;
+     * with an adb server that is `ps` on a slow timer, run by the log window. A Device Manager
+     * server has the map already and sends it down the log socket, so asking for it would be a
+     * shell command on someone else's machine for an answer that arrived with the lines — the same
+     * argument as [hasDeviceDetails].
+     */
+    val hasProcessNames: Boolean get() = false
 
     /** everything `getprop` knows. */
     suspend fun properties(serial: String): Result<Map<String, String>>
 
     /** a PNG of the device's screen. */
     suspend fun screenshot(serial: String): Result<ByteArray>
+
+    /**
+     * the same screen, pushed rather than asked for, with input going back the same way.
+     *
+     * null where the only way to see a screen is to ask for one frame at a time, which is what
+     * [com.jpage4500.devicemanager.manager.MirrorSource] falls back to. A Device Manager server has
+     * a websocket for exactly this, and over a phone's link it is the whole difference between a
+     * mirror and a slideshow: one connection instead of a request per frame, JPEG instead of a
+     * full-size PNG, and a tap that costs no round trip of its own.
+     *
+     * [intervalMs] is what the far end is *asked* for — it keeps the clock, so frames arrive when
+     * it has one rather than when this end next gets round to asking.
+     */
+    fun screenStream(serial: String, intervalMs: Long): ScreenStream? = null
 
     /** one folder on the device. */
     suspend fun listFiles(serial: String, path: String): Result<List<DeviceFile>>
@@ -160,12 +190,86 @@ interface DeviceTransport {
     fun close() {}
 }
 
+/**
+ * one batch off a log stream: the lines, and anything the far end has just said about the processes
+ * that wrote them.
+ *
+ * A batch rather than a line, because a busy device prints thousands of lines a second and an
+ * emission each would be thousands of recompositions — an adb server's socket is drained on a 100ms
+ * flush, a Device Manager server sends every 500ms.
+ *
+ * [processes] is pid -> process name. Empty is the normal case and means "nothing new, keep what you
+ * have"; a batch with names and no lines is the map arriving on its own, which is how `/ws/logs`
+ * sends it.
+ */
+class LogBatch(
+    val lines: List<String> = emptyList(),
+    val processes: Map<String, String> = emptyMap(),
+)
+
+/**
+ * one frame of a mirrored screen.
+ *
+ * [deviceWidth] and [deviceHeight] are the **device's** own pixels, which is not necessarily the
+ * image's size: a Device Manager server scales the frame down at anything below its top quality and
+ * says so in the frame header rather than in the JPEG. So a gesture is mapped against these, not
+ * against the decoded bitmap. 0 means "whatever the image itself is", which is the answer a polled
+ * `screencap` gives — that PNG is the screen, at size.
+ */
+class ScreenFrame(
+    val image: ByteArray,
+    val deviceWidth: Int = 0,
+    val deviceHeight: Int = 0,
+)
+
+/**
+ * a mirrored screen held open on one connection: frames out, input back in.
+ *
+ * Two directions on one socket, which is the point of it. The polled alternative asks for a whole
+ * screenshot on a timer and posts every tap as a request of its own, so the tap queues behind a
+ * frame nobody is waiting for any more — see [DeviceTransport.screenStream].
+ */
+interface ScreenStream {
+    /** frames, for as long as this is collected; it ends when the far end does. */
+    val frames: Flow<ScreenFrame>
+
+    /**
+     * one input event, up the connection the frames come down.
+     *
+     * Fire-and-forget, the way the far end treats it: nothing is acknowledged, and an event sent
+     * while the socket is down is dropped rather than held — by the time it reconnected, whatever
+     * was under the finger has moved.
+     */
+    suspend fun send(event: DeviceInput.Event)
+}
+
 /** the input events a mirrored screen sends back, in the one place both transports share. */
 object DeviceInput {
-    fun tap(x: Int, y: Int) = "input tap $x $y"
+    /**
+     * a gesture or a key, as a value.
+     *
+     * A value rather than a command string because the two routes want different things: an adb
+     * server takes an `input tap` line in a shell, a Device Manager server takes
+     * `{"action":"input","type":"tap"}` on the socket its frames arrive on. Text differs by more
+     * than syntax — the shell needs its spaces as `%s` and the server does that escaping itself, so
+     * a string escaped for one arrives as literal `%s` on the other. So a gesture stays a value
+     * until whatever is carrying it renders it.
+     */
+    sealed interface Event
 
-    fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Int) =
-        "input swipe $x1 $y1 $x2 $y2 $durationMs"
+    data class Tap(val x: Int, val y: Int) : Event
+
+    data class Swipe(
+        val x1: Int,
+        val y1: Int,
+        val x2: Int,
+        val y2: Int,
+        val durationMs: Int,
+    ) : Event
+
+    data class Text(val value: String) : Event
+
+    data class Key(val keyCode: Int) : Event
 
     /**
      * a press held in place.
@@ -174,14 +278,18 @@ object DeviceInput {
      * the Swing window's own figure — comfortably past Android's ~500ms threshold, so the gesture
      * still registers when the shell is slow to start it.
      */
-    fun longPress(x: Int, y: Int, durationMs: Int = LONG_PRESS_MS) = swipe(x, y, x, y, durationMs)
+    fun longPress(x: Int, y: Int, durationMs: Int = LONG_PRESS_MS) = Swipe(x, y, x, y, durationMs)
 
     const val LONG_PRESS_MS = 650
 
-    /** a space has to be sent as `%s`; `input text` splits its argument on whitespace. */
-    fun text(value: String) = "input text \"${value.replace(" ", "%s")}\""
-
-    fun keyEvent(keyCode: Int) = "input keyevent $keyCode"
+    /** [event] as the `adb shell` line that performs it — all the adb route can carry. */
+    fun shell(event: Event): String = when (event) {
+        is Tap -> "input tap ${event.x} ${event.y}"
+        is Swipe -> "input swipe ${event.x1} ${event.y1} ${event.x2} ${event.y2} ${event.durationMs}"
+        // a space has to be sent as `%s`; `input text` splits its argument on whitespace
+        is Text -> "input text \"${event.value.replace(" ", "%s")}\""
+        is Key -> "input keyevent ${event.keyCode}"
+    }
 
     // the key codes the mirror window's buttons send
     const val KEY_HOME = 3

@@ -215,6 +215,7 @@
     <string name="logs_hide">Hide</string>
     <string name="logs_hold">holding %1$d older lines</string>
     <string name="logs_hold_full">hold full — oldest lines dropping</string>
+    <string name="logs_no_stream">This connection can\'t stream logs</string>
     <string name="logs_search">Search…</string>
     <string name="logs_tooltip">Tooltip</string>
     <string name="logs_selected">selected %1$d of %2$d</string>

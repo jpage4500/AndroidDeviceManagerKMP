@@ -69,3 +69,10 @@
 - phone: the mirror opens with the same title bar as a dialog, full screen
 - details, status and commands each fold away, and stay folded next time
 - tapping a device property highlights the row and says what it copied
+- hold the mirrored screen for a long press, and see it register as you hold
+- pressing Back, Home, Recents or Power names itself on the mirrored screen
+- the mirror's tap, swipe and hold marks are twice the size they were
+- mirroring a device through a computer streams frames instead of polling
+- the mirror's tap, swipe and hold marks stay up long enough to see
+- phone: a device's page and its screenshot fill the screen, like the mirror
+- see the logs of a device that's attached to another computer

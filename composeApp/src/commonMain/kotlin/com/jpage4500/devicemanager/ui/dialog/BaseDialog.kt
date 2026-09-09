@@ -35,7 +35,8 @@ import org.jetbrains.compose.resources.stringResource
  *   title band, no rounded card, and Escape/Enter answered by the window.
  * - **Phone** — an overlay: a rounded card with the coloured title bar and its close X, filling the
  *   width, one on screen at a time. A dialog opened from another replaces it and comes back when
- *   the inner one closes.
+ *   the inner one closes. [fullScreen] drops the card and fills the screen instead, for a dialog
+ *   that is really a screen.
  */
 @Composable
 fun BaseDialog(
@@ -65,6 +66,11 @@ fun BaseDialog(
     // fraction of the screen width the dialog takes on a tablet. compact screens always fill the
     // width; ignored when fitContentWidth is set, and on a desktop, where a window has its own size
     widthFraction: Float = Dimens.dialogWidthFraction,
+    // true = fill the screen edge to edge instead of floating in a card, the way the phone's mirror
+    // is drawn: no side gaps, no rounded corners, no app showing around it. for a dialog that is
+    // really a screen — a device's page, a screenshot. ignored on a desktop, where a dialog is a
+    // window the user sizes and moves
+    fullScreen: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val titleText = title ?: titleRes?.let { stringResource(it) }
@@ -141,13 +147,14 @@ fun BaseDialog(
                 contentWidthPx = contentWidthPx,
                 onContentWidth = { contentWidthPx = it },
                 widthFraction = widthFraction,
+                fullScreen = fullScreen,
                 content = content,
             )
         }
     }
 }
 
-/** the phone's dialog: a rounded card over the app, with its own title bar. */
+/** the phone's dialog: a rounded card over the app, with its own title bar — or the whole screen. */
 @Composable
 private fun OverlayCard(
     titleText: String?,
@@ -169,6 +176,7 @@ private fun OverlayCard(
     contentWidthPx: Int?,
     onContentWidth: (Int) -> Unit,
     widthFraction: Float,
+    fullScreen: Boolean,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val focus = remember { FocusRequester() }
@@ -187,6 +195,8 @@ private fun OverlayCard(
 
         val density = LocalDensity.current
         val sized = when {
+            // the caller's padding goes with the card: a full-screen dialog has no margin to hold
+            fullScreen -> Modifier.fillMaxSize()
             fitContentWidth -> {
                 val fitWidth = contentWidthPx?.let { with(density) { it.toDp() } } ?: maxDialogHeight
                 modifier.width(fitWidth.coerceIn(0.dp, screenWidth * 0.9f))
@@ -196,7 +206,9 @@ private fun OverlayCard(
         }
         Card(
             modifier = sized
-                .heightIn(max = maxDialogHeight)
+                // a full-screen dialog is already as tall as it gets; the cap is what leaves a
+                // strip of the app showing above and below a card
+                .then(if (fullScreen) Modifier else Modifier.heightIn(max = maxDialogHeight))
                 // focusable so the keys below arrive even when nothing inside has taken focus — a
                 // confirmation with no fields in it, say
                 .focusRequester(focus)
@@ -210,7 +222,7 @@ private fun OverlayCard(
                         else -> false
                     }
                 },
-            shape = RoundedCornerShape(Dimens.dialogCorner),
+            shape = if (fullScreen) RectangleShape else RoundedCornerShape(Dimens.dialogCorner),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         ) {
             DialogPanel(

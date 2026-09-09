@@ -36,14 +36,14 @@ fun InputDialog(deviceIds: List<String>, onDismiss: () -> Unit) {
         if (value.isBlank()) return
         rememberRecent(value)
         scope.launch {
-            deviceIds.forEach { id -> DeviceManager.runCommand(id, DeviceInput.text(value), "Typing on") }
+            deviceIds.forEach { id -> DeviceManager.runCommand(id, DeviceInput.shell(DeviceInput.Text(value)), "Typing on") }
         }
         onDismiss()
     }
 
     fun key(code: Int, label: String) {
         scope.launch {
-            deviceIds.forEach { id -> DeviceManager.runCommand(id, DeviceInput.keyEvent(code), "$label on") }
+            deviceIds.forEach { id -> DeviceManager.runCommand(id, DeviceInput.shell(DeviceInput.Key(code)), "$label on") }
         }
     }
 

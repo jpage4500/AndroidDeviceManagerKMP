@@ -26,9 +26,10 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * a device's screen, with taps, holds, swipes and keys sent back to it.
  *
- * The frame is whatever `screencap` last returned, so a gesture has to be mapped from where it
- * landed in the drawn image back to the device's own pixels — the image is scaled to fit and the
- * device's resolution is whatever the PNG says it is, not whatever this pane happens to be.
+ * A gesture has to be mapped from where it landed in the drawn image back to the device's own
+ * pixels: the image is scaled to fit this pane, and the device's resolution is what the frame says
+ * it is — which is not always the image's own size, since a server sending a scaled-down frame says
+ * so in the header rather than in the JPEG. See [ScreenFrame].
  */
 @Composable
 fun MirrorScreen(
@@ -37,22 +38,23 @@ fun MirrorScreen(
 ) {
     val scope = rememberCoroutineScope()
     val source = remember(deviceId) { MirrorSource(deviceId) }
-    val frameBytes by source.frame.collectAsState()
+    val frame by source.frame.collectAsState()
     val error by source.error.collectAsState()
     // held here rather than inside [MirrorImage]: a key press comes from the button row below it
     val feedback = rememberMirrorFeedback()
 
-    // a mirror left running in the background is a screencap every 250ms for a frame nobody can
-    // see — and on a metered link, rude. it picks up again on the way back — see AppLifecycle
+    // a mirror left running in the background is a frame every 250ms nobody can see — and on a
+    // metered link, rude. it picks up again on the way back — see AppLifecycle
     LaunchedEffect(deviceId) { whileForeground { source.run() } }
 
-    val image = remember(frameBytes) { frameBytes?.let { decodeImage(it) } }
+    val image = remember(frame) { frame?.image?.let { decodeImage(it) } }
 
     Column(modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when {
                 image != null -> MirrorImage(
                     image = image,
+                    device = frame.deviceSize(image),
                     feedback = feedback,
                     onTap = { x, y -> scope.launch { source.tap(x, y) } },
                     onLongPress = { x, y -> scope.launch { source.longPress(x, y) } },
@@ -82,6 +84,7 @@ fun MirrorScreen(
 @Composable
 private fun MirrorImage(
     image: ImageBitmap,
+    device: IntSize,
     feedback: MirrorFeedback,
     onTap: (x: Int, y: Int) -> Unit,
     onLongPress: (x: Int, y: Int) -> Unit,
@@ -94,33 +97,35 @@ private fun MirrorImage(
         val boxWidth: Float = with(density) { maxWidth.toPx() }
         val boxHeight: Float = with(density) { maxHeight.toPx() }
         val scale: Float = min(boxWidth / image.width.toFloat(), boxHeight / image.height.toFloat())
-        val drawnWidth: Float = image.width * scale
-        val drawnHeight: Float = image.height * scale
+        val drawn = Size(image.width * scale, image.height * scale)
 
         // the gesture goes on the box rather than on the image, so the feedback drawn over the top
         // of it is never in the way of the next tap
         Box(
             Modifier
                 .size(
-                    with(density) { drawnWidth.toDp() },
-                    with(density) { drawnHeight.toDp() },
+                    with(density) { drawn.width.toDp() },
+                    with(density) { drawn.height.toDp() },
                 )
-                .pointerInput(image) {
+                // keyed on the two things the maths below reads, and **not** on the frame: a new
+                // bitmap arrives several times a second, and restarting the gesture detector on one
+                // is a drag chopped into whatever pieces the frames happened to fall between
+                .pointerInput(drawn, device) {
                     awaitEachGesture {
                         detectMirrorGesture(
                             onTap = { at ->
-                                val point = at.toDevice(image, scale)
+                                val point = at.toDevice(drawn, device)
                                 onTap(point.x, point.y)
                                 feedback.tap(at)
                             },
                             onLongPress = { at ->
-                                val point = at.toDevice(image, scale)
+                                val point = at.toDevice(drawn, device)
                                 onLongPress(point.x, point.y)
                                 feedback.longPress(at)
                             },
                             onSwipe = { from, to, heldMs ->
-                                val start = from.toDevice(image, scale)
-                                val end = to.toDevice(image, scale)
+                                val start = from.toDevice(drawn, device)
+                                val end = to.toDevice(drawn, device)
                                 onSwipe(
                                     start.x, start.y, end.x, end.y,
                                     heldMs.coerceIn(MIN_SWIPE_MS, MAX_SWIPE_MS),
@@ -205,10 +210,26 @@ private suspend fun AwaitPointerEventScope.detectMirrorGesture(
     }
 }
 
-/** back from drawn pixels to the device's own. */
-private fun Offset.toDevice(image: ImageBitmap, scale: Float): IntOffset = IntOffset(
-    (x / scale).toInt().coerceIn(0, image.width - 1),
-    (y / scale).toInt().coerceIn(0, image.height - 1),
+/**
+ * back from where a finger landed in the drawn image to the device's own pixels.
+ *
+ * Against [device] rather than against the bitmap: the drawn image covers the whole screen whatever
+ * size it arrived at, so a frame the server scaled down still has to answer in device coordinates.
+ */
+private fun Offset.toDevice(drawn: Size, device: IntSize): IntOffset = IntOffset(
+    (x / drawn.width * device.width).toInt().coerceIn(0, device.width - 1),
+    (y / drawn.height * device.height).toInt().coerceIn(0, device.height - 1),
+)
+
+/**
+ * what this frame says the device's screen measures, falling back to the image's own size.
+ *
+ * A polled `screencap` PNG *is* the screen, so it is its own measure; a pushed frame carries the
+ * device's dimensions in its header and may itself be smaller than them.
+ */
+private fun ScreenFrame?.deviceSize(image: ImageBitmap): IntSize = IntSize(
+    this?.deviceWidth?.takeIf { it > 0 } ?: image.width,
+    this?.deviceHeight?.takeIf { it > 0 } ?: image.height,
 )
 
 // `input swipe 0` is ignored by some devices, and a minute-long drag would hold the shell that long
