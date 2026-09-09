@@ -101,3 +101,5 @@
 - iOS: fixed the app quitting as it launched on iPhone
 - connecting to a device closes the form and opens that device's page
 - phone: a device opens on its storage and battery, with its properties last
+- connecting to a computer closes the form and shows its devices
+- iOS: fixed the wide empty bands above and below every screen

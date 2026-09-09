@@ -57,7 +57,7 @@ screen: `ServerForm` — `ui/screen/ConnectPanel.kt`, from the "Connect to a com
 | `FormHeader` | "Or enter it by hand" |
 | `LabelledField` | Host, Port, Auth token — three rows, always out |
 | `CenteredButton` | "Connect" |
-| `StatusText` | what the last attempt said, green or red, under the button |
+| `StatusText` | why the last attempt failed, under the button — a connection closes the form instead, and names the computer in a toast |
 
 ### connect to a device
 
@@ -679,6 +679,14 @@ bars, the display cutout and the IME, so the layout shrinks when the keyboard op
 only scrolls a focused field into view within a viewport that knows it got shorter. Padding the field
 instead leaves the scroll container full height and the field scrolls behind the keyboard where
 nothing can reach it.
+
+**On iOS the same rule means telling SwiftUI to keep out of it.** `ContentView` wraps the Compose
+view controller in a `UIViewControllerRepresentable`, and SwiftUI insets one of those by the safe
+area unless it is told not to. With `safeDrawingPadding()` already inside, that was the notch and
+the home indicator applied twice — about 93pt of white above every title bar and 68pt below every
+button row, and no watermark under either. `.ignoresSafeArea()` on the `ComposeView`, with no
+region argument, hands the whole question to Compose: the keyboard is one of the regions `.all`
+covers, and `safeDrawing` already has it.
 
 ```
 ┌─────────────────────────────────┐        ┌─────────────────────────────────┐

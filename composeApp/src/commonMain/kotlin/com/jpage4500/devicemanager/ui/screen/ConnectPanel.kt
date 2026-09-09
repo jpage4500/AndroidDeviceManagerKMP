@@ -116,8 +116,9 @@ private fun RouteDialog(entry: Route, onDismiss: () -> Unit, onConnected: (Strin
     ) {
         when (entry) {
             // a computer brings a whole fleet rather than one device, so there is no single page to
-            // open — its form stays put and the list behind it fills in
-            Route.SERVER -> ServerForm()
+            // open — but the form has nothing left to say once it is attached either, so it closes
+            // too and the list behind it fills in
+            Route.SERVER -> ServerForm(onDone = onDismiss)
             Route.DEVICE -> DeviceForm(onConnected)
         }
     }
@@ -144,9 +145,12 @@ private enum class Route(
  *
  * `/api/info` answers before anything is saved either way, so a typo doesn't leave a dead entry
  * behind and the row is labelled with the name the server gave rather than with its address.
+ *
+ * **Connecting closes the form**, the way reaching a device does. What the user came for is the
+ * desk's devices, and they arrive in the list this form is sitting on top of.
  */
 @Composable
-private fun ServerForm() {
+private fun ServerForm(onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     // resolved here rather than in the click handler: stringResource is a composable read
     val notOurQr = stringResource(Res.string.connect_scan_none)
@@ -169,8 +173,11 @@ private fun ServerForm() {
             )
             ServerManager.connect(server)
                 .onSuccess {
+                    // said as a toast rather than under the button, because the form it would be
+                    // under is on its way out — a success line nobody is left to read is no line
                     val text = getString(Res.string.connect_connected, it.serverName.orEmpty(), it.deviceCount)
-                    status = Status(text, isError = false)
+                    ToastManager.showToast(text, success = true)
+                    onDone()
                 }
                 .onFailure { status = Status(it.message ?: "couldn't connect", isError = true) }
             busy = false
