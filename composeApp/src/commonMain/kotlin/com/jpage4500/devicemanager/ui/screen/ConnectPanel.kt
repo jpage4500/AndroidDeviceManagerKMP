@@ -414,6 +414,7 @@ private fun PairPanel(onDone: () -> Unit) {
                 is PairState.Checking -> stringResource(Res.string.connect_pair_checking)
                 is PairState.Waiting -> stringResource(Res.string.connect_pair_waiting)
                 is PairState.Found -> stringResource(Res.string.connect_pair_found, current.address)
+                is PairState.Connecting -> stringResource(Res.string.connect_pair_connecting)
                 is PairState.Paired -> current.message
                 is PairState.Failed -> current.message
             },

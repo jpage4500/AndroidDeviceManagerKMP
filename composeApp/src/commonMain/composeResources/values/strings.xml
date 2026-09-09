@@ -52,6 +52,7 @@
     <string name="connect_pair_cancel">Stop waiting</string>
     <string name="connect_pair_checking">Checking the adb server…</string>
     <string name="connect_pair_found">Found %1$s — pairing…</string>
+    <string name="connect_pair_connecting">Paired. Connecting to it…</string>
     <string name="connect_pair_bundled">Starts an adb server inside this app, so no computer is needed.</string>
     <string name="connect_pair_starting">Starting the built-in adb server…</string>
     <string name="connect_pair_needs_adb">Set the adb server host in Settings first — pairing is done by a computer running adb.</string>

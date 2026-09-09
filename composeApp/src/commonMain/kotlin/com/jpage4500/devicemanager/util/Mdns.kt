@@ -33,3 +33,15 @@ const val MDNS_ADB_PAIRING = "_adb-tls-pairing._tcp"
  * pairing — so finding it would only offer a connection that can't be made.
  */
 const val MDNS_ADB_CONNECT = "_adb._tcp"
+
+/**
+ * how a device with wireless debugging on advertises the port an adb server connects to.
+ *
+ * The service name is the device's own guid — the same one `host:pair` reports back — which is what
+ * lets a pairing that just succeeded find *its* device rather than whichever answers first.
+ *
+ * Only useful with an adb server behind it: this port wants the TLS client certificate that pairing
+ * established, so [com.jpage4500.devicemanager.transport.DirectDeviceTransport] cannot use it and
+ * browses [MDNS_ADB_CONNECT] instead.
+ */
+const val MDNS_ADB_CONNECT_TLS = "_adb-tls-connect._tcp"

@@ -48,21 +48,39 @@ actual object AdbDaemon {
             log.e("launch: no context yet")
             return false
         }
-        // adb writes its RSA key under here and refuses to start without somewhere to put it; the
-        // app's own files dir is the only writable place, and HOME is what older adb reads while
-        // ANDROID_USER_HOME is what current adb reads — both are set rather than guessing the build
+        // adb writes its RSA key under here; the app's own files dir is the only writable place, and
+        // HOME is what older adb reads while ANDROID_USER_HOME is what current adb reads — both are
+        // set rather than guessing the build.
+        //
+        // **`.android` is created too, and that is not tidiness.** adb does not create it: it writes
+        // `adbkey` and `adb_known_hosts.pb` there through a write-then-rename, and the rename fails
+        // with "No such file or directory" if the directory is missing. The key then exists only in
+        // that process, so every restart of the server would generate a new one — and a device
+        // paired against the old key would have to be paired again
         val home = File(context.filesDir, "adb").apply { mkdirs() }
+        val userHome = File(home, ".android").apply { mkdirs() }
 
         return try {
+            // `tcp:localhost:<port>`, and **not** `tcp:127.0.0.1:<port>`, which adb rejects with
+            // "listening on specified hostname currently unsupported". Its socket_spec.cpp has
+            //
+            //     static bool tcp_host_is_local(std::string_view hostname) {
+            //         // FIXME
+            //         return hostname.empty() || hostname == "localhost";
+            //     }
+            //
+            // so a literal loopback address is not recognised as loopback. Naming the host at all
+            // is what pins this to the loopback path: an empty host there binds every interface
+            // whenever adb's own `gListenAll` is set, and 5037 has no authentication whatsoever
             val builder = ProcessBuilder(
                 executable.absolutePath,
-                "-L", "tcp:${LocalAdbServer.server.host}:${LocalAdbServer.server.port}",
+                "-L", "tcp:localhost:${LocalAdbServer.server.port}",
                 "server",
                 "nodaemon",
             )
             builder.environment().apply {
                 put("HOME", home.absolutePath)
-                put("ANDROID_USER_HOME", File(home, ".android").absolutePath)
+                put("ANDROID_USER_HOME", userHome.absolutePath)
                 put("TMPDIR", context.cacheDir.absolutePath)
                 // a statically linked adb ignores this; one built against its own libc++ and
                 // protobuf will not start without it, and the failure is a silent instant exit.
@@ -104,7 +122,9 @@ actual object AdbDaemon {
                     log.d("adb: $line")
                 }
             }
-            log.d("drain: adb exited with ${runCatching { from.exitValue() }.getOrNull()}")
+            // waitFor, not exitValue: the stream can end a moment before the process does, and
+            // exitValue then throws and the log says "exited with null" instead of the code
+            log.d("drain: adb exited with ${runCatching { from.waitFor() }.getOrNull()}")
         }.apply {
             isDaemon = true
             name = "adb-server-output"

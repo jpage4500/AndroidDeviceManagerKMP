@@ -1,5 +1,6 @@
 package com.jpage4500.devicemanager.manager
 
+import com.jpage4500.devicemanager.transport.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -16,6 +17,14 @@ sealed interface PairState {
     /** a device answered the browse; the adb server is being asked to pair with it. */
     data class Found(val address: String) : PairState
 
+    /**
+     * paired, and now being dialled.
+     *
+     * A step of its own because pairing does **not** attach the device — see [connectPaired].
+     */
+    data object Connecting : PairState
+
+    /** paired *and* connected, which is when the device actually appears in the list. */
     data class Paired(val message: String) : PairState
 
     /** [canRetry] when there is a device to try again with, rather than a dead server. */
@@ -71,6 +80,14 @@ class PairingSession {
      * could only be retried by closing the target's dialog and reopening it.
      */
     private var lastFound: MdnsService? = null
+
+    /**
+     * the device's own guid, once pairing has reported it.
+     *
+     * Also the marker that pairing is *done*: a code can only be paired with once, so a retry after
+     * this is set must re-dial rather than start again — see [retry].
+     */
+    private var pairedGuid: String? = null
 
     /**
      * browse until cancelled, pairing with whatever turns up.
@@ -135,9 +152,10 @@ class PairingSession {
             return
         }
         transport.pair(service.host, service.port, password)
-            .onSuccess {
-                log.i("onFound: paired: $it")
-                _state.value = PairState.Paired(it)
+            .onSuccess { reply ->
+                log.i("onFound: paired: $reply")
+                pairedGuid = guidOf(reply)
+                connectPaired(transport)
             }
             .onFailure {
                 log.w("onFound: ${it.message}")
@@ -146,8 +164,92 @@ class PairingSession {
             }
     }
 
-    /** try the device that was found again — see [lastFound] for why the browse can't do it. */
+    /**
+     * dial the device that was just paired, which is what actually puts it in the list.
+     *
+     * **Pairing does not attach anything.** `host:pair` exchanges keys and stops there; the device
+     * is then reachable on a *different* random port, the one it advertises as
+     * `_adb-tls-connect._tcp`. `adb` on a desktop never has to be told this because the server
+     * discovers that service itself and auto-connects — but its mDNS runs inside the server process,
+     * and inside an app that needs a multicast lock this app doesn't hold. Since the browse here
+     * already works, it is asked directly instead of relying on the server's own.
+     *
+     * Matched on the guid `host:pair` reported, because that guid *is* the service's name — with two
+     * devices paired, connecting to whichever answered first would attach the wrong one.
+     */
+    private suspend fun connectPaired(transport: DeviceTransport) {
+        _state.value = PairState.Connecting
+        val guid = pairedGuid
+        log.d("connectPaired: looking for ${guid ?: "any device"} on $MDNS_ADB_CONNECT_TLS")
+
+        val service = awaitConnectService(guid)
+        if (service == null) {
+            log.w("connectPaired: $guid never advertised a connect port")
+            // paired is worth saying: the trust is established and survives, so a retry only has to
+            // dial rather than pair again
+            _state.value = PairState.Failed("paired, but it didn't answer — try again", canRetry = true)
+            attempting = false
+            return
+        }
+
+        log.i("connectPaired: connecting to ${service.host}:${service.port}")
+        transport.connect(service.host, service.port)
+            .onSuccess {
+                log.i("connectPaired: $it")
+                _state.value = PairState.Paired(it)
+            }
+            .onFailure {
+                log.w("connectPaired: ${it.message}")
+                _state.value = PairState.Failed(
+                    it.message ?: "paired, but couldn't connect",
+                    canRetry = true,
+                )
+                attempting = false
+            }
+    }
+
+    /**
+     * the first `_adb-tls-connect._tcp` service matching [guid], or null if none turns up in time.
+     *
+     * The browse is started and stopped on the main thread for the same reason the pairing one is:
+     * iOS schedules `NSNetServiceBrowser` on the calling thread's run loop.
+     */
+    private suspend fun awaitConnectService(
+        guid: String?,
+        timeoutMs: Long = CONNECT_BROWSE_MS,
+    ): MdnsService? {
+        val found = CompletableDeferred<MdnsService>()
+        val browse = withContext(Dispatchers.Main) {
+            browseMdns(MDNS_ADB_CONNECT_TLS) { service ->
+                if (guid == null || service.name == guid) found.complete(service)
+            }
+        }
+        return try {
+            withTimeoutOrNull(timeoutMs) { found.await() }
+        } finally {
+            withContext(NonCancellable + Dispatchers.Main) { browse.close() }
+        }
+    }
+
+    /** `Successfully paired to 1.2.3.4:5555 [guid=adb-XXXX]` — the guid is the mDNS service name. */
+    private fun guidOf(reply: String): String? = reply
+        .substringAfter("[guid=", "")
+        .substringBefore(']', "")
+        .takeIf { it.isNotBlank() }
+
+    /**
+     * try again — which means different things depending on how far it got.
+     *
+     * Once [pairedGuid] is set the pairing succeeded and only the dial failed, and pairing a second
+     * time with the same code would be refused; so that case re-dials. See [lastFound] for why the
+     * browse can't drive a retry itself.
+     */
     suspend fun retry() {
+        val transport = DeviceManager.pairer()
+        if (pairedGuid != null && transport != null) {
+            connectPaired(transport)
+            return
+        }
         val service = lastFound ?: return
         attempting = false
         onFound(service)
@@ -161,5 +263,8 @@ class PairingSession {
         const val NAME_LENGTH = 20
         const val PASSWORD_LENGTH = 20
         const val ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+        /** a device re-advertises its connect port right after pairing, but not instantly. */
+        const val CONNECT_BROWSE_MS = 10_000L
     }
 }

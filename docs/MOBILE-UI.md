@@ -564,11 +564,15 @@ depends on what the phone is connected to:
 **Nobody has to type an IP address** — the panel browses mDNS and lists what answers, above the
 field. The field stays, for a device on another subnet.
 
-The service type browsed for is **`_adb._tcp`**, not `_adb-tls-connect._tcp`. That is deliberate and
-is the one detail worth keeping: `_adb._tcp` is the plain port `adb tcpip` opens and is the only adb
-service this transport can actually reach, while `_adb-tls-connect._tcp` is the wireless-debugging
-port and wants a client certificate from pairing — so listing those would offer connections that
-cannot be made. `browseMdns` already existed for pairing, so this is one constant and a list.
+The service type browsed for **here** is `_adb._tcp`, not `_adb-tls-connect._tcp`, and that is
+deliberate: `_adb._tcp` is the plain port `adb tcpip` opens and is the only adb service
+`DirectDeviceTransport` can actually reach, while `_adb-tls-connect._tcp` is the wireless-debugging
+port and wants a client certificate from pairing — so listing those in *this* form would offer
+connections that cannot be made.
+
+`_adb-tls-connect._tcp` is browsed in one other place, where it does work: `PairingSession` uses it
+to dial a device it has just paired, through the adb server that holds the certificate. See
+ADB-TRANSPORTS.md — pairing attaches nothing on its own, which is a trap worth knowing about.
 
 The prefill rule from the desktop's `ConnectScreen` is worth keeping: open on the **last** address
 connected to with its final octet selected, so the phone next to the last one is a few keystrokes.

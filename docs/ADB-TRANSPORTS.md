@@ -222,9 +222,29 @@ adb, Conscrypt and Android's own TLS stack use. So pairing directly costs one of
 
 | Option | Desktop | Android | iOS |
 |---|---|---|---|
-| Conscrypt (`conscrypt-openjdk-uber`, ~8 MB; `conscrypt-android`, ~4 MB per ABI) | yes | yes | **never** — no artifact |
+| **reflect into the platform's own Conscrypt** — no dependency at all | no | **yes**, and it is the cheapest route by far | no |
+| Conscrypt as a dependency (`conscrypt-openjdk-uber`, ~8 MB; `conscrypt-android`, ~4 MB per ABI) | yes | yes | **never** — no artifact |
 | vendor BoringSSL through cinterop | yes | yes | yes, and it is a C build in the KMP graph |
-| **ship Google's `adb` binary and run it** | not needed | **done** — see below | never — iOS cannot exec |
+| ship Google's `adb` binary and run it | not needed | works, and costs ~10 MB and a 16 KB-alignment problem | never — iOS cannot exec |
+
+**The first row is the correction.** Android's own TLS stack *is* Conscrypt, and its
+`exportKeyingMaterial` is reachable from an app with no dependency and no binary:
+
+```java
+Class.forName("com.android.org.conscrypt.Conscrypt")
+     .getMethod("exportKeyingMaterial", SSLSocket.class, String.class, byte[].class, int.class)
+     .invoke(null, sslSocket, "adb-label\u0000", null, 64);
+```
+
+A hidden API, but a stable one, and it is how
+[libadb-android](https://github.com/MuntashirAkon/libadb-android) pairs — `PairingConnectionCtx`
+does the whole handshake in Java. Note the label carries its trailing NUL, matching
+`sizeof(kExportedKeyLabel)` on the adb side. TLS 1.3 needs API 29+; below that the platform provider
+can't do it and a bundled Conscrypt would be required.
+
+So the earlier conclusion here — that the exporter was out of reach without vendoring BoringSSL, and
+that shipping the binary was the only way out on Android — was **wrong about Android**. It remains
+true for the desktop JVM and for iOS, where no equivalent exists.
 
 SPAKE2 itself is *not* the blocker it was assumed to be: BoringSSL's variant is Ed25519 with fixed M
 and N points, and [spake2-java](https://github.com/MuntashirAkon/spake2-java) is a pure-Java port of
@@ -232,6 +252,33 @@ and N points, and [spake2-java](https://github.com/MuntashirAkon/spake2-java) is
 `"adb pair client"`/`"adb pair server"` including their NUL, roles alice/bob, and the derived key
 feeds AES-128-GCM for one `PeerInfo` exchange. All of that is portable. The TLS exporter under it is
 not.
+
+### Pairing is not connecting
+
+Worth its own heading because it cost an afternoon. `host:pair` exchanges keys and **stops there** —
+it attaches nothing, and a successful pair leaves the device list exactly as it was. The device is
+then reachable on a *different* random port, the one it advertises as `_adb-tls-connect._tcp`, and
+something has to dial it.
+
+`adb` on a desktop never has to be told this, because the server discovers that service itself and
+auto-connects. That discovery runs **inside the server process**, and inside an app it needs a
+multicast lock this app does not hold — so a bundled server pairs happily and then sits there. Since
+the browse in `util/Mdns.kt` already works, `PairingSession.connectPaired` asks directly and then
+calls `host:connect`.
+
+It matches on the **guid** `host:pair` reports back (`Successfully paired to … [guid=adb-XXXX]`),
+because that guid *is* the connect service's name. With two devices paired, connecting to whichever
+answered first would attach the wrong one.
+
+Two smaller things in the same area, both found in a log rather than reasoned about:
+
+- **`$ANDROID_USER_HOME/.android` has to exist before adb starts.** adb does not create it, and it
+  writes `adbkey` and `adb_known_hosts.pb` there through a write-then-rename that fails with *"No
+  such file or directory"* when it doesn't. The key then lives only in that process, so every restart
+  of the server would mint a new one and every paired device would need pairing again.
+- **A failure after pairing is not a failure to pair.** The trust is established and survives, so
+  `retry()` re-dials rather than pairing again — a second `host:pair` with the same code is refused,
+  which would read as the pairing itself having broken.
 
 ### The way out on Android: ship Google's binary
 
@@ -263,6 +310,21 @@ Three things about it worth knowing before touching it:
   at 108 shared objects and 12 MB per ABI, with `libc++` missing from that repository entirely.
   `LD_LIBRARY_PATH` is pointed at the binary's directory so a dynamically linked one *could* work,
   but that is a fallback rather than the plan.
+- **The listen spec is `tcp:localhost:5037`, never `tcp:127.0.0.1:5037`.** adb rejects the second
+  with *"listening on specified hostname currently unsupported"* and exits, because
+  `socket_spec.cpp` decides what counts as loopback like this:
+
+  ```cpp
+  static bool tcp_host_is_local(std::string_view hostname) {
+      // FIXME
+      return hostname.empty() || hostname == "localhost";
+  }
+  ```
+
+  A literal loopback address is not recognised as loopback. Naming the host at all is also what pins
+  it to the loopback path — an empty host binds *every* interface whenever adb's own `gListenAll` is
+  set, and 5037 has no authentication whatsoever, so that is not a default to lean on.
+
 - **`libadb.so` in `jniLibs`, and `useLegacyPackaging = true`.** Android mounts an app's data
   directory no-exec (API 29+), so `nativeLibraryDir` is the only place left to run something from,
   and only `lib*.so` gets packaged there — so an executable must be named like a library to be
