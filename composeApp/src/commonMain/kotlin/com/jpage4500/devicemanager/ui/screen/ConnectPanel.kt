@@ -241,8 +241,30 @@ private fun DeviceForm() {
     var port by remember { mutableStateOf(DirectDeviceTransport.DEFAULT_PORT.toString()) }
     var busy by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<Status?>(null) }
+    var pairStatus by remember { mutableStateOf<Status?>(null) }
     var pairing by remember { mutableStateOf(false) }
     val found = rememberAdbDevices()
+
+    // an android build that ships the adb binary can start a server of its own, which is what makes
+    // pairing possible with no computer at all — see LocalAdbServer
+    val localState by LocalAdbServer.state.collectAsState()
+    val canStartLocal = LocalAdbServer.isAvailable
+
+    /** go straight to the QR when something can already pair, otherwise start our own server. */
+    fun pair() {
+        if (canPair) {
+            pairing = true
+            return
+        }
+        busy = true
+        pairStatus = null
+        scope.launch {
+            LocalAdbServer.start()
+                .onSuccess { pairing = true }
+                .onFailure { pairStatus = Status(it.message ?: "couldn't start adb", isError = true) }
+            busy = false
+        }
+    }
 
     fun connect() {
         if (busy || host.isBlank()) return
@@ -312,20 +334,26 @@ private fun DeviceForm() {
             CenteredButton(
                 label = stringResource(Res.string.connect_pair_qr),
                 icon = Res.drawable.qr_code,
-                // pairing needs an adb server behind us to do the cryptography, so the button is
-                // only offered where it can work — see PairingSession
-                enabled = canPair,
-                onClick = { pairing = true },
+                // pairing needs an adb server to do the cryptography: one already attached, or one
+                // this app starts for itself. with neither, the button would show a QR that could
+                // never be acted on — see PairingSession and LocalAdbServer
+                enabled = !busy && (canPair || canStartLocal),
+                onClick = ::pair,
             )
             Spacer(Modifier.height(Dimens.gap))
             Text(
-                text = stringResource(
-                    if (canPair) Res.string.connect_pair_steps else Res.string.connect_pair_needs_adb
-                ),
+                text = when {
+                    canPair -> stringResource(Res.string.connect_pair_steps)
+                    localState is LocalAdbServer.State.Starting ->
+                        stringResource(Res.string.connect_pair_starting)
+                    canStartLocal -> stringResource(Res.string.connect_pair_bundled)
+                    else -> stringResource(Res.string.connect_pair_needs_adb)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = Colors.secondaryText,
                 textAlign = TextAlign.Center,
             )
+            StatusText(pairStatus)
         }
     }
 }

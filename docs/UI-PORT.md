@@ -255,6 +255,11 @@ Finder layout. Three consequences, all handled:
 
 **Mirror windows keep their title bar.** They have nothing at the top but the device's screen, the
 traffic lights would sit on top of it, and the title is the device's name — which is worth reading.
+What they do have at the *foot* is the same bar the phone's mirror has: Back, Home and a keyboard key
+as icons, More holding Recents, Power and the three quality levels, and the measured frame rate at
+the right. It is one composable for both, described in [MOBILE-UI.md](MOBILE-UI.md) — including what
+the keyboard key does on a desktop, which is to point the physical one at the device, and how the
+wheel zooms and pans a frame that has no pinch to give it.
 Windows and Linux keep an ordinary title bar everywhere for now; going without one there means
 drawing your own close/minimise/maximise buttons.
 

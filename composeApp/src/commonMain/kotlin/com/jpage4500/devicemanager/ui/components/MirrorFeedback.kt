@@ -56,7 +56,19 @@ fun rememberMirrorFeedback(): MirrorFeedback = remember { MirrorFeedback() }
  * the Swing window's 30ms `Timer` does, except the clock is Compose's, so it idles with the window.
  */
 @Composable
-fun MirrorFeedbackOverlay(feedback: MirrorFeedback, modifier: Modifier = Modifier) {
+fun MirrorFeedbackOverlay(
+    feedback: MirrorFeedback,
+    modifier: Modifier = Modifier,
+    /**
+     * where a point on the frame ends up on screen — identity until the frame is zoomed.
+     *
+     * The overlay is drawn *outside* whatever transform the frame is under, and the marks are moved
+     * onto it instead: a ring is a mark on the glass rather than on the picture, and one drawn
+     * inside the transform would be four times the size at four times the zoom. Called from the
+     * draw, so a pinch repaints the marks without recomposing anything.
+     */
+    transform: (Offset) -> Offset = { it },
+) {
     if (feedback.active.isNotEmpty()) {
         LaunchedEffect(feedback) {
             while (feedback.active.isNotEmpty()) {
@@ -82,9 +94,10 @@ fun MirrorFeedbackOverlay(feedback: MirrorFeedback, modifier: Modifier = Modifie
             // null until the loop's next frame has started it, which is a frame away at most
             val elapsed = item.elapsedAt(now) ?: return@forEach
             when (item) {
-                is Feedback.Tap -> drawTap(item.at, elapsed)
-                is Feedback.Hold -> drawHold(item.at, elapsed)
-                is Feedback.Swipe -> drawSwipe(item.from, item.to, elapsed)
+                is Feedback.Tap -> drawTap(transform(item.at), elapsed)
+                is Feedback.Hold -> drawHold(transform(item.at), elapsed)
+                is Feedback.Swipe -> drawSwipe(transform(item.from), transform(item.to), elapsed)
+                // the bubble has no place on the frame: it centres itself on whatever it is drawn in
                 is Feedback.Key -> drawKey(item.label, elapsed, measurer)
             }
         }

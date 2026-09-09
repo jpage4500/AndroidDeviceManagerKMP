@@ -19,6 +19,13 @@ import kotlinx.coroutines.flow.*
 class AdbServerTransport(
     host: String = "127.0.0.1",
     port: Int = 5037,
+    /**
+     * true when this loopback address is **this app's own** bundled adb server, not a missing one.
+     *
+     * Carried as a flag rather than asked of `LocalAdbServer`, which would point the transport layer
+     * back at the manager layer for one boolean. It only affects [canPair].
+     */
+    private val bundled: Boolean = false,
 ) : DeviceTransport {
 
     private val server = AdbServer(host, port)
@@ -94,13 +101,19 @@ class AdbServerTransport(
     /**
      * pairing is done *by* the server, so it needs one that exists.
      *
-     * The loopback case is the trap this closes: there is no adb server inside an Android or iOS
-     * app, so a phone left on the default address would offer the button, show a QR, watch someone
-     * scan it, find the device over mDNS — and only then say there was never a server. Measured in
-     * whose time, that is the worst failure in the app.
+     * The loopback case is the trap this closes: a phone left on the default address would otherwise
+     * offer the button, show a QR, watch someone scan it, find the device over mDNS — and only then
+     * say there was never a server. Measured in whose time, that is the worst failure in the app.
+     *
+     * [bundled] is the exception, and the reason it exists: an Android build that ships the `adb`
+     * binary *does* have a server on loopback, started by
+     * [com.jpage4500.devicemanager.manager.LocalAdbServer], and that one can pair with nothing else
+     * involved at all.
      */
     override val canPair: Boolean
-        get() = !server.isLoopback || PlatformUtils.getPlatform() == PlatformType.DESKTOP
+        get() = !server.isLoopback ||
+            PlatformUtils.getPlatform() == PlatformType.DESKTOP ||
+            bundled
 
     override suspend fun pair(host: String, port: Int, code: String): Result<String> =
         adbPair(server, host, port, code).toResult()

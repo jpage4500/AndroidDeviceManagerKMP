@@ -42,7 +42,7 @@
     <string name="connect_device_by_ip">Connect to a device</string>
     <string name="connect_device_by_ip_msg">Straight to another device, no computer involved</string>
     <string name="connect_direct_connected">Connected to %1$s</string>
-    <string name="connect_direct_msg">The address from the other device\'s Wireless debugging screen. Tap Allow when it asks.</string>
+    <string name="connect_direct_msg">Needs "adb tcpip 5555" run on the device once — then use its IP with port 5555, and tap Allow when it asks. The port shown on its Wireless debugging screen is a different, encrypted one.</string>
     <string name="connect_forget">Forget</string>
     <string name="connect_host">Host</string>
     <string name="connect_host_hint">192.168.0.12</string>
@@ -52,6 +52,8 @@
     <string name="connect_pair_cancel">Stop waiting</string>
     <string name="connect_pair_checking">Checking the adb server…</string>
     <string name="connect_pair_found">Found %1$s — pairing…</string>
+    <string name="connect_pair_bundled">Starts an adb server inside this app, so no computer is needed.</string>
+    <string name="connect_pair_starting">Starting the built-in adb server…</string>
     <string name="connect_pair_needs_adb">Set the adb server host in Settings first — pairing is done by a computer running adb.</string>
     <string name="connect_pair_qr">Pair with a QR code</string>
     <string name="connect_pair_retry">Try again</string>
@@ -261,6 +263,14 @@
     <string name="key_home">Home</string>
     <string name="key_power">Power</string>
     <string name="device_screen">device screen</string>
+    <string name="mirror_fps">%1$d fps</string>
+    <string name="mirror_keyboard">Keyboard</string>
+    <string name="mirror_more">More</string>
+    <string name="mirror_quality">Quality</string>
+    <string name="mirror_reset_zoom">Reset zoom</string>
+    <string name="mirror_quality_high">High</string>
+    <string name="mirror_quality_low">Low</string>
+    <string name="mirror_quality_mid">Mid</string>
 
     <!-- desktop menu bar -->
     <string name="menu_close_window">Close Window</string>

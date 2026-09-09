@@ -68,8 +68,8 @@ fun InputDialog(deviceIds: List<String>, onDismiss: () -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(Dimens.gap / 2)) {
                     KeyButton(stringResource(Res.string.key_back)) { key(DeviceInput.KEY_BACK, "Back") }
                     KeyButton(stringResource(Res.string.key_home)) { key(DeviceInput.KEY_HOME, "Home") }
-                    KeyButton(stringResource(Res.string.input_enter)) { key(KEY_ENTER, "Enter") }
-                    KeyButton(stringResource(Res.string.input_delete)) { key(KEY_DEL, "Delete") }
+                    KeyButton(stringResource(Res.string.input_enter)) { key(DeviceInput.KEY_ENTER, "Enter") }
+                    KeyButton(stringResource(Res.string.input_delete)) { key(DeviceInput.KEY_DEL, "Delete") }
                 }
 
                 if (recent.isNotEmpty()) {
@@ -110,5 +110,3 @@ private fun rememberRecent(value: String) {
 }
 
 private const val MAX_RECENT = 10
-private const val KEY_ENTER = 66
-private const val KEY_DEL = 67

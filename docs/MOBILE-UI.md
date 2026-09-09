@@ -254,6 +254,38 @@ exactly these — Mirror, Logs, Files, Info, Connect, Settings, Message. Reuse i
 type and one enum names both a desktop window and a phone screen, so the shared action that opens a
 mirror doesn't need to know which it is.
 
+**Two fingers move the view, one finger always reaches the device.** Pinch zooms up to 4×, a
+two-finger drag pans, and neither is anything the device is told about — it is the picture being
+scaled, so it works the same over every transport. Two fingers are free to spend on this because
+`input` has no multi-touch to send in the first place: pinching *inside* the mirrored app was never
+possible. Four things make it work without breaking the gestures that were already there:
+
+- **The transform is a `graphicsLayer`, so the tap arithmetic is untouched.** Compose reports
+  pointer positions in a node's own pre-transform space, so `toDevice` maps a tap the same way at 4×
+  as at fit size. Growing the drawn size instead would re-measure and re-letterbox the frame on
+  every step of a pinch.
+- **A second finger takes the gesture and doesn't give it back.** Nothing has been sent to the
+  device until the finger lifts, so a tap or a swipe that turns into a pinch costs nothing to call
+  off. The exception is the long press, which fires *while the finger is down* — a pinch whose two
+  fingers land more than 500 ms apart sends one hold first. Letting go of one finger doesn't hand
+  the gesture back either, or the remains of a pinch would go to the device as a swipe.
+- **The touch slop is measured against the screen, not the frame.** The frame's pixels are `scale`
+  times smaller than they look, so without multiplying it back a swipe would start on a quarter of
+  the movement at 4×.
+- **The marks are drawn outside the transform.** `MirrorFeedbackOverlay` takes the point mapping
+  rather than sitting inside the layer, so a tap ring stays the size of a fingertip instead of
+  growing with the zoom, and the key bubble centres on what is being looked at rather than on the
+  part of the frame that has been panned off screen.
+
+The pan is bounded by how much frame there is to see — zero at fit size, so letting go of a zoom puts
+the picture back in the middle by itself, and zero in the letterboxed axis until the zoom is enough
+to fill it. **Reset zoom** is in the More menu, and reads the zoom inside the menu's own content so
+a pinch doesn't recompose the screen sixty times a second. The desktop has no pinch: **ctrl or cmd
+with the wheel** zooms about the pointer — both modifiers, since ctrl-scroll on macOS is the system's
+own screen zoom — and a plain wheel pans, but only while there is something to pan, so at fit size
+the event is left unconsumed and the wheel is still free to become the device swipe the Swing window
+sends.
+
 **A drag on the mirror is a swipe, not a tap.** `MirrorScreen` reads the whole gesture itself rather
 than through `detectTapGestures`, which reports a drag as a tap wherever the finger lifted — on a
 phone that turns every attempt to scroll the mirrored device into a click on whatever was under the
@@ -277,10 +309,58 @@ length over a screenshot of anything — with every figure in `Dimens`. The fram
 something is animating.
 
 **The mirror wears the dialog title bar**, not the device list's. It is a thing opened over the app
-the way a dialog is, so it gets `DialogTitle` — the accent band, the device's name over its serial,
-the close X, the whole band tappable — except it fills the screen instead of sitting in a card. The
-desktop's mirror window needs none of this: its heading is the OS title bar, the same as a dialog's
-there (see [UI-PORT.md](UI-PORT.md)).
+the way a dialog is, so it gets `DialogTitle` — the accent band, the close X, the whole band tappable
+— except it fills the screen instead of sitting in a card. The desktop's mirror window needs none of
+this: its heading is the OS title bar, the same as a dialog's there (see [UI-PORT.md](UI-PORT.md)).
+
+**And it wears the sheet's, not one of its own.** `DeviceHeading` in `DeviceSheet.kt` is the title,
+the icon, the state colour and the subtitle for a device id, and the sheet and the mirror both ask it
+— the mirror is opened from the sheet and covers it exactly, so a band that changed its icon, its
+colour and its second line on the way through read as a different device. What the mirror said before
+was the serial, which for a wireless device is `adb-RFCX20NB5TY-DBjIg4._adb-tls-connect._tcp`
+ellipsized into something nobody can read back.
+
+**The bar under the screen is four icons and a frame rate.** Back, Home, the keyboard and **More**,
+as the icons every Android device draws them as — a row of blue words was the widest thing on the
+screen and named each key twice, once on the button and again in the bubble the press raises. More is
+`AppPopupMenu` composed inside its own button, so it opens upwards from the foot of the window, and
+it holds **Recents** and **Power**: Recents is the least-pressed of the three navigation keys, and
+Power is the one key here that turns off the screen being watched, which is not something to put one
+target away from a thumb. Under those is **Quality** — High, Mid, Low, ticked where it stands,
+disabled while the mirror is polling because nothing on that route can act on it (see
+[ADB-TRANSPORTS.md](ADB-TRANSPORTS.md)). The frame rate sits at the right-hand end of the same bar,
+counted over the last second by `MirrorSource` and small enough to ignore until it is the thing being
+watched; a *fallen* rate is the reading worth having, which is why it is published on a clock rather
+than worked out from the gap between the last two frames. The frame itself gets a hairline border,
+since a screenshot of a white app on a light window has no edge of its own.
+
+**The keyboard key raises the phone's own keyboard and types onto the device.** What it focuses is a
+field one dp wide with no colour: a focus target has to be laid out to take focus, and there is
+nothing worth showing — what is being typed is on the screen above, a frame or two later, with
+`MirrorFeedback` putting each key up the moment it is pressed. Three things about it are the whole
+design:
+
+- **The field keeps what has been typed** instead of being emptied after each keystroke. An empty
+  field reports a backspace as no change at all and the device never sees it; with the text still
+  there, what the field *lost* is what to delete. The comparison is by common prefix, so an
+  autocorrect that rewrites a word comes out as the deletes and the letters that turn one into the
+  other, and a paste that carries newlines comes out as enter keys with the lines between them.
+- **Keystrokes go down a channel with one consumer**, because order is the point: every send
+  suspends on its way to the device, and two coroutines racing put "ab" on the screen as "ba" often
+  enough to see. Letters wait 50 ms for the next one and go as a single `input text` — on the polled
+  route that is one shell command instead of one per character, which is the same reason the Swing
+  window batches on the same timer — and a key that isn't a letter goes after them, never ahead.
+- **Enter is the IME's action key**, since `input text` can't carry a newline and a single-line field
+  is what turns Return into something to send rather than something to insert. Delete and Enter are
+  `DeviceInput.KEY_DEL` and `KEY_ENTER`, next to the keys the bar sends.
+
+Typing straight through is also what made `DeviceInput.shell` escape its argument: `input text` takes
+its string inside double quotes, and a quote, a backslash, a `$` or a backtick in what someone types
+would otherwise end that argument and leave the rest of it as a command of its own.
+
+**A phone's menu is not a desktop's menu at a phone's width.** `AppPopupMenu` is the desktop context
+menu — 24dp rows, 13sp — and `Dimens.menuItemHeight` and `menuTextSize` now read `LocalCompactUi`, so
+the same menu is 44dp and 17sp under a thumb. A 24dp row on a phone is a miss, not a choice.
 
 ## Connecting a device
 
@@ -696,8 +776,7 @@ when something is wrong: turn Debug Mode on, reproduce it, then Support / Feedba
 happened and sends the app log with it. View Logs shows the tail of that same file on the device,
 which is the only way to read it on a phone at all.
 
-Still missing on the phone: which connections are saved (with Edit and Forget), Keep connected, and
-mirror quality.
+Still missing on the phone: which connections are saved (with Edit and Forget), and Keep connected.
 
 ## Build order
 
@@ -752,8 +831,12 @@ Each step leaves the app usable and compiles on all three targets.
       password is `code || SSL_export_keying_material(64, "adb-label")` — absent from the JDK's
       `SSLSocket` and from every Apple TLS API. Conscrypt has it and has no iOS artifact; the only
       all-three-targets answer is vendoring BoringSSL through cinterop. See ADB-TRANSPORTS.md.
-    - **Bundle the `adb` binary** on Android, as LADB does. A weekend's work, Android only, a couple
-      of MB per ABI, and against the reason `scripts/*.sh` is on PORT-PLAN.md's staying-behind list.
+    - ~~**Bundle the `adb` binary** on Android~~ **Done, bar the binary itself.**
+      `manager/LocalAdbServer.kt` runs one on loopback and `PairingSession` pairs through it with no
+      computer involved — the objection that `scripts/*.sh` was rejected over does not apply, because
+      that was about a GUI macOS app inheriting neither `PATH` nor `ANDROID_HOME`, and an APK
+      carrying its own binary in `nativeLibraryDir` has neither problem. The binary is supplied per
+      build rather than committed; see `androidApp/src/main/jniLibs/README.md`.
 
 ## Deliberately later
 
@@ -762,8 +845,9 @@ Each step leaves the app usable and compiles on all three targets.
 - **Multi-select and bulk actions.** The desktop's reason for existing; a phone has no fleet. Built
   once — long press for a picker, a FAB, Remove Device — and taken back out: it was a mode to get
   into and out of, over a list of three rows, for one action nobody was asking a phone for.
-- **Standalone pairing.** Blocked on a TLS keying-material exporter rather than on SPAKE2; see above
-  and ADB-TRANSPORTS.md for what each way through it costs.
+- **Standalone pairing in pure Kotlin.** Blocked on a TLS keying-material exporter rather than on
+  SPAKE2. On Android it is no longer blocked at all — the bundled `adb` does it — so what is left
+  here is iOS, which cannot execute a bundled binary and so pairs only through a server elsewhere.
 - **Tier III live video.** ~70% of the total work, per ADB-TRANSPORTS.md, on the platform least able
   to spare it.
 - **Serving the HTTP API from a phone.** A phone has nothing attached to serve.

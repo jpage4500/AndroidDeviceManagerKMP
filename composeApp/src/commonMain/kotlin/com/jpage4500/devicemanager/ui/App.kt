@@ -5,7 +5,6 @@ import androidx.compose.ui.backhandler.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.manager.*
 import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.components.*
@@ -72,12 +71,15 @@ private fun CompactLayout() {
         OnBack(enabled = true) { mirroring = null }
         // the dialog's own title bar rather than the list's: a mirror is a thing opened over the
         // app the way a dialog is, and the whole band closes it — it just fills the screen instead
-        // of sitting in a card
+        // of sitting in a card. the same band the sheet under it was wearing, down to the icon and
+        // the state colour — see deviceHeading
+        val heading = deviceHeading(mirrored)
         Column(Modifier.safeInsets()) {
             DialogTitle(
-                title = DeviceManager.nameOf(mirrored),
-                subtitle = Device.serialOf(mirrored),
-                icon = Res.drawable.mirror,
+                title = heading.title,
+                icon = heading.icon,
+                iconTint = heading.iconTint,
+                subtitle = heading.subtitle,
                 onDismiss = { mirroring = null },
             )
             MirrorScreen(mirrored)

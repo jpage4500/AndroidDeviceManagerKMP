@@ -167,6 +167,23 @@ object Dimens {
     val mirrorKeyCorner = 32.dp
     val mirrorKeyGlow = 8.dp
 
+    // the frame's own outline: a screenshot of a white app on a light window has no edge of its own,
+    // and without one the mirror reads as part of the app rather than as the device's screen
+    val mirrorBorder = 1.dp
+    // the bar under it. icons rather than labels, so it needs the height of a touch target and no
+    // more — the row of text buttons it replaced was half again as tall for the same four keys
+    val mirrorBarHeight = 44.dp
+    val mirrorBarButton = 40.dp
+    val mirrorBarIcon = 22.dp
+    // between the buttons. wider than a form's gap because these are hit without looking, with the
+    // device's screen above holding the attention
+    val mirrorBarSpacing = 20.dp
+    // the field that raises the phone's keyboard, which nobody is meant to see: a focus target has
+    // to be laid out to take focus, so it is a dp of nothing rather than no field at all
+    val mirrorTypeField = 1.dp
+    // the frame rate, small enough to ignore until it is the thing you are watching
+    val mirrorFpsSize = 10.sp
+
     // battery bar
     val batteryWidth = 22.dp
     val batteryHeight = 11.dp
@@ -211,7 +228,9 @@ object Dimens {
     val menuMinWidth = 180.dp
     val menuVerticalPadding = 5.dp
     val menuShadow = 12.dp
-    val menuItemHeight = 24.dp
+    // and 44 on a phone, which is a thumb: this menu is the desktop's context menu, and a 24.dp row
+    // is a miss rather than a choice
+    val menuItemHeight: Dp @Composable get() = if (LocalCompactUi.current) 44.dp else 24.dp
     val menuItemCorner = 5.dp
     val menuItemInset = 5.dp
     val menuTextPadding = 11.dp
@@ -220,7 +239,9 @@ object Dimens {
     val menuIconSpacing = 7.dp
     // what makes IntrinsicSize.Max size a menu to its widest item rather than its widest label
     val menuTrailingGap = 24.dp
-    val menuTextSize = 13.sp
+    val menuTextSize: TextUnit @Composable get() = if (LocalCompactUi.current) 17.sp else 13.sp
+    /** a heading over a group of items — smaller than the items, the way a section label reads. */
+    val menuHeaderSize: TextUnit @Composable get() = if (LocalCompactUi.current) 14.sp else 11.sp
 }
 
 /**

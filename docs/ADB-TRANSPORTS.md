@@ -178,6 +178,36 @@ and is on the App Store, so both the approach and the review outcome have preced
   `WRTE` chunks back into a byte stream and gathers small writes until a flush. So the file explorer
   works on this route with no second implementation.
 
+### Which port, and why the wireless-debugging one is not it
+
+Worth being exact, because the two ports look alike and only one of them can be dialled:
+
+| Port | Advertised as | What it wants | Reachable here |
+|---|---|---|---|
+| the one `adb tcpip 5555` opens | `_adb._tcp`, and only while tcpip mode is on (`setup_mdns` runs from `setup_adb`, which needs `service.adb.tcp.port`) | plain `AUTH`: sign a token, and an unknown key raises **"Allow debugging?"** on the device | **yes** |
+| the random one on the Wireless debugging screen | `_adb-tls-connect._tcp` | `STLS`, then TLS 1.3 with a client certificate | no, not yet |
+
+**The wireless-debugging port cannot authorise a new key at all**, which is the part that is easy to
+get wrong: `adbd_tls_verify_cert` walks the keys the device already trusts, compares each against the
+client certificate's public key, and returns 0 if none match — after which
+`adbd_auth_tls_handshake` kicks the connection, "only allow one attempt at the handshake". There is
+no prompt on that path. `adbd_auth_prompt_user` belongs to the plain `AUTH` path, and that is the
+only way a key gets added other than pairing.
+
+So the ordering is forced, and it is also why pairing through a desk does **not** help a phone
+connect directly — pairing hands over the *desk's* key, not this app's:
+
+1. get this app's key into the device's `adb_keys`, which today means the plain port and its dialog
+2. once it is there, `IteratePublicKeys` finds it on **every** transport, the TLS one included
+
+Which is the real prize in implementing `STLS`: not a new way to gain trust, but the ability to use
+trust already gained on the port that survives a reboot and needs no `adb tcpip`. It needs TLS with a
+client certificate and **no** exporter — `ktor-network-tls` can do it on desktop and android,
+`Network.framework` with a `SecIdentity` on iOS — so it is a much smaller job than pairing.
+
+One exception worth knowing: `adbd_tls_verify_cert` short-circuits with *"auth not required"* when
+`ro.adb.secure=0`, so on an emulator or a userdebug build any certificate is accepted.
+
 ### Pairing is still the gap, and now for a specific reason
 
 **Wireless-debugging pairing needs a TLS exporter that no platform here exposes.** Reading
@@ -194,6 +224,7 @@ adb, Conscrypt and Android's own TLS stack use. So pairing directly costs one of
 |---|---|---|---|
 | Conscrypt (`conscrypt-openjdk-uber`, ~8 MB; `conscrypt-android`, ~4 MB per ABI) | yes | yes | **never** — no artifact |
 | vendor BoringSSL through cinterop | yes | yes | yes, and it is a C build in the KMP graph |
+| **ship Google's `adb` binary and run it** | not needed | **done** — see below | never — iOS cannot exec |
 
 SPAKE2 itself is *not* the blocker it was assumed to be: BoringSSL's variant is Ed25519 with fixed M
 and N points, and [spake2-java](https://github.com/MuntashirAkon/spake2-java) is a pure-Java port of
@@ -202,8 +233,50 @@ and N points, and [spake2-java](https://github.com/MuntashirAkon/spake2-java) is
 feeds AES-128-GCM for one `PeerInfo` exchange. All of that is portable. The TLS exporter under it is
 not.
 
-Which is why `PairingSession` still hands the handshake to an adb server's `host:pair`, and why
-`canPair` stays false without one.
+### The way out on Android: ship Google's binary
+
+Which is why `PairingSession` hands the handshake to an adb server's `host:pair` — and why, on
+Android, **this app can now be that server**. `manager/LocalAdbServer.kt` runs a bundled `adb` with
+`-L tcp:127.0.0.1:5037 server nodaemon`, and nothing above it changed at all: it is an ordinary adb
+server on loopback, so `AdbServerTransport` reads it and `PairingSession` pairs through it exactly as
+they do with a desk's. The exporter problem doesn't get solved, it gets delegated to the one
+implementation that already has BoringSSL in it.
+
+`AdbServerTransport(bundled = true)` is the only new concept — a flag saying "this loopback address
+is ours", since `canPair` is otherwise false for loopback on a phone precisely because there is
+normally nothing there.
+
+Three things about it worth knowing before touching it:
+
+- **The binary is committed for arm64 and pinned by checksum**, because building it needs a ~100 GB
+  AOSP tree and so cannot be a CI step — at ~10 MB changing about once a year, checking it in beats
+  LFS or fetching a release asset, both of which keep the trust decision and add a failure mode.
+  `:androidApp:verifyAdbBinary` runs on every build: a release refuses a binary with no recorded
+  checksum, a debug build warns, and either way a mismatch fails the build naming both hashes.
+  x86_64 stays local. The app is correct with none of it — `AdbDaemon.isBundled` is false, the
+  Connect panel says so, every other route is unaffected. What is committed today is LADB's
+  prebuilt, 4.9 MB, verified to need nothing outside bionic; `androidApp/src/main/jniLibs/
+  PROVENANCE.md` is the record, and it is a third-party build rather than one made here, which is
+  the weak link and is written down as such.
+- **It has to be a *statically* linked adb.** Termux's `android-tools` is the same upstream source
+  but links against Termux's own C++ runtime, and bundling it means bundling its closure — measured
+  at 108 shared objects and 12 MB per ABI, with `libc++` missing from that repository entirely.
+  `LD_LIBRARY_PATH` is pointed at the binary's directory so a dynamically linked one *could* work,
+  but that is a fallback rather than the plan.
+- **`libadb.so` in `jniLibs`, and `useLegacyPackaging = true`.** Android mounts an app's data
+  directory no-exec (API 29+), so `nativeLibraryDir` is the only place left to run something from,
+  and only `lib*.so` gets packaged there — so an executable must be named like a library to be
+  installed anywhere runnable. Legacy packaging is what makes it a real file on disk rather than a
+  mapping inside the APK. Verified: `lib/arm64-v8a/libadb.so` appears in the APK and the merged
+  manifest carries `extractNativeLibs="true"`.
+
+A loose end, deliberately left: the child process can outlive the app if Android kills it without
+unwinding, leaving an orphan holding 5037. That is self-healing rather than broken — the next launch
+finds a server already answering on loopback and uses it — but it is why `launch()` kills its own
+handle first.
+
+**iOS gets none of this.** It executes nothing an app brought with it, so iOS pairs only through an
+adb server somewhere else, permanently.
 
 ## Three tiers hide behind "remote control"
 
@@ -239,6 +312,15 @@ Three things about that websocket are worth knowing before touching it, and all 
   would land in the wrong place on any scaled frame.
 - **`intervalMs` in the URL is ignored** — the handshake reads only `serial` and `compress` — so the
   interval is asked for with a `setInterval` message once the socket is up.
+- **Quality is asked for the same way, and asked for again after every reconnect.** `setQuality`
+  takes `high`, `medium` or `low` — `transport/ScreenQuality`, the Swing combo box's own three: the
+  capture is scaled to 1, ¾ or ½ and its JPEG re-encoded at 0.70, 0.50 or 0.30. The server starts
+  every socket at high of its own accord, so `RemoteScreenStream` holds whichever level was picked
+  and sends it again in the handshake — a mirror dropped on a link too slow for high would otherwise
+  come back at the quality that dropped it. **Only a pushed stream has this**: `screencap` answers a
+  full-size PNG and takes no argument about it, so a polled mirror is at high whatever is asked,
+  which is why `MirrorSource.streamed` exists and why the mirror's menu draws the levels disabled
+  when it is false.
 - **A refusal arrives *after* the upgrade succeeds.** A bad token, an unknown serial and an unknown
   path all complete the handshake and then send an error and close, so a server too old to have
   `/ws/screen` looks exactly like a connection that dropped. `MirrorSource` tells them apart by

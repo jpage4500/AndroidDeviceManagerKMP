@@ -304,9 +304,14 @@ class AdbDeviceConnection private constructor(
                     }
                 }
 
+                // a wireless-debugging port, which is TLS-only and accepts *no* new key: adbd
+                // compares the client certificate against the keys it already trusts and kicks the
+                // connection when it doesn't match, with no dialog anywhere. So this is not
+                // something the user can allow their way out of — see docs/ADB-TRANSPORTS.md
                 AdbMessage.A_STLS -> return AdbOutcome.Err(
                     AdbError.UNAUTHORIZED,
-                    "$address wants a TLS certificate — pair it through an adb server for now",
+                    "$address is a wireless debugging port; run `adb tcpip 5555` on the device " +
+                        "and connect to port 5555 instead",
                 )
 
                 else -> log.d("handshake: $address: ignoring ${header.name}")

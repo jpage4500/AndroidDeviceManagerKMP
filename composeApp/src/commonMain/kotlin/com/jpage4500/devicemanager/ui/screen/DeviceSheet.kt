@@ -47,11 +47,9 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> Unit) {
     val devices by DeviceManager.devices.collectAsState()
-    val connections by DeviceManager.connections.collectAsState()
     val device = devices.firstOrNull { it.id == deviceId }
     val serial = device?.serial ?: Device.serialOf(deviceId)
-    // which desk this device came in through, which is the whole point of saying it here
-    val via = connections.firstOrNull { it.id == Device.connectionOf(deviceId) }?.label.orEmpty()
+    val heading = deviceHeading(deviceId)
     val scope = rememberCoroutineScope()
 
     var shot by remember(deviceId) { mutableStateOf<ByteArray?>(null) }
@@ -67,18 +65,10 @@ fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> U
     val collapsed by SettingsManager.getEnumSetAsState<InfoSection>(AppPref.INFO_COLLAPSED)
 
     BaseDialog(
-        title = device?.displayName ?: serial,
-        // the same icon and the same state colour the list row uses, so the two agree at a glance
-        icon = if (device?.isWireless == true) Res.drawable.device_remote else Res.drawable.android,
-        iconTint = stateColor(device?.state),
-        // not the serial: a wireless one eats the line to say nothing, and it is the first row of
-        // the list below. where the device came from and what it runs is what the name can't say —
-        // plus its state, but only when that state is worth reading
-        subtitle = listOfNotNull(
-            via.ifEmpty { null },
-            device?.os?.let { "Android $it" },
-            device?.state?.label?.takeUnless { online },
-        ).joinToString("  ·  "),
+        title = heading.title,
+        icon = heading.icon,
+        iconTint = heading.iconTint,
+        subtitle = heading.subtitle,
         // the shot takes over the body, so its Done is the dialog's own OK rather than a button of
         // its own; it clears the shot instead of closing the sheet
         okText = stringResource(Res.string.sheet_done).takeIf { shot != null },
@@ -176,6 +166,44 @@ fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> U
     // one is on top — see DialogStack
     ConfirmDialog(confirm) { confirm = null }
     InputDialog(rename) { rename = null }
+}
+
+/**
+ * how a device names itself at the top of a screen — the title band's four values, in one place.
+ *
+ * The sheet and the mirror it opens are the same device seen twice, and the mirror covers the sheet
+ * exactly: a band that changed its icon, its colour and its second line on the way through read as a
+ * different device. The mirror's own version said the serial, which for a wireless device is
+ * `adb-RFCX20NB5TY-DBjIg4._adb-tls-connect._tcp` truncated to nothing anyone can read back.
+ */
+class DeviceHeading(
+    val title: String,
+    val icon: DrawableResource,
+    val iconTint: Color,
+    val subtitle: String,
+)
+
+@Composable
+fun deviceHeading(deviceId: String): DeviceHeading {
+    val devices by DeviceManager.devices.collectAsState()
+    val connections by DeviceManager.connections.collectAsState()
+    val device = devices.firstOrNull { it.id == deviceId }
+    // which desk this device came in through, which is the whole point of saying it here
+    val via = connections.firstOrNull { it.id == Device.connectionOf(deviceId) }?.label.orEmpty()
+    return DeviceHeading(
+        title = device?.displayName ?: Device.serialOf(deviceId),
+        // the same icon and the same state colour the list row uses, so the two agree at a glance
+        icon = if (device?.isWireless == true) Res.drawable.device_remote else Res.drawable.android,
+        iconTint = stateColor(device?.state),
+        // not the serial: a wireless one eats the line to say nothing, and it is the first row of
+        // the details below. where the device came from and what it runs is what the name can't say
+        // — plus its state, but only when that state is worth reading
+        subtitle = listOfNotNull(
+            via.ifEmpty { null },
+            device?.os?.let { "Android $it" },
+            device?.state?.label?.takeUnless { device.isOnline },
+        ).joinToString("  ·  "),
+    )
 }
 
 /** the colour a device's state reads as, the same mapping the list row uses. */

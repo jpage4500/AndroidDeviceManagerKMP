@@ -45,6 +45,12 @@ class RemoteScreenStream(
     @Volatile
     private var live: WebSocketSession? = null
 
+    // what was last asked for, so a reconnect asks again: the server starts every socket of its own
+    // accord at high, and a mirror dropped on a slow link would come back at the quality that made
+    // it drop
+    @Volatile
+    private var quality = ScreenQuality.HIGH
+
     override val frames: Flow<ScreenFrame> = channelFlow {
         val out = this
         var seen = 0L
@@ -71,6 +77,9 @@ class RemoteScreenStream(
                 // the handshake reads only serial and compress, so an interval in the URL is
                 // ignored — it has to be asked for on the socket, and this is the one place it is
                 send(Frame.Text(intervalJson(intervalMs)))
+                // only when it isn't the server's own default: asking for what is already set is
+                // answered with a "already set to high" line and nothing else
+                if (quality != ScreenQuality.HIGH) send(Frame.Text(qualityJson(quality)))
                 for (frame in incoming) {
                     when (frame) {
                         is Frame.Binary -> parseFrame(frame.data)?.let {
@@ -107,13 +116,24 @@ class RemoteScreenStream(
             log.d("send: $serial isn't connected, dropping a ${event::class.simpleName}")
             return
         }
+        // the socket went between the gesture and this; reconnecting is the frame loop's job
+        session.sendOrDrop(inputJson(event))
+    }
+
+    override suspend fun setQuality(quality: ScreenQuality) {
+        this.quality = quality
+        // held either way: a stream that is down comes back asking for this in its own handshake
+        log.d("setQuality: $serial ${quality.wire}")
+        live?.sendOrDrop(qualityJson(quality))
+    }
+
+    private suspend fun WebSocketSession.sendOrDrop(json: String) {
         try {
-            session.send(Frame.Text(inputJson(event)))
+            send(Frame.Text(json))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // the socket went between the gesture and this; reconnecting is the frame loop's job
-            log.w("send: $serial ${e.message}")
+            log.w("sendOrDrop: $serial ${e.message}")
         }
     }
 
@@ -167,6 +187,11 @@ class RemoteScreenStream(
         put(FIELD_INTERVAL, ms.coerceIn(MIN_INTERVAL_MS, MAX_INTERVAL_MS))
     }.toString()
 
+    private fun qualityJson(quality: ScreenQuality): String = buildJsonObject {
+        put(FIELD_ACTION, ACTION_SET_QUALITY)
+        put(FIELD_QUALITY, quality.wire)
+    }.toString()
+
     /** an event as the server's own input message — the other half of [DeviceInput.shell]. */
     private fun inputJson(event: DeviceInput.Event): String = buildJsonObject {
         put(FIELD_ACTION, ACTION_INPUT)
@@ -217,11 +242,13 @@ class RemoteScreenStream(
         private const val FIELD_STATUS = "status"
         private const val FIELD_MESSAGE = "message"
         private const val FIELD_INTERVAL = "intervalMs"
+        private const val FIELD_QUALITY = "quality"
         private const val FIELD_WIDTH = "width"
         private const val FIELD_HEIGHT = "height"
 
         private const val ACTION_INPUT = "input"
         private const val ACTION_SET_INTERVAL = "setInterval"
+        private const val ACTION_SET_QUALITY = "setQuality"
         private const val TYPE_ERROR = "error"
         private const val INPUT_TAP = "tap"
         private const val INPUT_SWIPE = "swipe"

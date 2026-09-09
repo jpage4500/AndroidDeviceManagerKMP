@@ -1,0 +1,5 @@
+# sha256 of each bundled adb, verified on every build by :androidApp:verifyAdbBinary.
+# Record where the binary came from in PROVENANCE.md — a checksum pins *which* file
+# ships, not whether it should.
+arm64-v8a  47ea035fa5ed57f6149a2b025bbbd4b21584c355c05d0400416804715e4c12de
+x86_64  62cc0f7707c83c98aa4de699492c61091eda9d68b3db9ea2a185b179da505bfa

@@ -80,14 +80,16 @@ class AppMenuScope internal constructor(private val dismiss: () -> Unit) {
 
     /**
      * @param shortcut drawn right-aligned, as a menu bar shows a key equivalent
-     * @param leading drawn before the text — a device's status icon, say
+     * @param leading drawn before the text — a device's status icon, say — and handed the colour
+     *   the text is using, so a tinted icon dims when the row is disabled and turns over with it
+     *   when it highlights, rather than staying dark on the highlight
      */
     @Composable
     fun Item(
         text: String,
         enabled: Boolean = true,
         shortcut: String? = null,
-        leading: (@Composable () -> Unit)? = null,
+        leading: (@Composable (Color) -> Unit)? = null,
         onClick: () -> Unit,
     ) {
         val interaction = remember { MutableInteractionSource() }
@@ -115,7 +117,7 @@ class AppMenuScope internal constructor(private val dismiss: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (leading != null) {
-                leading()
+                leading(contentColor)
                 Spacer(Modifier.width(Dimens.menuIconSpacing))
             }
             Text(
@@ -138,6 +140,29 @@ class AppMenuScope internal constructor(private val dismiss: () -> Unit) {
                 )
             }
         }
+    }
+
+    /**
+     * a heading over the items under it — what the group is, not one of the choices.
+     *
+     * Not clickable and not hoverable, which is what tells it apart from a disabled item.
+     */
+    @Composable
+    fun Header(text: String) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            fontSize = Dimens.menuHeaderSize,
+            color = Colors.secondaryText,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(
+                start = Dimens.menuItemInset + Dimens.menuTextPadding,
+                end = Dimens.menuTextPadding,
+                top = Dimens.menuSeparatorSpacing,
+                bottom = Dimens.menuSeparatorSpacing,
+            ),
+        )
     }
 
     @Composable

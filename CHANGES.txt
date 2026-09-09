@@ -78,3 +78,15 @@
 - see the logs of a device that's attached to another computer
 - connect straight to another device, with no computer involved
 - pick a nearby device off the network instead of typing its address
+
+09/09
+- Mirror: Back and Home are icons on a shorter bar
+- Mirror: Recents and Power are in a More menu at the end of that bar
+- Mirror: type on the mirrored device with the keyboard of the one in your hand
+- Mirror: pick High, Mid or Low quality for a screen streamed through a computer
+- Mirror: see how many frames a second are arriving
+- Mirror: the mirrored screen has a border around it
+- Mirror: the title bar matches the one on the device's page
+- phone: pair a device by QR with no computer involved at all
+- Mirror: pinch to zoom into the screen and drag with two fingers to move around
+- Mirror: on the desktop, ctrl or cmd with the scroll wheel zooms the screen

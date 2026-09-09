@@ -6,15 +6,15 @@ import kotlinx.coroutines.flow.*
 /**
  * how the app reaches devices.
  *
- * The one seam the whole port turns on. There are three ways in and they differ mainly in what they
+ * The one seam the whole port turns on. There are four ways in and they differ mainly in what they
  * can reach, not in what they can do — so everything above this interface is written once:
  *
  * | | reaches USB | needs a desktop |
  * |---|---|---|
- * | [AdbServerTransport] against `127.0.0.1:5037` | yes | it *is* the desktop |
+ * | [AdbServerTransport] against `127.0.0.1:5037` | yes | it *is* the desktop, unless it is this app's own bundled adb |
  * | [AdbServerTransport] against a LAN address | yes | yes |
  * | [RemoteHttpTransport] against a Device Manager instance | yes | yes |
- * | direct to `adbd` on 5555 (not yet written) | no | no |
+ * | [DirectDeviceTransport] against `adbd` on 5555 | no | no |
  *
  * See docs/ADB-TRANSPORTS.md for why the desktop build must keep the 5037 path: `adbd` is reachable
  * over TCP from anywhere, but a **USB** device is claimed exclusively by whichever adb server is
@@ -241,6 +241,31 @@ interface ScreenStream {
      * was under the finger has moved.
      */
     suspend fun send(event: DeviceInput.Event)
+
+    /**
+     * how much picture to send, from here on.
+     *
+     * The far end keeps the clock and does the scaling, so this is a request rather than a setting:
+     * a stream that has nothing to offer below its top quality keeps sending what it sends.
+     */
+    suspend fun setQuality(quality: ScreenQuality) = Unit
+}
+
+/**
+ * how much of a device's screen a pushed frame carries.
+ *
+ * The three the Swing window's combo box has, by the names the server reads on the wire: the frame
+ * is scaled to 1, ¾ or ½ and its JPEG re-encoded at 0.70, 0.50 or 0.30. The header still says the
+ * *device's* size at every one of them, which is what keeps a tap landing where it was aimed — see
+ * [ScreenFrame].
+ *
+ * Only a pushed stream has this. A polled `screencap` answers a full-size PNG and takes no argument
+ * about it, so a mirror falling back to polling is a mirror at [HIGH] whatever is asked for.
+ */
+enum class ScreenQuality(val wire: String) {
+    HIGH("high"),
+    MEDIUM("medium"),
+    LOW("low"),
 }
 
 /** the input events a mirrored screen sends back, in the one place both transports share. */
@@ -286,10 +311,24 @@ object DeviceInput {
     fun shell(event: Event): String = when (event) {
         is Tap -> "input tap ${event.x} ${event.y}"
         is Swipe -> "input swipe ${event.x1} ${event.y1} ${event.x2} ${event.y2} ${event.durationMs}"
-        // a space has to be sent as `%s`; `input text` splits its argument on whitespace
-        is Text -> "input text \"${event.value.replace(" ", "%s")}\""
+        is Text -> "input text \"${shellText(event.value)}\""
         is Key -> "input keyevent ${event.keyCode}"
     }
+
+    /**
+     * a string as the argument to `input text`, inside the double quotes [shell] puts around it.
+     *
+     * A space has to go as `%s`, because `input text` splits its argument on whitespace. The other
+     * four are the ones a shell still reads *inside* double quotes — and with a keyboard typing
+     * straight through, a quote in what someone types would otherwise end the argument and leave
+     * the rest of it as a command of its own.
+     */
+    private fun shellText(value: String): String = value
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("$", "\\$")
+        .replace("`", "\\`")
+        .replace(" ", "%s")
 
     // the key codes the mirror window's buttons send
     const val KEY_HOME = 3
@@ -298,4 +337,8 @@ object DeviceInput {
     const val KEY_APP_SWITCH = 187
     const val KEY_VOLUME_UP = 24
     const val KEY_VOLUME_DOWN = 25
+
+    // and the two a keyboard sends that aren't text: `input text` carries neither
+    const val KEY_ENTER = 66
+    const val KEY_DEL = 67
 }
