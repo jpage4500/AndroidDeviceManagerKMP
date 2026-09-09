@@ -40,8 +40,9 @@
     <string name="connect_add">Add a device</string>
     <string name="connect_connected">Connected to %1$s · %2$d devices</string>
     <string name="connect_device_by_ip">Connect to a device</string>
-    <string name="connect_device_by_ip_msg">Pair with its wireless debugging screen</string>
-    <string name="connect_direct_later">Connecting straight to another device, with no computer involved, is not built yet.</string>
+    <string name="connect_device_by_ip_msg">Straight to another device, no computer involved</string>
+    <string name="connect_direct_connected">Connected to %1$s</string>
+    <string name="connect_direct_msg">The address from the other device\'s Wireless debugging screen. Tap Allow when it asks.</string>
     <string name="connect_forget">Forget</string>
     <string name="connect_host">Host</string>
     <string name="connect_host_hint">192.168.0.12</string>

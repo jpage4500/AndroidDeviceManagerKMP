@@ -18,7 +18,7 @@ private val log = LoggerConfig.createLogger("AdbSync")
  * file, which costs a connect, a transport switch and a service switch every time.
  */
 class AdbSync internal constructor(
-    private val stream: AdbStream,
+    private val stream: AdbByteStream,
     /** true when the device has `stat_v2`/`ls_v2` — see [AdbFeatures.syncV2]. */
     private val v2: Boolean,
 ) {

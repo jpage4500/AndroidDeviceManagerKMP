@@ -221,18 +221,52 @@ private fun ServerForm() {
 /**
  * a device, reached without a computer in the middle.
  *
- * That is what this section is *for*, and only half of it exists. Showing a QR for the other device
- * to scan works today, but the pairing behind it is still done by an adb server — and there is no
- * address field, because typing one would go through that server too. Reaching another phone with
- * nothing else involved needs the direct `adbd` transport, which is not written; see
- * docs/MOBILE-UI.md for what that costs.
+ * Two halves, and they need different things. **Connecting** is done here: `DirectDeviceTransport`
+ * talks to `adbd` itself, so an address plus the "Allow debugging?" dialog on the other device is
+ * the whole of it. **Pairing** — the QR the other device scans from its wireless debugging screen —
+ * is still done by an adb server, because the handshake behind it needs a TLS exporter no platform
+ * here exposes; see docs/ADB-TRANSPORTS.md.
+ *
+ * So the address field comes first: it is the part that works with nothing else involved. The QR
+ * below it is offered only where there is a server to do the cryptography.
  */
 @Composable
 private fun DeviceForm() {
-    // any attached adb server will do the cryptography; a Device Manager server can't
+    val scope = rememberCoroutineScope()
+    // any attached adb server will do the pairing cryptography; a Device Manager server can't
     val connections by DeviceManager.connections.collectAsState()
     val canPair = connections.any { it.canPair }
+
+    var host by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf(DirectDeviceTransport.DEFAULT_PORT.toString()) }
+    var busy by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<Status?>(null) }
     var pairing by remember { mutableStateOf(false) }
+    val found = rememberAdbDevices()
+
+    fun connect() {
+        if (busy || host.isBlank()) return
+        busy = true
+        status = null
+        scope.launch {
+            val transport = DirectDeviceTransport(
+                host = host.trim(),
+                port = port.toIntOrNull() ?: DirectDeviceTransport.DEFAULT_PORT,
+            )
+            // probed before it is added, so a typo doesn't leave a dead row in the list — and so the
+            // status line can name the device rather than the address that was typed
+            transport.probe()
+                .onSuccess {
+                    DeviceManager.addConnection(transport)
+                    status = Status(getString(Res.string.connect_direct_connected, it), isError = false)
+                }
+                .onFailure {
+                    transport.close()
+                    status = Status(it.message ?: "couldn't connect", isError = true)
+                }
+            busy = false
+        }
+    }
 
     Column(
         Modifier.fillMaxWidth().padding(horizontal = Dimens.rowPadding).padding(bottom = Dimens.gapLarge),
@@ -240,7 +274,41 @@ private fun DeviceForm() {
     ) {
         if (pairing) {
             PairPanel(onDone = { pairing = false })
+            Spacer(Modifier.height(Dimens.gap))
         } else {
+            // a device left in `adb tcpip` mode announces itself, so the common case needs no typing
+            found.forEach { service ->
+                OptionRow(
+                    icon = Res.drawable.device_remote,
+                    title = service.name,
+                    subtitle = "${service.host}:${service.port}",
+                    enabled = !busy,
+                    onClick = {
+                        host = service.host
+                        port = service.port.toString()
+                        connect()
+                    },
+                )
+            }
+            LabelledField(Res.string.connect_host, host, KeyboardType.Uri, { host = it }, ::connect, Res.string.connect_host_hint)
+            LabelledField(Res.string.connect_port, port, KeyboardType.Number, { port = it.digits(5) }, ::connect)
+            Spacer(Modifier.height(Dimens.gapLarge))
+            CenteredButton(
+                label = stringResource(Res.string.connect),
+                enabled = !busy && host.isNotBlank(),
+                onClick = ::connect,
+            )
+            Spacer(Modifier.height(Dimens.gap))
+            Text(
+                text = stringResource(Res.string.connect_direct_msg),
+                style = MaterialTheme.typography.bodySmall,
+                color = Colors.secondaryText,
+                textAlign = TextAlign.Center,
+            )
+            StatusText(status)
+            Spacer(Modifier.height(Dimens.gapLarge))
+            HorizontalDivider(color = Colors.divider)
+            Spacer(Modifier.height(Dimens.gapLarge))
             CenteredButton(
                 label = stringResource(Res.string.connect_pair_qr),
                 icon = Res.drawable.qr_code,
@@ -259,23 +327,28 @@ private fun DeviceForm() {
                 textAlign = TextAlign.Center,
             )
         }
-
-        // there is deliberately no address field here. Typing one would reach the device through a
-        // desk's adb server, which is the opposite of what this section is for: it exists to reach
-        // another phone with no computer in the middle, and that needs the direct adbd transport
-        Spacer(Modifier.height(Dimens.gap))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = stringResource(Res.string.connect_direct_later),
-                style = MaterialTheme.typography.bodySmall,
-                color = Colors.menuDisabledText,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f, fill = false),
-            )
-            Spacer(Modifier.width(Dimens.gap))
-            Chip(stringResource(Res.string.connect_later))
-        }
     }
+}
+
+/**
+ * every device on the network announcing a plain adb port, for as long as this is composed.
+ *
+ * Started on the main thread and stopped when the form goes away, which is what `browseMdns` asks
+ * for: iOS schedules `NSNetServiceBrowser` on the calling thread's run loop, and a background
+ * thread has none. Duplicates are dropped by address rather than by name, because a resolve can
+ * fire more than once for the same device.
+ */
+@Composable
+private fun rememberAdbDevices(): List<MdnsService> {
+    var found by remember { mutableStateOf(emptyList<MdnsService>()) }
+    DisposableEffect(Unit) {
+        val browse = browseMdns(MDNS_ADB_CONNECT) { service ->
+            found = (found.filterNot { it.host == service.host && it.port == service.port } + service)
+                .sortedBy { it.name }
+        }
+        onDispose { browse.close() }
+    }
+    return found
 }
 
 /**

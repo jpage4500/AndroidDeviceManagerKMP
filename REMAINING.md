@@ -82,7 +82,11 @@ and [ADB-TRANSPORTS.md](docs/ADB-TRANSPORTS.md) for what can reach a device.
 - [x] Manual **IP + port** entry (defaults to `:5555`), remembering the last IP and preselecting its
       last octet so only that has to be retyped
 - [x] **Recent wireless devices** list, persisted, with **Delete** on the right-click menu
-- [ ] **Pair with QR code** — Android 11+ wireless debugging pairing over mDNS
+- [x] **Pair with QR code** — Android 11+ wireless debugging pairing over mDNS, with an adb server
+      doing the handshake. Pairing *without* one is blocked on a TLS keying-material exporter that
+      neither the JDK nor Apple exposes — see [ADB-TRANSPORTS.md](docs/ADB-TRANSPORTS.md)
+- [x] **Connect straight to a device**, no adb server anywhere — `DirectDeviceTransport` against a
+      plain `adb tcpip 5555` port, found over mDNS or typed in
 - [x] **Connect to a remote server** — set its URL and token in Settings
 - [ ] **Share my devices** — run that server here
 - [x] A **transport picker**: local adb server, an adb server on the LAN, or a remote instance.

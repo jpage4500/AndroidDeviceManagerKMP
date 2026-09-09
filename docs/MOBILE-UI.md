@@ -363,18 +363,23 @@ in take:
 
 - **Connect to a computer** — *scan* the QR that Device Manager shows on its Share Server dialog
   (nothing typed at all), then *manual entry* behind a link for the address, port and token.
-- **Connect to a device** — *pair with a QR code*, which this app **shows** and the other device
-  scans. No address field, deliberately: see below.
+- **Connect to a device** — an *address* (found over mDNS or typed), then *pair with a QR code*,
+  which this app **shows** and the other device scans.
 
 The two QRs point in opposite directions and it is worth being clear which is which — one has our
 camera reading someone else's screen, the other has our screen being read by someone else's camera.
 
-**The two sections mean different things, and only one of them is finished.** A computer is reached
-over the Device Manager HTTP API and works today. A *device* is meant to be reached **directly, with
-no computer anywhere** — that is the whole point of the section — and that needs the `adbd`
-transport, which is not written. So there is no address field there: typing one would quietly go
-through a desk's adb server, which is the opposite of what the section says it does. The QR pairing
-in it works, but it still leans on a desk for the handshake, and the section says so.
+**The two sections mean different things, and the device one is now two halves.** A computer is
+reached over the Device Manager HTTP API. A *device* is reached **directly, with no computer
+anywhere** — that is the whole point of the section — and `DirectDeviceTransport` does it: the
+address field builds one, so nothing goes through a desk's adb server behind the user's back.
+
+What still leans on a desk is **pairing**, and only pairing. The QR is offered under the address
+field and is disabled without an adb server attached, because the handshake needs a TLS keying
+material exporter neither the JDK nor Apple exposes — see
+[ADB-TRANSPORTS.md](ADB-TRANSPORTS.md). In practice that splits along a line worth knowing: a device
+someone has run `adb tcpip 5555` on connects here with nothing else involved, and one that has only
+ever had wireless debugging switched on needs a desk once, to pair.
 
 ### Route 3, first: connect to a Device Manager server
 
@@ -473,20 +478,17 @@ depends on what the phone is connected to:
 | Situation | What "connect" means | Status |
 |---|---|---|
 | the phone is reading a desk's **adb server** | `host:connect:<host>:<port>` on that server — the desk dials the device, the phone sees it appear | **done** — `AdbServerTransport.connect` |
-| the phone is on its own | speak the **device** protocol to `adbd` on 5555 directly: 24-byte framing, RSA auth | not written |
+| the phone is on its own | speak the **device** protocol to `adbd` on 5555 directly: 24-byte framing, RSA auth | **done** — `DirectDeviceTransport`, one transport per device |
 | the phone is reading a **Device Manager server** | nothing — no endpoint for it | not possible without an API change |
 
-One thing left to fix here, and it helps the desktop's own Connect dialog too:
+**Nobody has to type an IP address** — the panel browses mDNS and lists what answers, above the
+field. The field stays, for a device on another subnet.
 
-- **Nobody should have to type an IP address.** Both platforms can browse mDNS for
-  `_adb-tls-connect._tcp`, which is how a device with wireless debugging on advertises itself:
-  `NsdManager` on Android, `NWBrowser` on iOS. `iosApp/Info.plist` already declares that service and
-  its two siblings, and `NSLocalNetworkUsageDescription` is already there. Behind one `expect`, this
-  turns the field into a list — and the field stays, for a device on another subnet.
-
-  ktor-network has no mDNS, so this is platform code on both sides, and on Android it wants
-  `CHANGE_WIFI_MULTICAST_STATE` and a multicast lock. That permission is also one of the ones the
-  foreground service needs (below), which is convenient.
+The service type browsed for is **`_adb._tcp`**, not `_adb-tls-connect._tcp`. That is deliberate and
+is the one detail worth keeping: `_adb._tcp` is the plain port `adb tcpip` opens and is the only adb
+service this transport can actually reach, while `_adb-tls-connect._tcp` is the wireless-debugging
+port and wants a client certificate from pairing — so listing those would offer connections that
+cannot be made. `browseMdns` already existed for pairing, so this is one constant and a list.
 
 The prefill rule from the desktop's `ConnectScreen` is worth keeping: open on the **last** address
 connected to with its final octet selected, so the phone next to the last one is a few keystrokes.
@@ -650,7 +652,7 @@ or `LaunchedEffect` owns the lifetime exactly as it did before. Three things are
 |---|---|---|
 | `AdbServerTransport` | the tracker is closed deliberately by cancelling the collection — `AdbDevices.track`'s own `finally` closes the socket. Left alone, `host:track-devices-l` dies without erroring and the tracker just goes quiet | re-entering the collection opens a new one, which is what `DeviceManager.refresh()` does for a server restarted underneath us |
 | `RemoteHttpTransport` | the `/api/info` poll stops | `evictIdleConnections()` runs **before** the flag flips, so the first request of the new session can't be the one written to a half-open socket — that one looks healthy and stalls ~14s. See APP-SERVICES.md |
-| direct to `adbd` | connection gone | full reconnect and re-auth — not written, there is no such transport yet |
+| direct to `adbd` | connection gone | `DirectDeviceTransport.open()` reconnects and re-authenticates on the next call, and the row it publishes goes to `OFFLINE` in the meantime. The key is stored, so the device does not ask again |
 
 Two things that must stop, and now do:
 
@@ -676,7 +678,8 @@ The gear in the title bar opens the desktop's own `SettingsScreen` in the phone'
 It had to be reachable before anything else could be tested, because **the adb server address lives
 there**: a phone's `AdbServerTransport` defaults to `127.0.0.1:5037`, which on a phone is nothing at
 all, so until that host is set to a desk the app can only read a Device Manager server or the test
-devices — and pairing, which needs an adb server behind it, can never be offered.
+devices, and pairing — which needs an adb server behind it — can never be offered. Connecting
+**straight to a device** is the one route that needs nothing set there at all.
 
 It is no longer a desktop form squeezed onto a phone. Settings is a **drill-down of dialogs**:
 `SettingsDialog` is five rows — Connection, Device list, Logs, App, About — each opening a dialog of
@@ -730,20 +733,25 @@ Each step leaves the app usable and compiles on all three targets.
    `manager/PairingSession.kt` and `host:pair` behind `DeviceTransport.pair` — compile-verified and
    encoder-verified, but the pairing round trip itself needs two real devices and an adb server.
 9. **The Android foreground service.**
-10. **Direct to `adbd`**, which is what "Connect to a device" is *for* and the reason its address
-    field is switched off today. Two problems, and only one is hard: the **transport** is the adb
-    device protocol — 24-byte framing, `CNXN`/`OPEN`/`WRTE`, pure `commonMain` — and the **trust**
-    step is the one with no pure-Kotlin answer. Three ways through it, cheapest first:
+10. ~~**Direct to `adbd`**~~ **Done, for the plain port.** `adb/device/` is the device protocol —
+    24-byte framing, `CNXN`/`AUTH`/`OPEN`/`WRTE`, one held-open connection per device with streams
+    multiplexed over it — and `DirectDeviceTransport` is the transport on top, with `AdbSync` reused
+    through `AdbByteStream` so the file explorer comes along. The trust step is the legacy one: plain
+    RSA auth against the port `adb tcpip 5555` opens, which is what `scrcpy-mobile` ships and is on
+    the App Store. **It composes with the pairing that already existed** — pair once through a desk,
+    run `adb tcpip` through that desk, and the phone talks to that device directly ever after.
+    Compile-verified on all three targets; the handshake itself needs two real devices.
 
-    - **Legacy `adb tcpip 5555`.** Plain RSA auth, no TLS: sign a 20-byte token with RSA-2048 and a
-      SHA-1 DigestInfo prefix *without hashing it*, plus adb's 524-byte pubkey blob. `scrcpy-mobile`
-      ships this and is on the App Store. The catch is the bootstrap — something must run
-      `adb tcpip 5555` on the target once — **which composes with the pairing that now exists**: pair
-      once through a desk, run `adb tcpip` through that desk, and the phone talks to that device
-      directly ever after.
-    - **SPAKE2 for real**, plus TLS 1.3 with a generated client certificate and platform TLS on both
-      sides. The only route to "scan and go, no computer ever", and probably the largest remaining
-      piece of work outside Tier III video.
+    What is left is only the *self-contained* trust step, and the blocker turned out not to be the
+    one this list assumed:
+
+    - **SPAKE2 is portable after all.** BoringSSL's variant is Ed25519 with fixed points, and
+      [spake2-java](https://github.com/MuntashirAkon/spake2-java) is a pure-Java port that maps onto
+      `commonMain` mechanically.
+    - **The TLS keying-material exporter is not.** The pairing socket is itself TLS and the SPAKE2
+      password is `code || SSL_export_keying_material(64, "adb-label")` — absent from the JDK's
+      `SSLSocket` and from every Apple TLS API. Conscrypt has it and has no iOS artifact; the only
+      all-three-targets answer is vendoring BoringSSL through cinterop. See ADB-TRANSPORTS.md.
     - **Bundle the `adb` binary** on Android, as LADB does. A weekend's work, Android only, a couple
       of MB per ABI, and against the reason `scripts/*.sh` is on PORT-PLAN.md's staying-behind list.
 
@@ -754,7 +762,8 @@ Each step leaves the app usable and compiles on all three targets.
 - **Multi-select and bulk actions.** The desktop's reason for existing; a phone has no fleet. Built
   once — long press for a picker, a FAB, Remove Device — and taken back out: it was a mode to get
   into and out of, over a list of three rows, for one action nobody was asking a phone for.
-- **Standalone pairing (SPAKE2).** See above, and ADB-TRANSPORTS.md.
+- **Standalone pairing.** Blocked on a TLS keying-material exporter rather than on SPAKE2; see above
+  and ADB-TRANSPORTS.md for what each way through it costs.
 - **Tier III live video.** ~70% of the total work, per ADB-TRANSPORTS.md, on the platform least able
   to spare it.
 - **Serving the HTTP API from a phone.** A phone has nothing attached to serve.

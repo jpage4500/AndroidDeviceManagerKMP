@@ -23,3 +23,13 @@ expect fun browseMdns(serviceType: String, onFound: (MdnsService) -> Unit): Mdns
 
 /** how a device advertises itself while its "Pair device with QR code" screen is open. */
 const val MDNS_ADB_PAIRING = "_adb-tls-pairing._tcp"
+
+/**
+ * how a device advertises the plain, un-encrypted port `adb tcpip` opens.
+ *
+ * The one adb service type [com.jpage4500.devicemanager.transport.DirectDeviceTransport] can
+ * actually reach, which is why it is the one browsed for. A device with wireless debugging switched
+ * on advertises `_adb-tls-connect._tcp` instead, and that port wants a TLS client certificate from
+ * pairing — so finding it would only offer a connection that can't be made.
+ */
+const val MDNS_ADB_CONNECT = "_adb._tcp"

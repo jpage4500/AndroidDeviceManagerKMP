@@ -65,6 +65,15 @@ path:
 | android | the app's internal storage — private, and wiped on uninstall |
 | iOS | `Documents/` |
 
+The adb identity lives at `keys/adbkey`: the RSA-2048 private key this install signs `AUTH`
+challenges with, base64 of whichever DER the platform round-trips — PKCS#8 on the JVM, PKCS#1 from
+`SecKeyCopyExternalRepresentation`, and only ever read back by the platform that wrote it. It has a
+folder of its own so that no "clear logs" can take it: **authorising a key is a dialog somebody
+physically taps on the device**, and adbd remembers the key rather than the app, so losing it means
+being asked again on every device that had accepted it. `AdbIdentity` generates it once, behind a
+mutex and on `ioDispatcher`, since two devices connecting at the same moment would otherwise each
+make one and the loser would overwrite a key already authorised.
+
 The log lives at `logs/device-manager.log` and rotates to `.log.old` at 2 MB. `AppLogWriter` keeps
 the size in a variable rather than stat-ing the file per line; anything that writes to the log
 *behind* it — `LogManager` appending a crash report synchronously — has to call

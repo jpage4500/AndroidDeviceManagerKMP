@@ -76,3 +76,5 @@
 - the mirror's tap, swipe and hold marks stay up long enough to see
 - phone: a device's page and its screenshot fill the screen, like the mirror
 - see the logs of a device that's attached to another computer
+- connect straight to another device, with no computer involved
+- pick a nearby device off the network instead of typing its address

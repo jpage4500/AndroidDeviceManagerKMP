@@ -36,7 +36,7 @@ Everything downstream follows from the fact that "ADB" names two different wire 
   replies. This is what jadb speaks, and what `adb/AdbConnection.kt` speaks here.
 - **Device protocol** — spoken by `adbd` itself over a USB endpoint or TCP 5555. Binary 24-byte
   message headers, `CNXN` / `AUTH` / `OPEN` / `OKAY` / `WRTE` / `CLSE`, with stream multiplexing
-  built in. This is what Kadb and dadb speak. **Not implemented in this project yet.**
+  built in. This is what Kadb and dadb speak, and what `adb/device/` speaks here.
 
 The service string is identical on every hop — only the framing around it changes. `JadbDevice`
 sends `"shell:"`, `"exec:"` and `"sync:"`; those are exactly the strings an `OPEN` message carries to
@@ -76,14 +76,14 @@ is a standard bulk endpoint pair, and cgutman's AdbLib has done it for years —
 makes it a poor fit for a 45-device bench. iOS has no USB host access at all, so it is network-only,
 permanently.
 
-## Three routes from a phone to a device
+## Four routes from a phone to a device
 
 | Route | Reaches USB fleet | Needs a desktop | Status here |
 |---|---|---|---|
 | adb server on `127.0.0.1:5037` | yes | it *is* the desktop | **done** — `AdbServerTransport` |
 | adb server on a LAN address | yes | yes | **done** — same class, different host |
 | Device Manager's HTTP API (`:8765`) | yes | yes | **done** — `RemoteHttpTransport` |
-| direct to `adbd` on 5555 | no | no | not written |
+| direct to `adbd` on 5555 | no | no | **done** — `DirectDeviceTransport` |
 
 **They are not exclusive.** `DeviceManager` holds a *list* of transports and the device list is the
 union of what they all report — a desk at the office and a desk at home are two connections and one
@@ -145,20 +145,65 @@ also excludes USB transport and has nothing for screen capture.
 ktor-network publishes jvm, android *and* ios artifacts, so one implementation in `commonMain` serves
 all three targets.
 
-### If the direct-to-`adbd` transport is ever written
+### The direct-to-`adbd` transport, as built
 
-- **The message framing is easy.** 24-byte headers and a handful of commands; pure `commonMain`.
-- **Auth has one quirk worth knowing up front.** `adbd` sends a 20-byte token which the client signs
-  with RSA-2048 PKCS#1 v1.5 using a SHA-1 DigestInfo prefix, *without hashing it*. Apple's
-  `SecKeyCreateSignature` with `kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA1` does precisely that,
-  so it maps cleanly through cinterop. You also hand-roll adb's 524-byte little-endian public-key
-  blob.
-- **Pairing is the real gap.** Android 11+ wireless debugging needs SPAKE2 plus TLS 1.3 client
-  certificates, and no pure-Kotlin implementation exists. Either cinterop into BoringSSL, or sidestep
-  it: connect to a legacy `adb tcpip 5555` port with plain RSA auth and let the target's "Allow
-  debugging?" dialog establish trust. That second option is the constraint
-  [scrcpy-mobile](https://github.com/wsvn53/scrcpy-mobile) ships with, and it is on the App Store —
-  so both the approach and the review outcome have precedent.
+`adb/device/` is the device protocol and `transport/DirectDeviceTransport.kt` is the transport over
+it. It reaches a device on a **plain** port — the one `adb tcpip 5555` opens — with no adb server
+anywhere, which is the sidestep [scrcpy-mobile](https://github.com/wsvn53/scrcpy-mobile) ships with
+and is on the App Store, so both the approach and the review outcome have precedent.
+
+- **The framing was easy, as expected.** `AdbMessage` is the 24-byte header and the eight commands;
+  pure `commonMain`. The only integrity check on the wire is `magic == command xor -1`, so a bad
+  magic ends the connection rather than trying to resynchronise — there is no frame boundary to
+  resynchronise *to*.
+- **One connection per device, held open, streams multiplexed over it.** `AdbDeviceConnection` is
+  the object that does the adb server's job without being one. Not a nicety: the handshake costs a
+  round trip *and* an RSA signature, so a mirror polling `screencap` at 4 fps would otherwise pay
+  both on every frame. One reader coroutine owns the read side and routes each message by the
+  receiver id in `arg1`; every `WRTE` waits for its `OKAY`, because that is adb's entire flow control
+  and sending without waiting deadlocks rather than going faster.
+- **Auth's quirk is real and is the easiest thing to get wrong.** `adbd` sends a 20-byte token and
+  wants PKCS#1 v1.5 over a SHA-1 `DigestInfo` whose digest field is those bytes *verbatim* — it is
+  treating the token as if it were a hash. The JVM reaches that with `NONEwithRSA` and the 15-byte
+  header prepended by hand; iOS reaches the same bytes with
+  `kSecKeyAlgorithmRSASignatureDigestPKCS1v15SHA1`, which takes a digest and builds the header
+  itself. Signing `sha1(token)` produces a well-formed signature that adbd rejects.
+- **The 524-byte public-key blob is computed in `commonMain`, not by the platform.** `AdbPublicKey`
+  carries `n0inv` and `rr` on top of the modulus, because adbd's verifier is Montgomery-form with no
+  bignum library. Neither needs general arithmetic — `n0inv` is a five-step Newton iteration on one
+  32-bit word, `rr` is 4096 doublings with a conditional subtract — which is what keeps it off an
+  `expect`, since Kotlin/Native has no big-integer type to have done it with.
+- **The sync protocol is reused rather than rewritten.** `AdbSync` was written against a socket; it
+  now takes an `AdbByteStream`, and `AdbDeviceByteStream` stitches the device protocol's discrete
+  `WRTE` chunks back into a byte stream and gathers small writes until a flush. So the file explorer
+  works on this route with no second implementation.
+
+### Pairing is still the gap, and now for a specific reason
+
+**Wireless-debugging pairing needs a TLS exporter that no platform here exposes.** Reading
+`pairing_connection.cpp` settles it: the pairing socket is *itself* TLS — each side presents a
+self-signed certificate and accepts the other's unverified — and the SPAKE2 password is not the
+six-digit code but `code || SSL_export_keying_material(64, "adb-label")`. That mixing landed in
+platform-tools 31 (it is absent in 30.0.5), so every device since Android 12 requires it.
+
+RFC 5705 keying-material export is **not** in the JDK's `SSLSocket`/`SSLEngine` at all, and Apple
+offers it in neither Network.framework nor SecureTransport. It exists in BoringSSL, which is what
+adb, Conscrypt and Android's own TLS stack use. So pairing directly costs one of:
+
+| Option | Desktop | Android | iOS |
+|---|---|---|---|
+| Conscrypt (`conscrypt-openjdk-uber`, ~8 MB; `conscrypt-android`, ~4 MB per ABI) | yes | yes | **never** — no artifact |
+| vendor BoringSSL through cinterop | yes | yes | yes, and it is a C build in the KMP graph |
+
+SPAKE2 itself is *not* the blocker it was assumed to be: BoringSSL's variant is Ed25519 with fixed M
+and N points, and [spake2-java](https://github.com/MuntashirAkon/spake2-java) is a pure-Java port of
+`spake25519.c` with its own Ed25519, which ports to `commonMain` mechanically. The names are
+`"adb pair client"`/`"adb pair server"` including their NUL, roles alice/bob, and the derived key
+feeds AES-128-GCM for one `PeerInfo` exchange. All of that is portable. The TLS exporter under it is
+not.
+
+Which is why `PairingSession` still hands the handshake to an adb server's `host:pair`, and why
+`canPair` stays false without one.
 
 ## Three tiers hide behind "remote control"
 
@@ -182,6 +227,7 @@ on.** `DeviceTransport.screenStream` is the seam: a transport that can push fram
 | Route | Frames | Input |
 |---|---|---|
 | adb server | `screencap` asked for again each time the last one arrived — a command answering a PNG, with nothing to subscribe to | `input tap` in a shell, one command per gesture |
+| direct to `adbd` | the same `screencap`, on a stream of the held-open connection rather than a socket of its own | the same shell command, on another stream |
 | Device Manager server | pushed over `/ws/screen`, JPEG, at an interval the server keeps — `transport/RemoteScreenStream.kt` | a text frame up the same socket; no request of its own |
 
 Three things about that websocket are worth knowing before touching it, and all three are in
@@ -213,6 +259,7 @@ the log window can't tell apart:
 | Route | Lines | Process names for the App column |
 |---|---|---|
 | adb server | `logcat -v threadtime` over `exec:`, socket drained and flushed every 100ms — `adb/AdbLogcat.kt` | the log window runs `ps` every 30s |
+| direct to `adbd` | the same, on one stream of the held-open connection, flushed on the same 100ms | the same `ps` on a slow timer |
 | Device Manager server | pushed over `/ws/logs` every 500ms as **gzipped JSON** — `transport/RemoteLogcat.kt` | the server sends pid -> name down the same socket every 5s, so no `ps` runs at all |
 
 - **Every batch is gzipped, always.** The plain JSON `logs` message the server's own client can also
@@ -240,8 +287,9 @@ decoding H.264 through MediaCodec on Android and VideoToolbox on iOS. Deliberate
 - **iOS backgrounding kills sockets.** Reconnect logic isn't optional.
 - **Local network permission.** iOS needs `NSLocalNetworkUsageDescription` and `NSBonjourServices` —
   both are in `iosApp/iosApp/Info.plist` already.
-- **SPAKE2 on Kotlin/Native** is the one genuinely unsolved piece. Decide early whether iOS pairs at
-  all.
+- **The TLS exporter, not SPAKE2, is what decides whether iOS ever pairs.** SPAKE2 ports cleanly;
+  `SSL_export_keying_material` has no public equivalent on Apple's platforms or in the JDK. See
+  *Pairing is still the gap* above for the two ways out and what each costs.
 - **Don't regress the desktop.** 45 devices over hubs is the workload that matters; any transport
   rework should be measured against it before the mobile app gets attention.
 
@@ -252,4 +300,7 @@ decoding H.264 through MediaCodec on Android and VideoToolbox on iOS. Deliberate
 - [cryptography-kotlin](https://github.com/whyoleg/cryptography-kotlin)
 - [OVERVIEW.TXT](https://android.googlesource.com/platform/packages/modules/adb/+/refs/heads/main/OVERVIEW.TXT) — the adb protocol
 - [SYNC.TXT](https://android.googlesource.com/platform/packages/modules/adb/+/refs/heads/main/SYNC.TXT) — the sync sub-protocol
+- [spake2-java](https://github.com/MuntashirAkon/spake2-java) — a pure-Java port of BoringSSL's SPAKE2
+- `packages/modules/adb/pairing_connection/pairing_connection.cpp` and `tls/tls_connection.cpp` — the
+  pairing wire protocol and the `"adb-label"` exporter
 - `FileExplorerKMP/docs/ANDROID-DEVICES.md` — the protocol measurements this port reuses
