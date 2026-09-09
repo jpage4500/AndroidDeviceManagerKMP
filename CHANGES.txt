@@ -96,3 +96,8 @@
 - phone: connecting to a computer says where to find the QR on that computer
 - phone: connecting to a device opens with the pairing QR already showing
 - pair and connect to a device with no computer involved at any point
+- phone: the device list has a divider between each of its sections
+- phone: a computer stands out from its devices on a shade of its own
+- iOS: fixed the app quitting as it launched on iPhone
+- connecting to a device closes the form and opens that device's page
+- phone: a device opens on its storage and battery, with its properties last

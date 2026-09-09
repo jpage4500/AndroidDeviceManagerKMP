@@ -279,6 +279,16 @@ data class Palette(
     val toolbarIcon: Color,
     val listBg: Color,
     val rowStripe: Color,
+    /**
+     * the ground behind a row that heads a group of other rows — a computer in the phone's device
+     * list, and anything else that owns the rows under it.
+     *
+     * A step off [listBg] and no more: far enough that a computer doesn't read as one of its own
+     * devices, nowhere near [headerBg], which is a desktop table's column bar and would read as a
+     * selection on a list. The device rows inside a group keep painting [listBg], so it is the
+     * *devices* that stay flat and the group around them that lifts.
+     */
+    val groupBg: Color,
     val rowSelectedInactive: Color,
     val rowSelectedText: Color,
     val headerBg: Color,
@@ -318,6 +328,8 @@ val LightPalette = Palette(
     // the Swing table's alternate row and header greys — the header is deliberately much darker
     // than a Material one, which is what makes the column titles read as a bar rather than a row
     rowStripe = Color(0xFFF6F6F6),
+    // a shade further than rowStripe: an alternate row is meant to be barely there, a heading is not
+    groupBg = Color(0xFFEFEFEF),
     rowSelectedInactive = Color(0xFFDCDCDC),
     rowSelectedText = Color(0xFFFFFFFF),
     headerBg = Color(0xFFC5C5C5),
@@ -351,6 +363,9 @@ val DarkPalette = Palette(
     toolbarIcon = Color(0xFFC7C7CC),
     listBg = Color(0xFF1C1C1E),
     rowStripe = Color(0xFF212123),
+    // *up* from the near-black list, and short of the divider grey — a dark theme's steps have to be
+    // bigger than a light one's to be seen at all, and one that reaches the rules reads as a hole
+    groupBg = Color(0xFF2A2A2C),
     rowSelectedInactive = Color(0xFF3A3A3E),
     rowSelectedText = Color(0xFFFFFFFF),
     headerBg = Color(0xFF2A2A2C),
@@ -429,6 +444,7 @@ object Colors {
     /** a selection in an unfocused window: still visible, but no longer claiming the keyboard. */
     val rowSelectedInactive: Color @Composable get() = LocalPalette.current.rowSelectedInactive
     val rowSelectedText: Color @Composable get() = LocalPalette.current.rowSelectedText
+    val groupBackground: Color @Composable get() = LocalPalette.current.groupBg
     val headerBackground: Color @Composable get() = LocalPalette.current.headerBg
     val headerDragged: Color @Composable get() = LocalPalette.current.headerDragged
     val headerDivider: Color @Composable get() = LocalPalette.current.headerDivider

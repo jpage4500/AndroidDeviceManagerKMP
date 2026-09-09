@@ -74,9 +74,11 @@ fun DeviceListScreen(
 
     LazyColumn(modifier.fillMaxSize()) {
         itemsIndexed(ordered, key = { _, server -> "server:${server.key}" }) { index, server ->
-            // a rule only *between* shut blocks, the connect panel's rule: one drawn against an open
-            // block would cut a computer off from the devices it just showed
-            if (index > 0 && !isOpen(server) && !isOpen(ordered[index - 1])) {
+            // a rule above every section but the first, whatever state the sections are in. it only
+            // ever falls above a computer's *header*, never between that header and the rows it
+            // opened, so it separates one computer from the last one's devices rather than cutting
+            // either off from its own
+            if (index > 0) {
                 HorizontalDivider(color = Colors.divider)
             }
             ServerGroup(
@@ -89,17 +91,26 @@ fun DeviceListScreen(
             )
         }
 
-        // whatever no computer owns: a desk's adb server, or the invented fleet
-        items(ungrouped, key = { "device:${it.id}" }) { device ->
+        // whatever no computer owns: a desk's adb server, or the invented fleet. one section, so
+        // the section rule goes above the first row and the rows themselves are only spaced apart
+        itemsIndexed(ungrouped, key = { _, device -> "device:${device.id}" }) { index, device ->
+            if (index == 0) {
+                if (ordered.isNotEmpty()) HorizontalDivider(color = Colors.divider)
+            } else {
+                HorizontalDivider(thickness = Dimens.listSpacing)
+            }
             DeviceRow(device = device, onClick = { onSelect(device) })
-            HorizontalDivider(thickness = Dimens.listSpacing)
         }
 
         // the same panel, collapsed — the last item rather than a floating button, so it scrolls
         // away with the list it belongs to. keyed, because a keyless item is keyed by its index: a
         // connection made from the form the panel opens adds a row above it, and the panel would
         // otherwise be remounted — closing the form that was still showing what it just did
-        item(key = "connect") { ConnectPanel() }
+        item(key = "connect") {
+            // always something above it: the screen with nothing at all to show is the empty state
+            HorizontalDivider(color = Colors.divider)
+            ConnectPanel()
+        }
     }
 }
 

@@ -37,6 +37,15 @@ class DirectDeviceTransport(
 
     override val label: String get() = "device ($host)"
 
+    /**
+     * the id the one device on this connection will have in the list.
+     *
+     * Known up front rather than waited for, because [devices] is the only thing that ever publishes
+     * it and a caller that has just connected wants to open the device *now* — see the Connect panel,
+     * which closes itself and opens this device's page.
+     */
+    val deviceId: String get() = Device(serial = serial, connectionId = id).id
+
     private val lock = Mutex()
     private var connection: AdbDeviceConnection? = null
 

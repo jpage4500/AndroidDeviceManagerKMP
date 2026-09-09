@@ -222,29 +222,34 @@ adb, Conscrypt and Android's own TLS stack use. So pairing directly costs one of
 
 | Option | Desktop | Android | iOS |
 |---|---|---|---|
-| **reflect into the platform's own Conscrypt** — no dependency at all | no | **yes**, and it is the cheapest route by far | no |
-| Conscrypt as a dependency (`conscrypt-openjdk-uber`, ~8 MB; `conscrypt-android`, ~4 MB per ABI) | yes | yes | **never** — no artifact |
+| reflect into the platform's own Conscrypt | no | **no — blocked, see below** | no |
+| **Conscrypt as a dependency** (`conscrypt-android`, ~2.6 MB per ABI) | yes (`-openjdk-uber`, ~8 MB) | **done** | **never** — no artifact |
 | vendor BoringSSL through cinterop | yes | yes | yes, and it is a C build in the KMP graph |
-| ship Google's `adb` binary and run it | not needed | works, and costs ~10 MB and a 16 KB-alignment problem | never — iOS cannot exec |
+| ship Google's `adb` binary and run it | not needed | works, and costs ~5 MB plus a 16 KB-alignment problem | never — iOS cannot exec |
 
-**The first row is the correction.** Android's own TLS stack *is* Conscrypt, and its
-`exportKeyingMaterial` is reachable from an app with no dependency and no binary:
+**The reflection row was tried and does not work, and this is worth recording because it looks like
+it should.** Android's own TLS stack *is* Conscrypt, the platform copy has exactly the method wanted,
+and its signature matches the public one:
 
 ```java
-Class.forName("com.android.org.conscrypt.Conscrypt")
-     .getMethod("exportKeyingMaterial", SSLSocket.class, String.class, byte[].class, int.class)
-     .invoke(null, sslSocket, "adb-label\u0000", null, 64);
+public static byte[] exportKeyingMaterial(SSLSocket socket, String label, byte[] context, int length)
 ```
 
-A hidden API, but a stable one, and it is how
-[libadb-android](https://github.com/MuntashirAkon/libadb-android) pairs — `PairingConnectionCtx`
-does the whole handshake in Java. Note the label carries its trailing NUL, matching
-`sizeof(kExportedKeyLabel)` on the adb side. TLS 1.3 needs API 29+; below that the platform provider
-can't do it and a bundled Conscrypt would be required.
+But it lives in `com.android.org.conscrypt`, and **hidden-API enforcement makes a blocked member
+throw `NoSuchMethodException` as though it simply were not there** — indistinguishable from a wrong
+signature until you check the source, which is what cost an afternoon here. The failure is
+`targetSdk`-dependent, so it is not something a device can be talked out of. That is also why
+[libadb-android](https://github.com/MuntashirAkon/libadb-android) lists both `conscrypt-android` and
+LSPosed's `hiddenapibypass` in its README.
 
-So the earlier conclusion here — that the exporter was out of reach without vendoring BoringSSL, and
-that shipping the binary was the only way out on Android — was **wrong about Android**. It remains
-true for the desktop JVM and for iOS, where no equivalent exists.
+So the dependency is the answer: the same code in `org.conscrypt` is **ours**, callable directly with
+no reflection and a compile error rather than a runtime surprise if it ever moves. The provider is
+passed to one `SSLContext` and deliberately **not** installed globally — changing TLS for the whole
+app, http client included, to fix one handshake would be the wrong shape of fix.
+
+Two earlier conclusions in this file were wrong and are corrected above: that the exporter needed
+BoringSSL vendored (it does not, on Android), and that the platform copy could be reflected into (it
+cannot). Both remain true for the desktop JVM and for iOS, where no equivalent exists at all.
 
 SPAKE2 itself is *not* the blocker it was assumed to be: BoringSSL's variant is Ed25519 with fixed M
 and N points, and [spake2-java](https://github.com/MuntashirAkon/spake2-java) is a pure-Java port of
@@ -266,9 +271,19 @@ multicast lock this app does not hold — so a bundled server pairs happily and 
 the browse in `util/Mdns.kt` already works, `PairingSession.connectPaired` asks directly and then
 calls `host:connect`.
 
-It matches on the **guid** `host:pair` reports back (`Successfully paired to … [guid=adb-XXXX]`),
-because that guid *is* the connect service's name. With two devices paired, connecting to whichever
-answered first would attach the wrong one.
+It matches on the **guid**, which the direct route gets from the `PeerInfo` the device sends back and
+the server route parses out of `Successfully paired to … [guid=adb-XXXX]`. That guid *is* the connect
+service's name, so with several devices paired, dialling whichever answered first would attach the
+wrong one.
+
+**One guid can name more than one record, and the first is often dead.** A device that has
+re-registered leaves the abandoned announcement in place, and mDNS resolves the collision by
+appending ` (2)` to the newer name rather than replacing anything — the same suffix `parseDeviceList`
+already deals with on an adb server's list. Observed in the wild as two records for one phone, the
+exact-name match refused and the ` (2)` one live. So the browse gathers every match for a settle
+window and each is dialled in turn; a stale record refuses instantly, so the attempts cost nothing.
+The failure reported at the end is the most informative one rather than the last, since a refused
+connect only says a record was stale where anything else is the real reason.
 
 Two smaller things in the same area, both found in a log rather than reasoned about:
 
@@ -318,8 +333,8 @@ What remains unanchored is the SPAKE2 transcript layout — the order of names a
 
 ### Pairing, in this app, on Android
 
-No server, no bundled binary. `manager/PairingSession` shows a QR, finds the device over mDNS and
-then does the handshake itself through `adb/pairing/AdbPairing` — TLS with a self-signed certificate
+No server and no external process — one dependency. `manager/PairingSession` shows a QR, finds the
+device over mDNS and then does the handshake itself through `adb/pairing/AdbPairing` — TLS with a self-signed certificate
 over this app's own adb key, 64 bytes of keying material exported and appended to the code, SPAKE2,
 then AES-128-GCM for one fixed-size `PeerInfo` each way.
 
@@ -342,6 +357,24 @@ adbd rejects a certificate for a key it has not been paired with by dropping the
 saying nothing, so a failed upgrade is reported as "pair with it first" — which is the true reason
 almost every time.
 
+**The default JSSE key manager sends no certificate here, and the failure does not look like that.**
+adbd includes a `certificate_authorities` list built from the public keys it already trusts
+(`adbd_tls_client_ca_list`), and JSSE only offers a key whose issuer appears in it — which a
+self-signed certificate's never does, so it quietly offers nothing. In TLS 1.3 the client's
+certificate travels *after* the server's Finished, so the handshake **completes**, `startTls` returns
+true, and the peer's alert only arrives on the next read:
+
+```
+TLSV1_ALERT_CERTIFICATE_REQUIRED
+```
+
+which reads as a protocol error rather than a missing certificate. `AdbTls.ForcedKeyManager` answers
+every request with the one certificate regardless of issuers, which is both correct and the only
+thing that works — adbd is not doing PKI, it compares the public key inside whatever arrives against
+the keys it knows. The pairing port happens *not* to send that list, so the default manager works
+there; both paths use the forcing one anyway, because relying on a difference between two adbd ports
+would be a trap.
+
 ### What this replaced, and what it cost
 
 An earlier pass shipped Google's `adb` binary in the APK and ran it as a loopback server, on the
@@ -351,11 +384,13 @@ against going back:
 
 | | bundled binary | in-process |
 |---|---|---|
-| APK | ~5 MB of compressed `libadb.so` entries, two ABIs | nothing |
-| 16 KB page sizes | the prebuilt's LOAD segments were 4 KB-aligned, which **blocks a Play release** targeting SDK 35+, and could not be patched — segment offsets would have to move, so it needs relinking | no native code involved |
+| APK | ~5 MB of compressed `libadb.so` entries, two ABIs | one `libconscrypt_jni.so`, ~2.6 MB — `abiFilters` ships arm64 only, since that is every phone this app is for. Measured: 28.0 MB across four ABIs, 20.4 MB with one |
+| 16 KB page sizes | the prebuilt's LOAD segments were 4 KB-aligned, which **blocks a Play release** targeting SDK 35+, and could not be patched — segment offsets would have to move, so it needs relinking | Conscrypt's are `0x4000`, measured |
 | side effects | `useLegacyPackaging = true` is required to execute anything out of `nativeLibraryDir`, and it compresses *every* native library, which made the 16 KB checker report "Unknown error" for an unrelated, correctly-aligned androidx library | none; `extractNativeLibs` is back to false and the remaining libraries are stored uncompressed |
-| supply chain | a third-party prebuilt running with the app's permissions, pinned by checksum and recorded in a provenance file | code in this repo |
+| supply chain | a third-party prebuilt running with the app's permissions, pinned by checksum and recorded in a provenance file | code in this repo, plus Google's own Conscrypt from Maven Central |
 | lifecycle | a child process that could outlive the app and hold port 5037 | none |
+| loaded how | `exec` out of `nativeLibraryDir`, which forced `useLegacyPackaging` | `System.loadLibrary`, so `extractNativeLibs` stays false |
+| when it is missing | the app said so and every other route still worked | the same: `canPairDirectly` asks `Conscrypt.isAvailable()`, so an ABI without it disables the QR rather than failing at the exporter |
 
 The one thing it had going for it: it worked, and it proved the SPAKE2 exchange end to end against a
 real device before any of this existed.

@@ -199,7 +199,6 @@
     <string name="info_os">OS</string>
     <string name="info_phone">Phone</string>
     <string name="info_serial">Serial</string>
-    <string name="info_status">Status</string>
     <string name="info_storage">Internal Storage</string>
     <string name="info_timezone">Timezone</string>
 

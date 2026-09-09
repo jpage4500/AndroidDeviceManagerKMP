@@ -24,8 +24,8 @@ import org.jetbrains.compose.resources.stringResource
  * everything known about one device, as its own scrolling screen — the desktop's Device Details
  * window.
  *
- * The phone reaches the same rows through [DeviceInfoContent] instead, since [DeviceSheet] already
- * has a scroll of its own around them.
+ * The phone draws the same two pieces, [DeviceStatus] and [DeviceDetails], with its own Commands
+ * section between them — see [DeviceSheet], which already has a scroll of its own around them.
  */
 @Composable
 fun DeviceInfoScreen(deviceId: String, modifier: Modifier = Modifier) {
@@ -48,25 +48,31 @@ fun DeviceInfoScreen(deviceId: String, modifier: Modifier = Modifier) {
             .verticalScroll(rememberScrollState())
             .padding(Dimens.gapLarge),
     ) {
-        DeviceInfoContent(deviceId)
+        DeviceStatus(deviceId)
+        Spacer(Modifier.height(Dimens.gapLarge))
+        DeviceDetails(deviceId)
     }
 }
 
 /**
- * the rows themselves: what the device is, then a gauge each for storage and battery.
+ * what the device is: every property it reports, one per row.
  *
  * Ported from the Swing app's `DeviceInfoScreen`. Reads the live device, so it follows a refresh
- * rather than showing a snapshot — the free space and the battery move while it is open.
+ * rather than showing a snapshot — the values move while it is open.
  *
- * Sections rather than cards-on-grey: the same headers and flat rows a settings screen uses, so it
- * reads as part of the app rather than as two panels floating on a band of grey. Each one folds
- * away and is remembered folded — see [InfoSection]. **Must be called inside a `Column`.**
+ * A section rather than a card-on-grey: the same header and flat rows a settings screen uses, so it
+ * reads as part of the app rather than as a panel floating on a band of grey. It folds away and is
+ * remembered folded — see [InfoSection]. **Must be called inside a `Column`.**
+ *
+ * **Last on the page**, under [DeviceStatus] and whatever the caller puts between them: eleven rows
+ * of properties are the longest thing here and the least often read — a phone that opens on them
+ * has to be scrolled past them to reach anything that can be pressed.
  *
  * [onRename] draws a pencil on the Name row when it is given. The desktop's window is read-only and
  * passes nothing.
  */
 @Composable
-fun DeviceInfoContent(deviceId: String, onRename: (() -> Unit)? = null) {
+fun DeviceDetails(deviceId: String, onRename: (() -> Unit)? = null) {
     val devices by DeviceManager.devices.collectAsState()
     val device = devices.firstOrNull { it.id == deviceId }
     val copyToClipboard = rememberClipboardCopy()
@@ -134,42 +140,47 @@ fun DeviceInfoContent(deviceId: String, onRename: (() -> Unit)? = null) {
             copyToClipboard,
         )
     }
+}
 
-    Spacer(Modifier.height(Dimens.gapLarge))
+/**
+ * a gauge each for storage and battery — how the device is doing right now.
+ *
+ * **No header, and it doesn't fold.** Two bars are shorter than the header that would hide them, and
+ * they are what someone opening a device looks at first; a fold on them only ever costs a tap. That
+ * is also why they come before everything else on the page. **Must be called inside a `Column`.**
+ */
+@Composable
+fun DeviceStatus(deviceId: String) {
+    val devices by DeviceManager.devices.collectAsState()
+    val device = devices.firstOrNull { it.id == deviceId } ?: return
 
-    CollapsibleSection(
-        text = stringResource(Res.string.info_status),
-        open = InfoSection.STATUS.isOpen(collapsed),
-        onToggle = { InfoSection.STATUS.toggle(collapsed) },
-    ) {
-        Gauge(
-            label = stringResource(Res.string.info_storage),
-            percent = device.storageUsedPercent,
-            detail = listOfNotNull(
-                device.freeSpace?.let { "Free ${Utils.bytesToDisplayString(it)}" },
-                device.totalSpace?.let { "Total ${Utils.bytesToDisplayString(it)}" },
-            ).joinToString(", "),
-            // a nearly-full disk is what stops a device installing anything
-            color = when {
-                (device.storageUsedPercent ?: 0) > 90 -> Colors.error
-                (device.storageUsedPercent ?: 0) > 75 -> Colors.busy
-                else -> Colors.accent
-            },
-        )
-        Gauge(
-            label = stringResource(Res.string.info_battery),
-            percent = device.batteryLevel,
-            detail = listOfNotNull(
-                device.batteryLevel?.let { "$it%" },
-                device.powerStatus.takeIf { it != PowerStatus.NONE }?.name?.lowercase(),
-            ).joinToString(", "),
-            color = when {
-                (device.batteryLevel ?: 100) <= 15 -> Colors.error
-                (device.batteryLevel ?: 100) <= 30 -> Colors.busy
-                else -> Colors.online
-            },
-        )
-    }
+    Gauge(
+        label = stringResource(Res.string.info_storage),
+        percent = device.storageUsedPercent,
+        detail = listOfNotNull(
+            device.freeSpace?.let { "Free ${Utils.bytesToDisplayString(it)}" },
+            device.totalSpace?.let { "Total ${Utils.bytesToDisplayString(it)}" },
+        ).joinToString(", "),
+        // a nearly-full disk is what stops a device installing anything
+        color = when {
+            (device.storageUsedPercent ?: 0) > 90 -> Colors.error
+            (device.storageUsedPercent ?: 0) > 75 -> Colors.busy
+            else -> Colors.accent
+        },
+    )
+    Gauge(
+        label = stringResource(Res.string.info_battery),
+        percent = device.batteryLevel,
+        detail = listOfNotNull(
+            device.batteryLevel?.let { "$it%" },
+            device.powerStatus.takeIf { it != PowerStatus.NONE }?.name?.lowercase(),
+        ).joinToString(", "),
+        color = when {
+            (device.batteryLevel ?: 100) <= 15 -> Colors.error
+            (device.batteryLevel ?: 100) <= 30 -> Colors.busy
+            else -> Colors.online
+        },
+    )
 }
 
 /**
@@ -177,9 +188,11 @@ fun DeviceInfoContent(deviceId: String, onRename: (() -> Unit)? = null) {
  *
  * In `AppPref.INFO_COLLAPSED` rather than in the composable's own state: the sheet is built fresh
  * for each device, so a section that forgot would have to be shut again on every one. Stored as the
- * set that is **shut**, so a build that adds a section shows it rather than hiding it.
+ * set that is **shut**, so a build that adds a section shows it rather than hiding it — and a name
+ * that no longer matches one, `STATUS` from a build before the gauges lost their header, is read
+ * back as nothing rather than as an error.
  */
-enum class InfoSection { DETAILS, STATUS, COMMANDS }
+enum class InfoSection { DETAILS, COMMANDS }
 
 fun InfoSection.isOpen(collapsed: Set<InfoSection>): Boolean = this !in collapsed
 

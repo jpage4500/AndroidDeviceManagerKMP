@@ -40,6 +40,17 @@ android {
         versionName = "1.0.$commitCount"
         // the composeApp library ships no strings.xml, so this is the only source of the label
         resValue("string", "app_name", brandAppName)
+
+        // arm64 only, which is every phone this app is for. The weight here is Conscrypt's
+        // libconscrypt_jni.so at ~2.6 MB per ABI, and shipping four of them put ~10 MB in a
+        // universal APK to serve one. See adb/pairing/PairingTls.android.kt for why it is bundled.
+        //
+        // The cost is emulators: an x86_64 image has no Conscrypt native library and so cannot
+        // pair. That degrades rather than breaks — `canPairDirectly` asks Conscrypt whether it
+        // actually loaded — and an Apple-silicon emulator is arm64 anyway.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
     }
 
     buildTypes {

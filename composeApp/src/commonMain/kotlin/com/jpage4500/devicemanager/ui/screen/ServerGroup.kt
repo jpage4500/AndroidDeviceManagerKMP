@@ -21,9 +21,11 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * one computer running Device Manager, with its devices inside it.
  *
- * The same [ExpandableBlock] the connect panel's routes use, for the same reason: rows that simply
- * follow a header read as more list rather than as that header's contents, and the point of the
- * group is to say *these* devices came through *that* desk.
+ * An [ExpandableBlock]: rows that simply follow a header read as more list rather than as that
+ * header's contents, and the point of the group is to say *these* devices came through *that* desk.
+ * **Its ground is a shade off the list's**, so a computer doesn't read as one of its own devices —
+ * the device rows inside keep painting the plain surface, which is what makes them the flat thing
+ * and the group around them the lifted one.
  *
  * Any number of them can be connected at once — each is a connection of its own in [DeviceManager]
  * — so a group is live when *this* computer is one of them, and the rest open onto a Connect button
@@ -60,10 +62,9 @@ fun ServerGroup(
 
     ExpandableBlock(
         open = open,
-        // the ground the device rows already paint, so a shut computer reads as one of the rows
-        // around it rather than as a gap with a name in it — the block's own tint lands on top of
-        // this when it opens
-        modifier = Modifier.background(MaterialTheme.colorScheme.surface),
+        // full width rather than inside the block's inset, so the shading reads as a band across
+        // the list and shows as a frame around the device rows rather than as a card behind them
+        modifier = Modifier.background(Colors.groupBackground),
         header = {
             OptionRow(
                 icon = Res.drawable.server,

@@ -13,6 +13,228 @@ switch.
 
 ---
 
+## Screens, and what to call their parts
+
+Every screen the phone app has, and the name of each piece of it, so a request can say `ActionTile`
+or `MirrorBar` and mean exactly one thing. The names are the Compose functions — the ones drawn by
+an anonymous `Text` or `Row` are named here by what they say instead, in quotes.
+
+Everything below `##` in the rest of this document is *why* the screens are shaped this way; this is
+*what they are*. Nothing here is a `DataTable`: the desktop's screens are in
+[UI-PORT.md](UI-PORT.md).
+
+Two levels and no navigation library. `CompactLayout` in `ui/App.kt` is the whole router: the list,
+a full-screen mirror, and `DeviceManager.selectedId` putting the device's page over the top. Every
+other screen is a `BaseDialog` on the dialog stack, which is what makes the back gesture close a
+form rather than the app — the ones that are really screens pass `fullScreen = true`.
+
+### device list
+
+description: every device from every connection, and the two ways to add another  
+screen: `DeviceListScreen` — `ui/screen/DeviceListScreen.kt`, inside `CompactLayout`
+
+| element | what it is |
+|---|---|
+| `AppBar` | the band across the top: "Devices", "N attached" under it, gear at the end. lives in `App.kt` |
+| `ServerGroup` | one computer, with the devices that came in through it inside it. the header opens and shuts it |
+| `OptionRow` | that header: server icon (green connected, grey only remembered), name, `host:port  ·  N attached`, ⓘ button, chevron |
+| `ServerNote` | what an open computer shows when it has no rows — "Not connected" with a Connect button, or "Nothing attached to this computer" |
+| `DeviceRow` | one device on two lines: state icon, name and model, then `phone  ·  Android n  ·  free space` |
+| `BatteryGauge` | the battery at the end of a `DeviceRow`, when the device reported one |
+| `ConnectPanel` | the card at the foot of the list: one row per route, and nothing opens inside it |
+| `EmptyState` | first run — nothing connected and nothing remembered: "Connect a device" over an expanded `ConnectPanel` |
+
+### connect to a computer
+
+description: attach a desk running Device Manager, by QR or by hand  
+screen: `ServerForm` — `ui/screen/ConnectPanel.kt`, from the "Connect to a computer" row
+
+| element | what it is |
+|---|---|
+| `DialogTitle` | "Connect to a computer" and its subtitle; the whole band is the way out. `RouteDialog` is the `BaseDialog` that draws it |
+| `CenteredNote` | "In Device Manager on your computer: Share ▸ Start Server ▸ QR Code, then scan it here." |
+| `CenteredButton` | "Scan a QR code" — the camera, through `rememberQrScanner`. a scan fills the three fields below and dials |
+| `FormHeader` | "Or enter it by hand" |
+| `LabelledField` | Host, Port, Auth token — three rows, always out |
+| `CenteredButton` | "Connect" |
+| `StatusText` | what the last attempt said, green or red, under the button |
+
+### connect to a device
+
+description: pair or reach a device with no computer in the middle  
+screen: `DeviceForm` — `ui/screen/ConnectPanel.kt`, opened by the "Connect to a device" row
+
+| element | what it is |
+|---|---|
+| `FormHeader` | "Pair with a QR code" |
+| `PairPanel` | the pairing half: the steps, the code, and what the session is doing |
+| `QrImage` | the code the other device scans, 60% of the width |
+| "Try again" | a `LinkButton` under the state line, on a failure worth retrying |
+| `CenteredNote` | "Set the adb server host in Settings first…" in place of the code, when nothing attached can pair |
+| `FormHeader` | "Found on this network" |
+| `OptionRow` | one device mDNS found; tapping it fills the address fields rather than connecting |
+| `CenteredNote` | "Nothing yet — still looking…" while the browse has found nothing |
+| `FormHeader` | "Or enter its address" |
+| `LabelledField` | Host, Port |
+| `CenteredButton` | "Connect" |
+| `CenteredNote` | the `adb tcpip 5555` explanation under the button |
+| `StatusText` | what the last attempt said |
+
+### computer
+
+description: what can be done to a remembered computer  
+screen: `ServerDialog` — `ui/screen/ServerGroup.kt`, from the ⓘ on a `ServerGroup` header
+
+| element | what it is |
+|---|---|
+| `DialogMessage` | the `host:port` under the name |
+| `SettingItem` | "Disconnect" — only while this computer is connected |
+| `SettingItem` | "Forget" — red, and the token goes with it |
+
+### device
+
+description: what a device is, and what a finger can do to it  
+screen: `DeviceSheet` — `ui/screen/DeviceSheet.kt`, put up by `CompactLayout` when a row is tapped
+
+| element | what it is |
+|---|---|
+| `DialogTitle` | state icon, name, and `via  ·  Android n  ·  state`, from `deviceHeading` — the same band the mirror wears |
+| `ActionGrid` | the four tiles, two by two, at the top |
+| `ActionTile` | one tile: Mirror, Screenshot, and Browse / View Logs as dashed outlines because they aren't built |
+| `DeviceStatus` | the two gauges straight under the tiles, with no header over them — the desktop's own, shared |
+| `Gauge` | one bar: Internal Storage, then Battery |
+| `CollapsibleSection` | "Commands" next, then "Details"; both fold and are remembered folded, in `InfoSection` |
+| `SettingItem` | the Commands rows: "Restart", plus "Disconnect" for a wireless device |
+| `DeviceDetails` | the "Details" section last — the desktop's own, shared |
+| `Property` | one Details row: Serial, Name, Model, Phone, IMEI, Carrier, OS, Timezone, Booted, Custom 1, Custom 2. tapping copies it |
+| pencil on Name | `Property`'s `onEdit`, on an online device: opens `InputDialog` to rename |
+
+### screenshot
+
+description: the PNG just taken, in place of the device's properties  
+screen: `Screenshot` — `ui/screen/DeviceSheet.kt`, taking over the sheet's body
+
+| element | what it is |
+|---|---|
+| `CircularProgressIndicator` | while `screencap` runs |
+| the image | letterboxed into whatever the title bar left, never written to a file |
+| "Done" | the sheet's own OK: it clears the shot and leaves the device's page up |
+
+### mirror
+
+description: the device's screen, live, with taps and keys going back to it  
+screen: `MirrorScreen` — `ui/screen/MirrorScreen.kt`, from the Mirror tile
+
+| element | what it is |
+|---|---|
+| `DialogTitle` | the same band the device's page wore, drawn by `CompactLayout`; the whole band closes the mirror |
+| `MirrorImage` | the frame, with its border: tap, hold and swipe go to the device, pinch zooms, two fingers pan |
+| `MirrorFeedbackOverlay` | the rings, the swipe arrow and the key bubbles, drawn over the frame |
+| `EmptyState` | "Can't mirror this device", with the reason under it |
+| `MirrorBar` | the bar under the frame |
+| `MirrorKey` | Back and Home, as icons |
+| `MirrorKeyboard` | the keyboard toggle — filled while on; what you type lands on the device |
+| `MirrorMore` | the ⋯ menu: Recents, Power, "Reset zoom", and Quality High / Mid / Low (only on a streamed mirror) |
+| "N fps" | how many frames a second are arriving, at the right-hand end of the bar |
+
+### settings
+
+description: five categories, one dialog each  
+screen: `SettingsDialog` — `ui/dialog/SettingsDialog.kt`, from the gear in the `AppBar`
+
+| element | what it is |
+|---|---|
+| `SettingItem` | "Connection" — `ConnectionSettingsDialog` |
+| `SettingItem` | "Device list" — `DeviceListSettingsDialog` |
+| `SettingItem` | "Logs" — `LogSettingsDialog` |
+| `SettingItem` | "App" — `AppSettingsDialog` |
+| `SettingItem` | "About" — `AboutDialog` |
+
+### settings ▸ connection
+
+description: how this app reaches devices, and at what address  
+screen: `ConnectionSettingsDialog` — `ui/dialog/SettingsDialog.kt`
+
+| element | what it is |
+|---|---|
+| "Reading devices from" | `TransportSetting` → an `OptionsDialog` of Automatic / adb server / Device Manager |
+| "adb server host" | `TextSetting` → `TextInputDialog` |
+| "adb server port" | `TextSetting`, numbers only |
+| "Remote Device Manager URL" | `TextSetting` |
+| "Remote token" | `TextSetting`, shown obfuscated |
+
+### settings ▸ device list
+
+description: how often devices are re-read, and how the mirror behaves  
+screen: `DeviceListSettingsDialog` — `ui/dialog/SettingsDialog.kt`
+
+| element | what it is |
+|---|---|
+| "Refresh battery/disk (secs)" | `SliderSetting` → `SliderDialog` |
+| "Full refresh (mins)" | `SliderSetting`; 0 reads "Never" |
+| "Mirror interval (ms)" | `SliderSetting`. reads and writes the pref and nothing else does: a polled mirror runs at `MirrorSource.DEFAULT_INTERVAL_MS` |
+| "Mirror windows at once" | `StepperSetting`. windows are a desktop thing; the row shows here too |
+| "Show Tooltips" | `SwitchSetting`. also desktop-only in effect — a phone has no pointer to hover |
+
+### settings ▸ logs
+
+description: the log viewer's prefs, which the phone doesn't have a viewer for yet  
+screen: `LogSettingsDialog` — `ui/dialog/SettingsDialog.kt`
+
+| element | what it is |
+|---|---|
+| "Log buffer (lines)" | `TextSetting`, numbers only |
+| "Hold while scrolled up (lines)" | `TextSetting`, numbers only |
+| "Log font size" | `SliderSetting` |
+
+### settings ▸ app
+
+description: the app's own behaviour  
+screen: `AppSettingsDialog` — `ui/dialog/SettingsDialog.kt`
+
+| element | what it is |
+|---|---|
+| "Stay in the menu bar when closed" | `SwitchSetting`; desktop-only in effect |
+| "Keep windows on top" | `SwitchSetting`; desktop-only in effect |
+| "Confirm destructive commands" | `SwitchSetting` — what the device page's Restart reads before it asks |
+| "Reset all settings" | RESET, behind a `ConfirmationDialog` |
+
+### settings ▸ about
+
+description: version, and everything for getting a log out of a phone  
+screen: `AboutDialog` — `ui/dialog/AboutDialog.kt`
+
+| element | what it is |
+|---|---|
+| "Support / Feedback" | `SupportDialog`: say what happened, and the app log goes with it |
+| "Check for updates" | `CheckUpdatesDialog` |
+| "Debug Mode" | `SettingSwitchItem` — raises what the log file keeps from Info to Debug |
+| "View Logs" | `LogFileDialog` |
+| version line | `Android Device Manager  ·  v1.0.n  ·  build date`, at the foot |
+
+### over any of them
+
+description: the pieces that aren't a screen of their own  
+screen: —
+
+| element | what it is |
+|---|---|
+| `ToastHost` | the toast, raised from anywhere: a copied property, a command that failed. `util/Toast.kt`, hosted in `ui/App.kt` |
+| `ConfirmDialog` | are-you-sure — Restart, and Reset all settings |
+| `InputDialog` | one field and an OK — renaming a device |
+| `BaseDialog` | the frame all of the above sit in: title band, scrolling body, optional CANCEL/OK. `fullScreen = true` is the three that are really screens — the device's page and the two connect forms. the mirror isn't a dialog at all |
+| `SettingItem` | the row shape used well outside settings: an icon, a label, a value or a chevron |
+
+**Phone-only**, so a change here can't break the desktop: `CompactLayout`, `AppBar`,
+`DeviceListScreen`, `DeviceRow`, `ServerGroup`, `ConnectPanel` and its two forms, `DeviceSheet` with
+`ActionGrid` and `ActionTile`.
+
+**Shared with the desktop**, so a change here shows up in a window as well: `MirrorScreen` and
+everything in it, `DeviceStatus` and `DeviceDetails`, `SettingsDialog` and every dialog under it,
+`BaseDialog`, `OptionRow`, `ExpandableBlock`, `EmptyState` and the `Setting*` rows.
+
+---
+
 ## What the phone app is for
 
 Small on purpose: a list of devices, and a way to work on one of them. The desktop exists to manage
@@ -105,6 +327,31 @@ idiom rather than two. A connected computer opens itself and the rest stay shut;
 from then on. Anything no computer owns — a desk's adb server, the test fleet — is a plain row below
 the groups, and the connect panel is still the last item.
 
+**A computer's ground is a shade off the list's.** `Colors.groupBackground` behind the whole group,
+full width rather than inside the block's inset, so it reads as a band across the list and shows as a
+frame around the device rows. The rows themselves keep painting the plain surface, which is what
+makes the *devices* the flat thing and the group around them the lifted one — shade both and neither
+stands out. It is one step off `listBg` and no more: `headerBg` is a desktop table's column bar and
+would read as a selection here.
+
+The shading is the group's in **both** states, which is a change worth knowing about. It used to be
+`ExpandableBlock`'s own, faded in only while open — and invisible from the day it was written, since
+that tint was `Colors.listBg` and `listBg` is also `MaterialTheme.colorScheme.surface`, the ground
+the rows inside already paint. A block that stands out has to stand out shut as well: a remembered
+computer nobody is connected to never opens at all. So the block no longer paints a ground, and the
+caller's is the whole story.
+
+**One rule, drawn in two places, and one place it is left out.** The app has a single hairline —
+`Colors.divider`, which is also the theme's `outlineVariant`, so `HorizontalDivider(color =
+Colors.divider)` and `HorizontalDivider(thickness = Dimens.listSpacing)` are the same pixels. It goes
+above every **section** but the first — each computer, the ungrouped rows as one block, the connect
+panel — and between the rows *inside* a section. It is left out in exactly one place: between an open
+computer's header and the rows it just opened, which is the connect panel's rule below and the reason
+`ExpandableBlock` exists. The section rule used to be drawn only between *shut* computers on the same
+reasoning, but a rule above a header never lands between that header and its own contents: it lands
+under the last device of whatever came before, and without it an open computer's rows ran straight
+into the next computer's name.
+
 A group rather than a column on the row, because a serial says nothing about which desk it arrived
 from and a remembered computer that isn't connected has nowhere else to be. **Any number of groups
 can be live**: a row is placed by the connection it arrived on, so two desks fill two groups, and
@@ -170,9 +417,9 @@ can't be mirrored or browsed, and offering the action is worse than not having i
 
 ## Tapping a device: the detail sheet
 
-Tapping a **connected** row opens a sheet over the list — not a navigation, and not straight into the
-mirror as the code does today. A phone user tapping a device usually wants to see what it is; going
-straight to a 250ms screencap poll is an expensive guess.
+Tapping a **connected** row opens a sheet over the list — not a navigation, and not straight into
+the mirror. A phone user tapping a device usually wants to see what it is; going straight to a
+250ms screencap poll is an expensive guess.
 
 ```
 ┌─────────────────────────────────┐
@@ -187,36 +434,45 @@ straight to a 250ms screencap poll is an expensive guess.
 │ │      📁     ││      ≡      │ │
 │ │   Browse    ││    Logs     │ │
 │ └ ─ ─ ─ ─ ─ ─ ┘└ ─ ─ ─ ─ ─ ─ ┘ │
-│ DETAILS                      ⌄  │
-│ Serial      192.168.0.147:5555 ⧉│
-│ Name        Pixel 10a         ✎ │
-│ Model       Pixel 10a          ⧉│
-│ Android     16 (SDK 36)        ⧉│
 │ STATUS                       ⌄  │
 │ Storage     ▓▓▓▓▓▓░░░  62%      │
 │ Battery     ▓▓▓▓▓▓▓▓░  87% ⚡   │
 │ COMMANDS                     ⌄  │
 │ ↻  Restart                      │
 │ ✕  Disconnect                   │
+│ DETAILS                      ⌄  │
+│ Serial      192.168.0.147:5555 ⧉│
+│ Name        Pixel 10a         ✎ │
+│ Model       Pixel 10a          ⧉│
+│ Android     16 (SDK 36)        ⧉│
 └─────────────────────────────────┘
 ```
 
 The title bar is the app's own `DialogTitle`: the whole band closes the sheet, the icon is the list
 row's device icon tinted by the same state colour, and the second line is where the device came from
 rather than its serial — a wireless serial eats the line to say nothing, and it is the first row of
-the list below.
+Details anyway.
 
-- **The body is `DeviceInfoContent`**, the rows the desktop's Device Details window draws, reading
-  the live device rather than a snapshot — so the free space and the battery move while the sheet is
-  open. `DeviceInfoScreen` is the desktop's scrolling wrapper around the same rows; the sheet has a
-  scroll of its own and calls the content directly. **Sections rather than cards on grey**: the same
-  `SectionHeader` and flat rows a settings screen uses, because two white cards floating on a band of
-  `headerBg` was the one part of the phone app that looked like a different product.
-- **Every section folds, and stays folded.** Details, Status and Commands are `CollapsibleSection`s —
+- **The body is `DeviceStatus` and `DeviceDetails`**, the gauges and the rows the desktop's Device
+  Details window draws, reading the live device rather than a snapshot — so the free space and the
+  battery move while the sheet is open. `DeviceInfoScreen` is the desktop's scrolling wrapper around
+  the same two pieces; the sheet has a scroll of its own and calls them directly. **Sections rather
+  than cards on grey**: the same `SectionHeader` and flat rows a settings screen uses, because two
+  white cards floating on a band of `headerBg` was the one part of the phone app that looked like a
+  different product.
+- **Status comes first, and Details last.** The two gauges are what a device is asked for first and
+  they are two rows tall; Details is eleven, and with it directly under the tiles it pushed both of
+  the others off the bottom of the screen. Commands sits between them, which puts the phone's own
+  section in the middle of the two the desktop shares.
+- **The gauges have no header and don't fold.** Two bars are shorter than the header that would hide
+  them, so the header only ever cost a tap to get back what it was covering.
+- **The sections that do fold, stay folded.** Commands and Details are `CollapsibleSection`s —
   the settings header plus a chevron that turns, so the app has one way of saying "this opens" rather
   than two. Which ones are shut lives in `AppPref.INFO_COLLAPSED` rather than in the composable, and
   is stored as the set that is *shut*: the sheet is built fresh for each device, so a section that
-  forgot would have to be closed again on every one, and a build that adds a section shows it.
+  forgot would have to be closed again on every one, and a build that adds a section shows it. A
+  stored name that no longer matches one — `STATUS`, from before the gauges lost their header — reads
+  back as nothing rather than as an error.
 - **A property row copies itself and says so.** A column of text that silently copies is
   indistinguishable from a column of text, so all four affordances are on the row: it ripples under
   the finger, a copy hint sits in the gutter at the end of it, a divider closes it, and the toast
@@ -386,17 +642,18 @@ behind the form, they are the only thing still saying which of the two ways in t
 So the row's chevron points right and stays there (`OptionRow(open = false)`). A chevron that *turns*
 is a promise to unfold in place, and the device list's computers are what still make it:
 `ui/components/ExpandableBlock.kt` belongs to them now rather than to this panel. It is worth reading
-for what an expanding row costs. Open, a computer is one block — its own ground, a rounded edge, an
-accent stripe down the left of the row *and* of its contents, and no rule between the two, since the
-rule only ever falls between blocks — because contents that simply appear underneath read as the next
-item in the list. The stripe is painted with `drawBehind` rather than laid out as a sibling, as it
-has to be as tall as both halves and nothing can know that height while the body is still animating.
+for what an expanding row costs. A computer is one block — a shaded ground, a rounded inset, and open,
+an accent stripe down the left of the row *and* of its contents, with no rule between the two, since
+the rule only ever falls between blocks — because contents that simply appear underneath read as the
+next item in the list. The stripe is painted with `drawBehind` rather than laid out as a sibling, as
+it has to be as tall as both halves and nothing can know that height while the body is still
+animating.
 And the block's **inset does not change with its state**: insetting only when open moved the row's
 icon and title down and to the right at the instant the body appeared, and that one-frame shift was
 the whole of the jank — the expand animation itself was fine.
 
 The third folding idiom is a section inside a form — `SectionHeader`'s `CollapsibleSection`, which
-the device sheet's Details / Status / Commands use. A list row that opens into its own contents and a
+the device sheet's Commands and Details use. A list row that opens into its own contents and a
 heading over a group of rows want different chrome; what they share, and what has to agree, is the
 chevron that turns rather than swaps.
 
@@ -455,6 +712,13 @@ in take:
 
 The two QRs point in opposite directions and it is worth being clear which is which — one has our
 camera reading someone else's screen, the other has our screen being read by someone else's camera.
+
+**Connecting to a device ends by opening that device.** Both ways in — a typed or tapped address, and
+pairing by QR — close the form and select the device, which is what puts its page up; the connection
+was only ever a means to that. A *computer* does not do this, because it brings a fleet rather than
+one device and there is no single page to open, so its form stays put and the list behind it fills
+in. The device id is known from the transport rather than waited for off the device list, since the
+point is to open it immediately.
 
 **Each form leads with the part that needs nothing typed, and nothing is behind a link.** Both are
 sections under `SectionHeader`s, ordered by how little work each is, and every section is on screen
@@ -843,11 +1107,12 @@ Each step leaves the app usable and compiles on all three targets.
    `RemoteHttpTransport.info()` on `/api/info` as the thing Connect actually calls. The two QR rows
    are drawn disabled, so the panel is the real shape rather than a stub. `0.0.0.0` in either field
    loads `transport/FakeTransport.kt`.
-2. ~~**The device sheet.**~~ **Done.** `ui/screen/DeviceSheet.kt`: `DeviceInfoContent` inside a
-   `BaseDialog`, the 2×2 grid of action tiles above it, and Restart / Disconnect as `SettingItem`
-   rows under Commands. Mirror and Screenshot are wired; Browse and Logs are dashed outlines. Rename
-   is a pencil on the Name row and Copy serial is gone — every property row copies itself. Details,
-   Status and Commands each fold away, remembered in `AppPref.INFO_COLLAPSED`. Restart confirms when
+2. ~~**The device sheet.**~~ **Done.** `ui/screen/DeviceSheet.kt`: `DeviceStatus` and
+   `DeviceDetails` inside a `BaseDialog`, the 2×2 grid of action tiles above them, and Restart /
+   Disconnect as `SettingItem` rows under Commands, between the two. Mirror and Screenshot are wired;
+   Browse and Logs are dashed outlines. Rename is a pencil on the Name row and Copy serial is gone —
+   every property row copies itself. Commands and Details each fold away, remembered in
+   `AppPref.INFO_COLLAPSED`; the gauges have no header and don't. Restart confirms when
    `CONFIRM_DESTRUCTIVE` is on. A screenshot is shown and thrown away — the share sheet is still
    waiting on `shareImage`.
 3. **The lifecycle seam.** `isForeground`, reconnect on return, stop polling on leave. iOS needs it

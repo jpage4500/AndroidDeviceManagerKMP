@@ -631,14 +631,15 @@ print the JSON on open) and **Edit** (hand the text to whatever opens `.txt`). B
 remembered. `TextUtils.formatJson` is a character walk rather than parse-and-re-serialise, because
 the input is a log *sentence* with a payload in the middle and the prose either side has to survive.
 
-**Device Details** (`DeviceInfoScreen`) — the properties list plus storage and battery gauges, under
-section headers rather than in cards, so the window reads like the settings forms beside it. Both
-sections fold away and are remembered folded in `AppPref.INFO_COLLAPSED`, which the phone's sheet
-shares — it adds a third, Commands. The rows themselves are `DeviceInfoContent`, which that sheet
-drops into its own scroll; the screen is the scrolling wrapper around them, and owns the empty state
-for a device that is gone — nothing can fill an unbounded height, so that check has to sit outside
-the scroll. Every property row copies itself on click, with a ripple, a copy hint in the gutter and a
-toast naming what it took.
+**Device Details** (`DeviceInfoScreen`) — the storage and battery gauges, then the properties list
+under a section header rather than in cards, so the window reads like the settings forms beside it.
+The gauges carry no header and don't fold: two bars are shorter than the header that would hide them.
+The properties do fold, remembered in `AppPref.INFO_COLLAPSED`, which the phone's sheet shares — it
+adds a second, Commands. The two pieces are `DeviceStatus` and `DeviceDetails`, which that sheet
+drops into its own scroll with Commands between them; the screen is the scrolling wrapper around the
+pair, gauges first, and owns the empty state for a device that is gone — nothing can fill an
+unbounded height, so that check has to sit outside the scroll. Every property row copies itself on
+click, with a ripple, a copy hint in the gutter and a toast naming what it took.
 
 **Settings** (`SettingsDialog`) — and one section with no Swing equivalent: **which transport the
 device list reads from**. That app is always a client of a local adb server; this one can also point

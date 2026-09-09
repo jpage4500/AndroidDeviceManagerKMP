@@ -41,8 +41,8 @@ import org.jetbrains.compose.resources.stringResource
  * phone this is the device's page, not a prompt over the list, and the mirror it opens is drawn the
  * same way — so the title bar stays put between the two. What is its own is the grid of
  * actions at the top, which is the desktop's right-click menu filtered to what a finger can reach
- * for; the body under it is [DeviceInfoContent], the same rows the desktop's Device Details window
- * draws, and the rest of that menu is the rows at the foot.
+ * for; under it are [DeviceStatus] and [DeviceDetails], the same gauges and rows the desktop's
+ * Device Details window draws, with the rest of that menu — Commands — between them.
  */
 @Composable
 fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> Unit) {
@@ -101,16 +101,10 @@ fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> U
         )
         Spacer(Modifier.height(Dimens.gapLarge))
 
-        DeviceInfoContent(
-            deviceId = deviceId,
-            onRename = if (online) ({
-                rename = InputRequest(
-                    title = renameTitle,
-                    initialValue = device.nickname.orEmpty(),
-                    onConfirm = { name -> scope.launch { DeviceManager.setNickname(deviceId, name) } },
-                )
-            }) else null,
-        )
+        // storage and battery straight under the tiles, then what can be run, and the properties
+        // last: the two gauges are what a device is asked for first and they are two rows tall,
+        // where Details is eleven and pushed everything else off the screen
+        DeviceStatus(deviceId)
         Spacer(Modifier.height(Dimens.gapLarge))
 
         // the rest of the desktop's row menu, as the settings screen's icon rows rather than as text
@@ -160,6 +154,18 @@ fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> U
                 )
             }
         }
+        Spacer(Modifier.height(Dimens.gapLarge))
+
+        DeviceDetails(
+            deviceId = deviceId,
+            onRename = if (online) ({
+                rename = InputRequest(
+                    title = renameTitle,
+                    initialValue = device.nickname.orEmpty(),
+                    onConfirm = { name -> scope.launch { DeviceManager.setNickname(deviceId, name) } },
+                )
+            }) else null,
+        )
     }
 
     // siblings rather than children: each is its own dialog, and the sheet steps aside for whichever

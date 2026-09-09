@@ -184,6 +184,9 @@ kotlin {
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.kotlinx.coroutines.android)
                 implementation(libs.play.services.code.scanner)
+                // pairing only; see adb/pairing/PairingTls.android.kt for why the platform's own
+                // copy of the same code cannot be called
+                implementation(libs.conscrypt.android)
             }
         }
 

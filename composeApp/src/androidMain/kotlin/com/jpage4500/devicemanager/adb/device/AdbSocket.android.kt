@@ -1,5 +1,6 @@
 package com.jpage4500.devicemanager.adb.device
 
+import com.jpage4500.devicemanager.adb.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
 import java.io.*
@@ -60,26 +61,17 @@ internal actual class AdbSocket internal constructor(
      * The device's certificate is **not** validated, and cannot be: `adbd` generates a fresh
      * self-signed one every time it starts. What authenticates it is that it accepted *our*
      * certificate, which it only does for a key it was paired with — see docs/ADB-TRANSPORTS.md.
+     *
+     * Returning true here means only that the handshake completed. In TLS 1.3 the client's
+     * certificate travels after the server's Finished, so a peer that rejects it says so on the
+     * **next read** — which is why [AdbTls.keyManagers] exists and why a `certificate_required`
+     * alert shows up as a read failure rather than a handshake one.
      */
     actual suspend fun startTls(key: AdbKeyPair, certificateDer: ByteArray): Boolean =
         withContext(ioDispatcher) {
             try {
-                val privateKey = KeyFactory.getInstance("RSA")
-                    .generatePrivate(PKCS8EncodedKeySpec(key.privateKey))
-                val certificate = CertificateFactory.getInstance("X.509")
-                    .generateCertificate(certificateDer.inputStream())
-
-                val store = KeyStore.getInstance("PKCS12").apply {
-                    load(null, null)
-                    setKeyEntry("adb", privateKey, EMPTY_PASSWORD, arrayOf(certificate))
-                }
-                val keyManagers =
-                    KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
-                        .apply { init(store, EMPTY_PASSWORD) }
-                        .keyManagers
-
                 val context = SSLContext.getInstance("TLSv1.3")
-                context.init(keyManagers, arrayOf(AcceptAnyPeer), null)
+                context.init(AdbTls.keyManagers(key, certificateDer), arrayOf(AdbTls.acceptAnyPeer), null)
 
                 val upgraded = context.socketFactory
                     .createSocket(socket, host, port, true) as SSLSocket
@@ -120,15 +112,3 @@ internal actual suspend fun openAdbSocket(host: String, port: Int, connectMs: Lo
             null
         }
     }
-
-/** the in-memory keystore never reaches disk, so its password only has to exist. */
-private val EMPTY_PASSWORD = CharArray(0)
-
-/** see [AdbSocket.startTls] — the device's certificate is unverifiable by construction. */
-private object AcceptAnyPeer : X509TrustManager {
-    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-
-    override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-
-    override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-}

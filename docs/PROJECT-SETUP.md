@@ -104,6 +104,12 @@ first open. The Xcode build phase runs `:composeApp:embedAndSignAppleFrameworkFo
 `Info.plist` already declares `NSLocalNetworkUsageDescription` and the three adb Bonjour services.
 Without them iOS refuses every connection this app makes, and the refusal is silent.
 
+It also declares `CADisableMinimumFrameDurationOnPhone`. Compose checks for that key on the first
+frame and throws if it's missing, so the app aborts on launch without it; the key is what lets a
+120Hz iPhone draw above 60fps, which the mirror screen needs. A target with its own `Info.plist`
+needs the key too — `ComposeUIViewController(configure = { enforceStrictPlistSanityCheck = false })`
+turns the check off, but then the frame rate stays capped.
+
 ## Build-time keys
 
 `LOGGING_URL` and `LOGGING_API` are read from the environment, then `~/.gradle/gradle.properties`,

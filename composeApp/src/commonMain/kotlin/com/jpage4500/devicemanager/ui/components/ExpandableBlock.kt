@@ -21,10 +21,16 @@ import org.jetbrains.compose.resources.DrawableResource
 /**
  * a row that opens into its own contents, drawn as one block.
  *
- * The phone's one expanding idiom, shared so the connect panel's routes and the device list's
- * computers can't drift apart: open, a section gets its own ground, a rounded edge and an accent
- * stripe down the left of the row *and* what it opened. Content that simply appears below a row
- * reads as the next item in the list rather than as that row's contents — see docs/MOBILE-UI.md.
+ * The phone's one expanding idiom — the device list's computers, and whatever else comes to need it:
+ * a rounded inset, and an accent stripe down the left of the row *and* what it opened. Content that
+ * simply appears below a row reads as the next item in the list rather than as that row's contents —
+ * see docs/MOBILE-UI.md.
+ *
+ * **The ground is the caller's**, painted through [modifier] and the same open or shut. It used to be
+ * this block's, tinted to [Colors.listBg] only while open — invisible from the day it was written,
+ * because `listBg` is also `MaterialTheme.colorScheme.surface`, the ground the rows inside already
+ * paint. A block that stands out has to stand out shut as well: a remembered computer nobody is
+ * connected to never opens at all.
  */
 @Composable
 fun ExpandableBlock(
@@ -36,10 +42,6 @@ fun ExpandableBlock(
     val shape = RoundedCornerShape(Dimens.corner)
     val stripe = Colors.accent
     val stripeWidth = with(LocalDensity.current) { Dimens.accentStripe.toPx() }
-    val background by animateColorAsState(
-        if (open) Colors.listBg else Color.Transparent,
-        label = "blockBackground",
-    )
 
     Column(
         modifier
@@ -48,7 +50,6 @@ fun ExpandableBlock(
             // and to the right at the instant the body appeared, which read as a stutter
             .padding(Dimens.gap / 2)
             .clip(shape)
-            .background(background)
             // painted rather than laid out: the stripe has to be as tall as the row *and* its
             // contents, and a sibling in a Row can't know that height while the body is animating
             .drawBehind { if (open) drawRect(stripe, size = Size(stripeWidth, size.height)) },

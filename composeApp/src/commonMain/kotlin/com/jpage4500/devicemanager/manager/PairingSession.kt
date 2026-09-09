@@ -7,6 +7,7 @@ import com.jpage4500.devicemanager.crypto.*
 import com.jpage4500.devicemanager.transport.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.flow.*
 import kotlin.random.Random
 
@@ -28,8 +29,13 @@ sealed interface PairState {
      */
     data object Connecting : PairState
 
-    /** paired *and* connected, which is when the device actually appears in the list. */
-    data class Paired(val message: String) : PairState
+    /**
+     * paired *and* connected, which is when the device actually appears in the list.
+     *
+     * [deviceId] is null on the adb-server route: that connection carries a whole fleet and the
+     * device arrives in its next `track-devices` push, so there is no one row to point at.
+     */
+    data class Paired(val message: String, val deviceId: String? = null) : PairState
 
     /** [canRetry] when there is a device to try again with, rather than a dead server. */
     data class Failed(val message: String, val canRetry: Boolean = false) : PairState
@@ -98,6 +104,9 @@ class PairingSession {
      */
     private var pairedGuid: String? = null
 
+    /** the device that was attached, so the screen can open it; null on the adb-server route. */
+    private var connectedId: String? = null
+
     /**
      * browse until cancelled, pairing with whatever turns up.
      *
@@ -108,22 +117,9 @@ class PairingSession {
     suspend fun run() {
         val scope = CoroutineScope(currentCoroutineContext())
 
-        // ask first. a phone left on the default 127.0.0.1 has no adb server at all, and finding
-        // that out after someone has scanned a code is the whole failure this avoids
-        val transport = DeviceManager.pairer()
-        if (transport == null) {
-            log.w("run: nothing attached can pair")
-            _state.value = PairState.Failed("no adb server to pair through")
-            return
-        }
-        val reachable = transport.probe()
-        if (reachable.isFailure) {
-            val why = reachable.exceptionOrNull()?.message ?: "unreachable"
-            log.w("run: $why")
-            _state.value = PairState.Failed(why)
-            return
-        }
-        log.d("run: ${reachable.getOrNull()} is up; waiting for a scan of $serviceName")
+        // ask first, whichever route this is: finding out there is nothing to pair through *after*
+        // someone has scanned a code is the whole failure this avoids
+        if (!checkReady()) return
         _state.value = PairState.Waiting
 
         val browse = withContext(Dispatchers.Main) {
@@ -137,6 +133,40 @@ class PairingSession {
             withContext(NonCancellable + Dispatchers.Main) { browse.close() }
             log.d("run: stopped")
         }
+    }
+
+    /**
+     * whether there is anything to pair through, asked before a code is drawn.
+     *
+     * The two routes fail for different reasons and neither is worth discovering late: pairing
+     * ourselves needs a key, and pairing through a server needs one that answers.
+     */
+    private suspend fun checkReady(): Boolean {
+        if (canPairDirectly) {
+            if (AdbIdentity.keyPair() == null) {
+                log.e("checkReady: no adb key to pair with")
+                _state.value = PairState.Failed("this app has no key to pair with")
+                return false
+            }
+            log.d("checkReady: pairing directly; waiting for a scan of $serviceName")
+            return true
+        }
+
+        val transport = DeviceManager.pairer()
+        if (transport == null) {
+            log.w("checkReady: nothing attached can pair")
+            _state.value = PairState.Failed("no adb server to pair through")
+            return false
+        }
+        val reachable = transport.probe()
+        if (reachable.isFailure) {
+            val why = reachable.exceptionOrNull()?.message ?: "unreachable"
+            log.w("checkReady: $why")
+            _state.value = PairState.Failed(why)
+            return false
+        }
+        log.d("checkReady: ${reachable.getOrNull()} is up; waiting for a scan of $serviceName")
+        return true
     }
 
     /**
@@ -228,8 +258,8 @@ class PairingSession {
         val guid = pairedGuid
         log.d("connectPaired: looking for ${guid ?: "any device"} on $MDNS_ADB_CONNECT_TLS")
 
-        val service = awaitConnectService(guid)
-        if (service == null) {
+        val services = awaitConnectServices(guid)
+        if (services.isEmpty()) {
             log.w("connectPaired: $guid never advertised a connect port")
             // paired is worth saying: the trust is established and survives, so a retry only has to
             // dial rather than pair again
@@ -238,57 +268,98 @@ class PairingSession {
             return
         }
 
-        log.i("connectPaired: connecting to ${service.host}:${service.port}")
-
-        // a null transport means we paired ourselves, so we hold the key the device now trusts and
-        // must be the one to dial it — a server asked to connect would present its own key and be
-        // refused. `DirectDeviceTransport` reaches the TLS port through the STLS upgrade
-        val result = if (transport == null) {
-            val direct = DirectDeviceTransport(service.host, service.port)
-            direct.probe()
-                .onSuccess { DeviceManager.addConnection(direct) }
-                .onFailure { direct.close() }
-        } else {
-            transport.connect(service.host, service.port)
+        // **every match is tried, not just the first.** One device commonly advertises more than one
+        // connect record — a registration it has already abandoned plus the live one — and mDNS
+        // disambiguates them by appending ` (2)` to the name rather than replacing anything. The
+        // stale one refuses instantly, so working through them costs nothing and dialling only the
+        // exact-name match dials the dead one about half the time
+        var failure: Throwable? = null
+        for (service in services) {
+            log.i("connectPaired: trying ${service.host}:${service.port}")
+            val result = dial(transport, service)
+            result.onSuccess {
+                log.i("connectPaired: $it")
+                _state.value = PairState.Paired(it, connectedId)
+                return
+            }
+            result.onFailure { error ->
+                log.w("connectPaired: ${service.port}: ${error.message}")
+                // keep the most informative failure: a refused connect says only that this record
+                // was stale, where anything else is the actual reason the device won't have us
+                if (failure == null || error.isRefused().not()) failure = error
+            }
         }
 
-        result
-            .onSuccess {
-                log.i("connectPaired: $it")
-                _state.value = PairState.Paired(it)
-            }
-            .onFailure {
-                log.w("connectPaired: ${it.message}")
-                _state.value = PairState.Failed(
-                    it.message ?: "paired, but couldn't connect",
-                    canRetry = true,
-                )
-                attempting = false
-            }
+        _state.value = PairState.Failed(
+            failure?.message ?: "paired, but couldn't connect",
+            canRetry = true,
+        )
+        attempting = false
     }
 
     /**
-     * the first `_adb-tls-connect._tcp` service matching [guid], or null if none turns up in time.
+     * connect to one advertised address.
+     *
+     * A null [transport] means we paired ourselves, so we hold the key the device now trusts and
+     * must be the one to dial it — a server asked to connect would present its own key and be
+     * refused. [DirectDeviceTransport] reaches the TLS port through the `STLS` upgrade.
+     */
+    private suspend fun dial(transport: DeviceTransport?, service: MdnsService): Result<String> {
+        if (transport != null) return transport.connect(service.host, service.port)
+        val direct = DirectDeviceTransport(service.host, service.port)
+        return direct.probe()
+            .onSuccess {
+                DeviceManager.addConnection(direct)
+                connectedId = direct.deviceId
+            }
+            .onFailure { direct.close() }
+    }
+
+    /** a connect that was refused outright, which is what a stale mDNS record looks like. */
+    private fun Throwable.isRefused(): Boolean =
+        (this as? AdbException)?.reason == AdbError.DISCONNECTED
+
+    /**
+     * every `_adb-tls-connect._tcp` service belonging to [guid], in the order they were announced.
+     *
+     * Waits for the first, then keeps listening for [SETTLE_MS] — a device with a stale record
+     * announces both, and the useful one is often the second. A channel rather than a list because
+     * the callback arrives on whichever thread the platform resolves on.
      *
      * The browse is started and stopped on the main thread for the same reason the pairing one is:
      * iOS schedules `NSNetServiceBrowser` on the calling thread's run loop.
      */
-    private suspend fun awaitConnectService(
+    private suspend fun awaitConnectServices(
         guid: String?,
         timeoutMs: Long = CONNECT_BROWSE_MS,
-    ): MdnsService? {
-        val found = CompletableDeferred<MdnsService>()
+    ): List<MdnsService> {
+        val announced = Channel<MdnsService>(Channel.UNLIMITED)
         val browse = withContext(Dispatchers.Main) {
             browseMdns(MDNS_ADB_CONNECT_TLS) { service ->
-                if (guid == null || service.name == guid) found.complete(service)
+                if (service.belongsTo(guid)) announced.trySend(service)
             }
         }
         return try {
-            withTimeoutOrNull(timeoutMs) { found.await() }
+            val first = withTimeoutOrNull(timeoutMs) { announced.receive() } ?: return emptyList()
+            val all = mutableListOf(first)
+            // drain the rest of the window; the loop only ends because the timeout cancels it
+            withTimeoutOrNull(SETTLE_MS) {
+                for (service in announced) all += service
+            }
+            all.distinctBy { "${it.host}:${it.port}" }
         } finally {
             withContext(NonCancellable + Dispatchers.Main) { browse.close() }
         }
     }
+
+    /**
+     * whether an announced service is this device's.
+     *
+     * The ` (2)` suffix is mDNS resolving a name collision — the same shape `parseDeviceList` deals
+     * with on the adb server's own list — so a suffixed name is *this* device, not another one.
+     */
+    private fun MdnsService.belongsTo(guid: String?): Boolean =
+        guid == null || name == guid || name.startsWith("$guid (")
 
     /** `Successfully paired to 1.2.3.4:5555 [guid=adb-XXXX]` — the guid is the mDNS service name. */
     private fun guidOf(reply: String): String? = reply
@@ -339,5 +410,8 @@ class PairingSession {
 
         /** a device re-advertises its connect port right after pairing, but not instantly. */
         const val CONNECT_BROWSE_MS = 10_000L
+
+        /** how long to keep listening after the first match, to catch a live record behind a stale one. */
+        const val SETTLE_MS = 1_500L
     }
 }

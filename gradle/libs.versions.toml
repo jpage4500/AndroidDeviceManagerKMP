@@ -20,6 +20,8 @@ kermit = "2.1.0"
 # build on minSdk 24 fails to dex ktor-client-core. 3.5.x is clean
 ktor = "3.5.2"
 slf4jSimple = "2.0.18"
+# Google's own TLS stack, bundled on android for exactly one method — see PairingTls.android.kt
+conscrypt = "2.7.0"
 buildconfig = "6.0.10"
 
 [libraries]
@@ -71,6 +73,13 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+
+# the TLS keying-material exporter wireless-debugging pairing needs. Android's platform TLS *is*
+# Conscrypt and has this method, but it lives in `com.android.org.conscrypt`, and hidden-API
+# enforcement makes it throw NoSuchMethodException for an app targeting a modern SDK. Bundling it
+# puts the same class in `org.conscrypt` where it is ours to call — no reflection, no restriction.
+# ~2.6 MB per ABI, and 16 KB-page aligned
+conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscrypt" }
 
 # --- misc ---
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }

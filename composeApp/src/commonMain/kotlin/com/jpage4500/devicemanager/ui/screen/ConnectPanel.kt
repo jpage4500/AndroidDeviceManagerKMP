@@ -78,7 +78,19 @@ fun ConnectPanel(modifier: Modifier = Modifier) {
 
     // outside the card on purpose: what a route opens is a screen of its own, not the card's next
     // item, and a dialog composed inside the card would still be one in the tree
-    route?.let { entry -> RouteDialog(entry, onDismiss = { route = null }) }
+    route?.let { entry ->
+        RouteDialog(
+            entry = entry,
+            onDismiss = { route = null },
+            // a device that has just been connected is the thing the user came here for, so the
+            // dialog gets out of the way and its page opens. Selecting it is what shows that page —
+            // App collects the selection and puts up the device sheet
+            onConnected = { deviceId ->
+                route = null
+                DeviceManager.select(deviceId)
+            },
+        )
+    }
 }
 
 /**
@@ -90,7 +102,7 @@ fun ConnectPanel(modifier: Modifier = Modifier) {
  * what puts this on the dialog stack, so the back gesture closes the form and not the app.
  */
 @Composable
-private fun RouteDialog(entry: Route, onDismiss: () -> Unit) {
+private fun RouteDialog(entry: Route, onDismiss: () -> Unit, onConnected: (String) -> Unit) {
     BaseDialog(
         title = stringResource(entry.title),
         icon = entry.icon,
@@ -103,8 +115,10 @@ private fun RouteDialog(entry: Route, onDismiss: () -> Unit) {
         fullScreen = true,
     ) {
         when (entry) {
+            // a computer brings a whole fleet rather than one device, so there is no single page to
+            // open — its form stays put and the list behind it fills in
             Route.SERVER -> ServerForm()
-            Route.DEVICE -> DeviceForm()
+            Route.DEVICE -> DeviceForm(onConnected)
         }
     }
 }
@@ -226,7 +240,7 @@ private fun ServerForm() {
  * being a thing to find.
  */
 @Composable
-private fun DeviceForm() {
+private fun DeviceForm(onConnected: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     // this app does the pairing cryptography itself where it can; failing that, an attached adb
     // server will do it, and a Device Manager server never can — see PairingSession
@@ -254,6 +268,7 @@ private fun DeviceForm() {
                 .onSuccess {
                     DeviceManager.addConnection(transport)
                     status = Status(getString(Res.string.connect_direct_connected, it), isError = false)
+                    onConnected(transport.deviceId)
                 }
                 .onFailure {
                     transport.close()
@@ -266,7 +281,7 @@ private fun DeviceForm() {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         FormHeader(Res.string.connect_pair_qr)
         if (canPair) {
-            PairPanel()
+            PairPanel(onConnected)
         } else {
             CenteredNote(stringResource(Res.string.connect_pair_needs_adb))
         }
@@ -278,6 +293,9 @@ private fun DeviceForm() {
         if (found.isEmpty()) {
             CenteredNote(stringResource(Res.string.connect_found_none))
         }
+        // tapping one **fills the fields in** rather than connecting: the address lands where it can
+        // be seen and corrected, and Connect stays the one thing that dials. A row that connected on
+        // touch also gives no way to pick a device and then change the port
         found.forEach { service ->
             OptionRow(
                 icon = Res.drawable.device_remote,
@@ -287,7 +305,7 @@ private fun DeviceForm() {
                 onClick = {
                     host = service.host
                     port = service.port.toString()
-                    connect()
+                    status = null
                 },
             )
         }
@@ -338,11 +356,19 @@ private fun rememberAdbDevices(): List<MdnsService> {
  * there is no "stop waiting" — there is nothing to back out of, only a form to close.
  */
 @Composable
-private fun PairPanel() {
+private fun PairPanel(onConnected: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val session = remember { PairingSession() }
     val state by session.state.collectAsState()
     LaunchedEffect(session) { session.run() }
+
+    // pairing ends by attaching the device, so the dialog closes and its page opens — the same
+    // follow-through the typed-address path gets. Keyed on the state so it fires once, and null on
+    // the adb-server route, where a fleet arrives rather than one device
+    val paired = state as? PairState.Paired
+    LaunchedEffect(paired) {
+        paired?.deviceId?.let(onConnected)
+    }
 
     val current = state
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
