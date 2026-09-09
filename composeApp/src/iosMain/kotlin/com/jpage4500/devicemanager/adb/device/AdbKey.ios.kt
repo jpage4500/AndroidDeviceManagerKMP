@@ -72,6 +72,36 @@ actual class AdbKeyPair internal constructor(private val key: SecKeyRef) {
         }
     }
 
+    /**
+     * `kSecKeyAlgorithmRSASignatureMessagePKCS1v15SHA256` — *Message*, not *Digest*: it hashes the
+     * input itself, which is what an ordinary signature over a certificate wants.
+     *
+     * The contrast with [signToken] is the whole reason both exist. That one uses the *Digest*
+     * variant, because adbd's challenge is 20 bytes to be treated as though they were already a
+     * hash.
+     */
+    actual fun signSha256(data: ByteArray): ByteArray? {
+        val input = data.toCFData() ?: return null
+        try {
+            val signature = SecKeyCreateSignature(
+                key,
+                kSecKeyAlgorithmRSASignatureMessagePKCS1v15SHA256,
+                input,
+                null,
+            ) ?: run {
+                log.e("signSha256: the key refused to sign")
+                return null
+            }
+            try {
+                return signature.toByteArray()
+            } finally {
+                CFRelease(signature)
+            }
+        } finally {
+            CFRelease(input)
+        }
+    }
+
     private fun export(of: SecKeyRef): ByteArray? {
         val data = SecKeyCopyExternalRepresentation(of, null) ?: run {
             log.e("export: the key can't be exported")

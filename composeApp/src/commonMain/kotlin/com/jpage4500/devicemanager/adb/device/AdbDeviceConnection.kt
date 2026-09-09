@@ -1,6 +1,7 @@
 package com.jpage4500.devicemanager.adb.device
 
 import com.jpage4500.devicemanager.adb.*
+import com.jpage4500.devicemanager.crypto.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
@@ -28,7 +29,7 @@ private val log = LoggerConfig.createLogger("AdbDeviceConnection")
  * two headers' bytes into one message.
  */
 class AdbDeviceConnection private constructor(
-    private val stream: AdbStream,
+    private val socket: AdbSocket,
     val address: String,
 ) {
     /** what the device said about itself in its `CNXN` — `device::ro.product.name=…;features=…`. */
@@ -99,9 +100,14 @@ class AdbDeviceConnection private constructor(
 
     internal suspend fun send(message: AdbMessage): AdbOutcome<Unit> = try {
         writeLock.withLock {
-            stream.write(message.header())
-            if (message.payload.isNotEmpty()) stream.write(message.payload)
-            stream.flush()
+            // one write per message where possible: a header and payload sent separately are two
+            // TLS records for one message, and the far end reads them fine but pays for both
+            val header = message.header()
+            if (message.payload.isEmpty()) {
+                socket.write(header)
+            } else {
+                socket.write(header + message.payload)
+            }
         }
         AdbOutcome.Ok(Unit)
     } catch (e: CancellationException) {
@@ -126,7 +132,7 @@ class AdbDeviceConnection private constructor(
                 while (isActive) {
                     val header = readHeader() ?: break
                     val payload =
-                        if (header.length > 0) stream.readFully(header.length) else ByteArray(0)
+                        if (header.length > 0) socket.readFully(header.length) else ByteArray(0)
                     route(header, payload)
                 }
             } catch (e: CancellationException) {
@@ -165,7 +171,7 @@ class AdbDeviceConnection private constructor(
     }
 
     private suspend fun readHeader(): AdbHeader? {
-        val bytes = stream.readFully(AdbMessage.HEADER_SIZE)
+        val bytes = socket.readFully(AdbMessage.HEADER_SIZE)
         val header = AdbMessage.parseHeader(bytes)
         if (header == null) {
             // there is no framing to resynchronise to, so a bad magic ends the connection
@@ -188,7 +194,7 @@ class AdbDeviceConnection private constructor(
     fun close() {
         closed = true
         scope.cancel()
-        stream.close()
+        socket.close()
     }
 
     companion object {
@@ -217,7 +223,7 @@ class AdbDeviceConnection private constructor(
             authMs: Long = AUTH_MS,
         ): AdbOutcome<AdbDeviceConnection> {
             val address = "$host:$port"
-            val socket = AdbStream.openOrNull(host, port, connectMs)
+            val socket = openAdbSocket(host, port, connectMs)
                 ?: return AdbOutcome.Err(AdbError.DISCONNECTED, "nothing is listening on $address")
 
             val connection = AdbDeviceConnection(socket, address)
@@ -264,7 +270,7 @@ class AdbDeviceConnection private constructor(
         while (true) {
             val header = readHeader()
                 ?: return AdbOutcome.Err(AdbError.DISCONNECTED, "$address closed the connection")
-            val payload = if (header.length > 0) stream.readFully(header.length) else ByteArray(0)
+            val payload = if (header.length > 0) socket.readFully(header.length) else ByteArray(0)
 
             when (header.command) {
                 AdbMessage.A_CNXN -> {
@@ -308,11 +314,42 @@ class AdbDeviceConnection private constructor(
                 // compares the client certificate against the keys it already trusts and kicks the
                 // connection when it doesn't match, with no dialog anywhere. So this is not
                 // something the user can allow their way out of — see docs/ADB-TRANSPORTS.md
-                AdbMessage.A_STLS -> return AdbOutcome.Err(
-                    AdbError.UNAUTHORIZED,
-                    "$address is a wireless debugging port; run `adb tcpip 5555` on the device " +
-                        "and connect to port 5555 instead",
-                )
+                /*
+                 * a wireless-debugging port. The upgrade happens on this same connection: answer
+                 * with A_STLS, hand over a certificate over our own key, and then **wait** — adbd
+                 * sends CNXN once the handshake succeeds, so the loop simply carries on rather than
+                 * asking again.
+                 *
+                 * adbd accepts the certificate only for a key it has been paired with, and rejects
+                 * it by dropping the connection with nothing said. So a failure here reads as
+                 * "not paired", which is the true reason far more often than not.
+                 */
+                AdbMessage.A_STLS -> {
+                    if (!socket.canStartTls) {
+                        return AdbOutcome.Err(
+                            AdbError.UNAUTHORIZED,
+                            "$address needs TLS, which this platform can't do; run " +
+                                "`adb tcpip 5555` on the device and use port 5555 instead",
+                        )
+                    }
+                    val key = AdbIdentity.keyPair() ?: return AdbOutcome.Err(
+                        AdbError.UNAUTHORIZED,
+                        "there is no adb key to present",
+                    )
+                    val certificate = X509Self.create(key, AdbIdentity.name())
+                        ?: return AdbOutcome.Err(AdbError.IO, "couldn't build a certificate")
+
+                    log.d("handshake: $address wants TLS; upgrading")
+                    send(AdbMessage(AdbMessage.A_STLS, AdbMessage.A_STLS_VERSION))
+                        .let { if (it is AdbOutcome.Err) return it }
+
+                    if (!socket.startTls(key, certificate)) {
+                        return AdbOutcome.Err(
+                            AdbError.UNAUTHORIZED,
+                            "$address refused this app's certificate — pair with it first",
+                        )
+                    }
+                }
 
                 else -> log.d("handshake: $address: ignoring ${header.name}")
             }

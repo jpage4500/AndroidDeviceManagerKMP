@@ -187,6 +187,17 @@ kotlin {
             }
         }
 
+        // the only tests in the project, and they exist for one reason: the SPAKE2 stack in
+        // `crypto/` is arithmetic that either matches BoringSSL byte for byte or fails a handshake
+        // with nothing to debug. Desktop-only because the code under test is pure `commonMain` — it
+        // would compile and pass identically on the other two, and running it three times proves
+        // nothing extra. `./gradlew :composeApp:desktopTest`
+        val desktopTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
+
         val desktopMain by getting {
             dependsOn(jvmCommonMain)
             dependencies {

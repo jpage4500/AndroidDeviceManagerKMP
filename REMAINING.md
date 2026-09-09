@@ -82,12 +82,12 @@ and [ADB-TRANSPORTS.md](docs/ADB-TRANSPORTS.md) for what can reach a device.
 - [x] Manual **IP + port** entry (defaults to `:5555`), remembering the last IP and preselecting its
       last octet so only that has to be retyped
 - [x] **Recent wireless devices** list, persisted, with **Delete** on the right-click menu
-- [x] **Pair with QR code** — Android 11+ wireless debugging pairing over mDNS. On Android the app
-      runs its own bundled `adb` as the server, so no computer is needed; iOS still needs one
-      elsewhere, since it cannot execute a bundled binary — see
-      [ADB-TRANSPORTS.md](docs/ADB-TRANSPORTS.md)
-- [x] **Connect straight to a device**, no adb server anywhere — `DirectDeviceTransport` against a
-      plain `adb tcpip 5555` port, found over mDNS or typed in
+- [x] **Pair with QR code** — Android 11+ wireless debugging pairing over mDNS, done by the app
+      itself on Android: SPAKE2 in `crypto/`, the handshake in `adb/pairing/`, no server and nothing
+      bundled. Desktop pairs through its own adb server; iOS can only ever do that, since no Apple
+      TLS API exports keying material — see [ADB-TRANSPORTS.md](docs/ADB-TRANSPORTS.md)
+- [x] **Connect straight to a device**, no adb server anywhere — `DirectDeviceTransport`, over a
+      plain `adb tcpip 5555` port or, once paired, the wireless-debugging port via `A_STLS`
 - [x] **Connect to a remote server** — set its URL and token in Settings
 - [ ] **Share my devices** — run that server here
 - [x] A **transport picker**: local adb server, an adb server on the LAN, or a remote instance.

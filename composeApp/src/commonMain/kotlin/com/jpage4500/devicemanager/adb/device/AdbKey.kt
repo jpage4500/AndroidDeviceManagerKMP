@@ -38,6 +38,17 @@ expect class AdbKeyPair {
      * @return null when the platform refused to sign
      */
     fun signToken(token: ByteArray): ByteArray?
+
+    /**
+     * sign [data] with `SHA256withRSA` — an ordinary signature over a message, hashed and all.
+     *
+     * The counterpart to [signToken] and deliberately separate from it: this one is for the X.509
+     * certificate TLS pairing presents, where the rules are the usual ones. Reusing [signToken]
+     * would produce a certificate no TLS stack accepts.
+     *
+     * @return null when the platform refused to sign
+     */
+    fun signSha256(data: ByteArray): ByteArray?
 }
 
 /** a fresh pair, or null when the platform refused. */

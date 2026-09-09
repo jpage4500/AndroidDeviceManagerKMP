@@ -91,7 +91,9 @@ gets it alongside whatever else is attached.
 │     192.168.0.31:8765 · not co… │
 ├─────────────────────────────────┤
 │ ┌─────────────────────────────┐ │
-│ │ + Add a device              │ │  ← the same panel the empty state shows
+│ │ ▤ Connect to a computer   ▸ │ │  ← the same panel the empty state shows
+│ ├─────────────────────────────┤ │
+│ │ ▯ Connect to a device     ▸ │ │
 │ └─────────────────────────────┘ │
 └─────────────────────────────────┘
 ```
@@ -367,31 +369,44 @@ the same menu is 44dp and 17sp under a thumb. A 24dp row on a phone is a miss, n
 The screen a first-run user sees, and the one that decides whether the app is any good.
 
 **One `ConnectPanel` composable, two placements.** With nothing to show at all — no devices and no
-remembered computer — it is the empty state, centred and expanded. Otherwise it is the last item of
-the list, collapsed to a single "+ Add a device" card that expands in place. The same composable in
-both cases, so the two can never drift apart.
+remembered computer — it is the empty state, centred. Otherwise it is the last item of the list. The
+same composable in both cases, so the two can never drift apart, and **both routes are on show in
+both**: the card used to be a single "+ Add a device" row under a list, which put one tap in front of
+everything on the screen whose entire job is the first connection.
 
-**An open section has to look like part of the row that opened it.** A form that simply appears
-underneath reads as the next item in the list, which is what the first version did wrong. Open, a
-route becomes one block: its own ground, a rounded edge, an accent stripe down the left of the row
-*and* its form, and no rule between the two — the rule only ever falls between blocks. The stripe is
-painted with `drawBehind` rather than laid out as a sibling, because it has to be as tall as both
-halves and nothing can know that height while the form is still animating. The chevron turns rather
-than swapping icon, and the form expands and fades rather than appearing, so the eye follows where
-the content came from.
+**A route opens a screen; it does not unfold.** Either form is taller than the card it used to open
+inside — a QR code, three fields, a list of what mDNS found, a paragraph on what to do on the other
+device — and unfolded on a phone the button at the foot of the form sat below the bottom of the
+screen, in a card that scrolled inside a list that also scrolled. So a tap on a route hands it the
+whole screen, as the full-screen `BaseDialog` the device sheet and the mirror already are: the same
+title band, the same close, and the same place in the dialog stack, so the back gesture closes the
+form rather than the app. The row's title and subtitle become that dialog's heading — once the row is
+behind the form, they are the only thing still saying which of the two ways in this is.
 
-That drawing is `ui/components/ExpandableBlock.kt`, not this file's own: the device list's computers
-expand the same way, and a phone with two expanding idioms has one of them drawn slightly wrong. The
-one thing that folds and *isn't* an `ExpandableBlock` is a section inside a form — `SectionHeader`'s
-`CollapsibleSection`, which the device sheet's Details / Status / Commands use. A list row that opens
-into its own contents and a heading over a group of rows want different chrome; what they share, and
-what has to agree, is the chevron that turns rather than swaps.
+So the row's chevron points right and stays there (`OptionRow(open = false)`). A chevron that *turns*
+is a promise to unfold in place, and the device list's computers are what still make it:
+`ui/components/ExpandableBlock.kt` belongs to them now rather than to this panel. It is worth reading
+for what an expanding row costs. Open, a computer is one block — its own ground, a rounded edge, an
+accent stripe down the left of the row *and* of its contents, and no rule between the two, since the
+rule only ever falls between blocks — because contents that simply appear underneath read as the next
+item in the list. The stripe is painted with `drawBehind` rather than laid out as a sibling, as it
+has to be as tall as both halves and nothing can know that height while the body is still animating.
+And the block's **inset does not change with its state**: insetting only when open moved the row's
+icon and title down and to the right at the instant the body appeared, and that one-frame shift was
+the whole of the jank — the expand animation itself was fine.
+
+The third folding idiom is a section inside a form — `SectionHeader`'s `CollapsibleSection`, which
+the device sheet's Details / Status / Commands use. A list row that opens into its own contents and a
+heading over a group of rows want different chrome; what they share, and what has to agree, is the
+chevron that turns rather than swaps.
+
 Remembered computers themselves are **not** on this panel — they are rows of the device list, next to
 the devices they own. Two places listing the same server is one of them going stale.
 
-The block's **inset does not change with its state**. Insetting only when open moved the row's icon
-and title down and to the right at the instant the form appeared, and that one-frame shift was the
-whole of the jank — the expand animation itself was fine.
+**The panel's list item is keyed.** A keyless `item {}` in a `LazyColumn` is keyed by its index, so a
+connection made from the open form adds a row above the panel, shifts its index and remounts it —
+taking the form down mid-flow along with the "Connected to …" line it was showing. `item(key =
+"connect")` is what leaves the form up until it is closed.
 
 **A form's one real action is centred.** A button hard against the left edge of a panel reads as a
 label rather than as the thing to press.
@@ -409,29 +424,21 @@ instead leaves the scroll container full height and the field scrolls behind the
 nothing can reach it.
 
 ```
-┌─────────────────────────────────┐
-│  No devices yet                 │
-│                                 │
-│  ┌───────────────────────────┐  │
-│  │ [mac]  Connect to a      ▾│  │
-│  │        computer running   │  │
-│  │        Device Manager     │  │
-│  │ ┃                         │  │
-│  │ ┃   [ ▣  Scan a QR code ] │  │
-│  │ ┃   shown by Device Mgr   │  │
-│  │ ┃    on your computer     │  │
-│  │ ┃                         │  │
-│  │ ┃    ⎘ Paste connection   │  │
-│  │ ┃      Manual entry       │  │
-│  ├───────────────────────────┤  │
-│  │ [dev]  Connect to a device▸│ │
-│  │        pair with its      │  │
-│  │        wireless debugging │  │
-│  └───────────────────────────┘  │
-│                                 │
-│  Found on this network:         │
-│  · Pixel 8   192.168.0.171      │
-└─────────────────────────────────┘
+┌─────────────────────────────────┐        ┌─────────────────────────────────┐
+│  No devices yet                 │        │ [mac] Connect to a computer   ✕ │
+│                                 │        │       Running Device Manager    │
+│  ┌───────────────────────────┐  │        ├─────────────────────────────────┤
+│  │ [mac]  Connect to a      ▸│  │        │  In Device Manager on your      │
+│  │        computer running   │  │  tap   │  computer: Share ▸ Start Server │
+│  │        Device Manager     │  │  ────▶ │  ▸ QR Code, then scan it here.  │
+│  ├───────────────────────────┤  │        │      [ ▣  Scan a QR code ]      │
+│  │ [dev]  Connect to a      ▸│  │        │                                 │
+│  │        device, no         │  │        │ ── Or enter it by hand ──────── │
+│  │        computer involved  │  │        │ Host  [ 192.168.0.12          ] │
+│  └───────────────────────────┘  │        │ Port  [ 8765                  ] │
+└─────────────────────────────────┘        │ Token [ ••••••••              ] │
+                                           │           [ Connect ]           │
+                                           └─────────────────────────────────┘
 ```
 
 Ordered by how likely each is to work, not by how interesting it is.
@@ -441,22 +448,57 @@ rows of their own, which read as unrelated things to try; each belongs inside th
 as that section's main action. So there are two rows, and each is ordered by how little work its ways
 in take:
 
-- **Connect to a computer** — *scan* the QR that Device Manager shows on its Share Server dialog
-  (nothing typed at all), then *manual entry* behind a link for the address, port and token.
-- **Connect to a device** — an *address* (found over mDNS or typed), then *pair with a QR code*,
-  which this app **shows** and the other device scans.
+- **Connect to a computer** — the three clicks to make on the computer (Share ▸ Start Server ▸ QR
+  Code), the *scan* button under them, and the address, port and token below that.
+- **Connect to a device** — *pair with a QR code*, which this app **shows** and the other device
+  scans; then what mDNS *found on this network*; then an address typed by hand.
 
 The two QRs point in opposite directions and it is worth being clear which is which — one has our
 camera reading someone else's screen, the other has our screen being read by someone else's camera.
+
+**Each form leads with the part that needs nothing typed, and nothing is behind a link.** Both are
+sections under `SectionHeader`s, ordered by how little work each is, and every section is on screen
+at once: a full-screen form has the room, and a link that hides half of it is a link somebody has to
+guess at. The computer's fields are out even though a scan fills them, since they are also where a
+scan that read the wrong server gets corrected.
+
+```
+┌─────────────────────────────────┐
+│ [dev] Connect to a device     ✕ │
+│       Straight to another dev…  │
+├─────────────────────────────────┤
+│ ── Pair with a QR code ──────── │
+│  On the other device: Settings  │
+│  ▸ Developer options ▸ Wireless │
+│  debugging ▸ Pair device with   │
+│  QR code, then scan this.       │
+│         ▛▀▚▘▗▚▀▜                │
+│         ▐▖▟▄▙▄▖▌                │  ← up on its own; the adb server it
+│         ▙▄▞▗▖▚▄▟                │    needs was started on the way in
+│   Waiting for a device to scan… │
+│                                 │
+│ ── Found on this network ─────── │
+│ ▯ Pixel 8                       │
+│   192.168.0.171:5555            │
+│                                 │
+│ ── Or enter its address ─────── │
+│ Host [ 192.168.0.12           ] │
+│ Port [ 5555                   ] │
+│           [ Connect ]           │
+└─────────────────────────────────┘
+```
 
 **The two sections mean different things, and the device one is now two halves.** A computer is
 reached over the Device Manager HTTP API. A *device* is reached **directly, with no computer
 anywhere** — that is the whole point of the section — and `DirectDeviceTransport` does it: the
 address field builds one, so nothing goes through a desk's adb server behind the user's back.
 
-What still leans on a desk is **pairing**, and only pairing. The QR is offered under the address
-field and is disabled without an adb server attached, because the handshake needs a TLS keying
-material exporter neither the JDK nor Apple exposes — see
+What still leans on a desk is **pairing**, and only pairing — or on the adb server this app can start
+inside itself, which is what makes the QR the *first* thing in the device form rather than a button
+at the foot of it: on an Android build carrying the binary there is no decision in it, so the server
+is started on the way in and the code is simply up. Where neither is possible — iOS, or a build with
+no binary — the section says so instead of drawing a code nobody could act on. The handshake needs a
+TLS keying material exporter neither the JDK nor Apple exposes — see
 [ADB-TRANSPORTS.md](ADB-TRANSPORTS.md). In practice that splits along a line worth knowing: a device
 someone has run `adb tcpip 5555` on connects here with nothing else involved, and one that has only
 ever had wireless debugging switched on needs a desk once, to pair.
@@ -489,9 +531,9 @@ Four things to get right:
   rather than an IP. `ServerManager.connect` saves the entry only after it answers.
 - **Accept a pasted connection string.** The Swing app's Share Server dialog copies
   `adm://<base64 of {"host","port","token","name"}>` (`RemoteConnectionUtils`), and typing a
-  16-character token on a phone keyboard is the worst thing in this app. `SavedServer`
-  reads and writes that format, and the panel's **Paste connection** button fills the three fields
-  from it. Paste beats typing; a QR code of the same string beats paste, which is the next section.
+  16-character token on a phone keyboard is the worst thing in this app. `SavedServer` reads and
+  writes that format, and it is exactly what the QR carries: a scan fills the three fields from it,
+  which is why the scan button heads that form and the fields under it are there for repair.
 - **A phone on this route cannot add a device to that desk.** There is no connect and no pair
   endpoint in the API, and the brief is not to change it. So when the active connection is a Device
   Manager server, the "connect a device by IP" option is about *this phone*, not about the desk — and
@@ -621,14 +663,15 @@ Android's `resolveService` handles one lookup at a time and fails rather than qu
 queues; and iOS hands back raw `sockaddr` bytes rather than a string, read octet by octet so no host
 byte order is assumed.
 
-**The button is only offered where it can work, and the server is asked before anyone is asked.**
-Both halves of that were learned by running it:
+**No code is drawn where it can't work, and the server is asked before anyone is asked.** Both halves
+of that were learned by running it, and they are what lets the section come first without being a
+trap:
 
 - `canPair` was true for any `AdbServerTransport`, and a phone's default address is `127.0.0.1`.
-  There is no adb server inside an Android or iOS app, so the button was offered, a QR was shown, a
-  device scanned it, mDNS found it at `192.168.0.85:45615` — and only *then* did it say
-  `no adb server on 127.0.0.1`. `canPair` now excludes loopback on anything that isn't a desktop, and
-  the row says to set the adb server host in Settings.
+  There is no adb server inside an Android or iOS app, so a QR was shown, a device scanned it, mDNS
+  found it at `192.168.0.85:45615` — and only *then* did it say `no adb server on 127.0.0.1`.
+  `canPair` now excludes loopback on anything that isn't a desktop, and the section says to set the
+  adb server host in Settings instead of drawing a code.
 - The remaining case is a host that *is* set but isn't answering — the desk asleep, or its server not
   started with `-a`. So `PairingSession` calls `DeviceTransport.probe()` (`host:version`, the
   cheapest thing the server answers) **before** it shows a QR at all, and shows the failure instead.
@@ -637,6 +680,12 @@ Both halves of that were learned by running it:
 quiet: `onServiceFound` does not fire again for a device already known, so a pairing that failed for
 any transient reason would otherwise need the target's dialog closed and reopened. The resolved
 address is kept and a Try again link re-attempts with it.
+
+**A code that has been used comes down.** A password pairs once, so the QR is drawn only while it is
+still worth scanning: not while the server is still in question, not once it turned out not to be
+there, and not after a device has paired with it. Pairing a *second* device means closing the form
+and reopening it, which is also the only way to stop the browse — the session lives for exactly as
+long as the form is composed, so there is nothing to back out of and no "stop waiting" link.
 
 **Settings had to become reachable on the phone for any of this to work** — the adb server host lives
 there, and there was no way in. See below.
@@ -816,31 +865,23 @@ Each step leaves the app usable and compiles on all three targets.
    `manager/PairingSession.kt` and `host:pair` behind `DeviceTransport.pair` — compile-verified and
    encoder-verified, but the pairing round trip itself needs two real devices and an adb server.
 9. **The Android foreground service.**
-10. ~~**Direct to `adbd`**~~ **Done, for the plain port.** `adb/device/` is the device protocol —
-    24-byte framing, `CNXN`/`AUTH`/`OPEN`/`WRTE`, one held-open connection per device with streams
-    multiplexed over it — and `DirectDeviceTransport` is the transport on top, with `AdbSync` reused
-    through `AdbByteStream` so the file explorer comes along. The trust step is the legacy one: plain
-    RSA auth against the port `adb tcpip 5555` opens, which is what `scrcpy-mobile` ships and is on
-    the App Store. **It composes with the pairing that already existed** — pair once through a desk,
-    run `adb tcpip` through that desk, and the phone talks to that device directly ever after.
-    Compile-verified on all three targets; the handshake itself needs two real devices.
+10. ~~**Direct to `adbd`**~~ **Done, including wireless debugging.** `adb/device/` is the device
+    protocol — 24-byte framing, `CNXN`/`AUTH`/`OPEN`/`WRTE`, one held-open connection per device with
+    streams multiplexed over it, and `A_STLS` upgrading that connection to TLS in place.
+    `DirectDeviceTransport` sits on top, with `AdbSync` reused through `AdbByteStream` so the file
+    explorer comes along. Two ways in: the plain port `adb tcpip 5555` opens, and the
+    wireless-debugging port once the device has been paired with.
 
-    What is left is only the *self-contained* trust step, and the blocker turned out not to be the
-    one this list assumed:
+11. ~~**Standalone pairing**~~ **Done on Android.** `crypto/` and `adb/pairing/` do the whole
+    handshake in this app — SPAKE2 over Ed25519, a self-signed certificate over the app's own adb
+    key, and the TLS keying-material exporter reached through the platform's Conscrypt. No adb
+    server, no computer, nothing bundled. `canPairDirectly` is false on desktop and iOS, which pair
+    through a server instead; iOS can never do otherwise, because no Apple TLS API exports keying
+    material.
 
-    - **SPAKE2 is portable after all.** BoringSSL's variant is Ed25519 with fixed points, and
-      [spake2-java](https://github.com/MuntashirAkon/spake2-java) is a pure-Java port that maps onto
-      `commonMain` mechanically.
-    - **The TLS keying-material exporter is not.** The pairing socket is itself TLS and the SPAKE2
-      password is `code || SSL_export_keying_material(64, "adb-label")` — absent from the JDK's
-      `SSLSocket` and from every Apple TLS API. Conscrypt has it and has no iOS artifact; the only
-      all-three-targets answer is vendoring BoringSSL through cinterop. See ADB-TRANSPORTS.md.
-    - ~~**Bundle the `adb` binary** on Android~~ **Done, bar the binary itself.**
-      `manager/LocalAdbServer.kt` runs one on loopback and `PairingSession` pairs through it with no
-      computer involved — the objection that `scripts/*.sh` was rejected over does not apply, because
-      that was about a GUI macOS app inheriting neither `PATH` nor `ANDROID_HOME`, and an APK
-      carrying its own binary in `nativeLibraryDir` has neither problem. The binary is supplied per
-      build rather than committed; see `androidApp/src/main/jniLibs/README.md`.
+    The constraint that shaped it: **pairing and connecting are the same key or neither works.**
+    `adbd` matches on the public key inside the certificate, so whoever pairs is the only one who can
+    then connect — which is why the `A_STLS` work above had to land in the same pass.
 
 ## Deliberately later
 
@@ -849,9 +890,8 @@ Each step leaves the app usable and compiles on all three targets.
 - **Multi-select and bulk actions.** The desktop's reason for existing; a phone has no fleet. Built
   once — long press for a picker, a FAB, Remove Device — and taken back out: it was a mode to get
   into and out of, over a list of three rows, for one action nobody was asking a phone for.
-- **Standalone pairing in pure Kotlin.** Blocked on a TLS keying-material exporter rather than on
-  SPAKE2. On Android it is no longer blocked at all — the bundled `adb` does it — so what is left
-  here is iOS, which cannot execute a bundled binary and so pairs only through a server elsewhere.
+- **Pairing on iOS.** No Apple TLS API exports RFC 5705 keying material, so the SPAKE2 password can
+  never be assembled there. iOS pairs through an adb server elsewhere, permanently.
 - **Tier III live video.** ~70% of the total work, per ADB-TRANSPORTS.md, on the platform least able
   to spare it.
 - **Serving the HTTP API from a phone.** A phone has nothing attached to serve.

@@ -90,3 +90,9 @@
 - phone: pair a device by QR with no computer involved at all
 - Mirror: pinch to zoom into the screen and drag with two fingers to move around
 - Mirror: on the desktop, ctrl or cmd with the scroll wheel zooms the screen
+- phone: each way of connecting opens full screen instead of unfolding
+- phone: both ways of connecting show without opening a row first
+- phone: the host, port and token for a computer are always on screen
+- phone: connecting to a computer says where to find the QR on that computer
+- phone: connecting to a device opens with the pairing QR already showing
+- pair and connect to a device with no computer involved at any point

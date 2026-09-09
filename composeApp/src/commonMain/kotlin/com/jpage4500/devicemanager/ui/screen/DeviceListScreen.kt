@@ -64,7 +64,7 @@ fun DeviceListScreen(
                 title = stringResource(Res.string.connect_device),
                 detail = stringResource(Res.string.connect_device_msg),
             )
-            ConnectPanel(startExpanded = true)
+            ConnectPanel()
         }
         return
     }
@@ -96,8 +96,10 @@ fun DeviceListScreen(
         }
 
         // the same panel, collapsed — the last item rather than a floating button, so it scrolls
-        // away with the list it belongs to
-        item { ConnectPanel() }
+        // away with the list it belongs to. keyed, because a keyless item is keyed by its index: a
+        // connection made from the form the panel opens adds a row above it, and the panel would
+        // otherwise be remounted — closing the form that was still showing what it just did
+        item(key = "connect") { ConnectPanel() }
     }
 }
 

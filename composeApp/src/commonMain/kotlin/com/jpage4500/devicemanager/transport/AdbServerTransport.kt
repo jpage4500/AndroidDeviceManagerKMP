@@ -19,13 +19,6 @@ import kotlinx.coroutines.flow.*
 class AdbServerTransport(
     host: String = "127.0.0.1",
     port: Int = 5037,
-    /**
-     * true when this loopback address is **this app's own** bundled adb server, not a missing one.
-     *
-     * Carried as a flag rather than asked of `LocalAdbServer`, which would point the transport layer
-     * back at the manager layer for one boolean. It only affects [canPair].
-     */
-    private val bundled: Boolean = false,
 ) : DeviceTransport {
 
     private val server = AdbServer(host, port)
@@ -105,15 +98,12 @@ class AdbServerTransport(
      * offer the button, show a QR, watch someone scan it, find the device over mDNS — and only then
      * say there was never a server. Measured in whose time, that is the worst failure in the app.
      *
-     * [bundled] is the exception, and the reason it exists: an Android build that ships the `adb`
-     * binary *does* have a server on loopback, started by
-     * [com.jpage4500.devicemanager.manager.LocalAdbServer], and that one can pair with nothing else
-     * involved at all.
+     * A phone no longer needs this route at all — it pairs for itself through
+     * [com.jpage4500.devicemanager.adb.pairing.AdbPairing] — so this is the desktop's answer and
+     * iOS's only one.
      */
     override val canPair: Boolean
-        get() = !server.isLoopback ||
-            PlatformUtils.getPlatform() == PlatformType.DESKTOP ||
-            bundled
+        get() = !server.isLoopback || PlatformUtils.getPlatform() == PlatformType.DESKTOP
 
     override suspend fun pair(host: String, port: Int, code: String): Result<String> =
         adbPair(server, host, port, code).toResult()

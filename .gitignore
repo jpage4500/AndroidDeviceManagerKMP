@@ -73,7 +73,3 @@ package-lock.json
 notes.raw
 release-notes.txt
 combined-notes.txt
-
-# the arm64 adb IS committed, pinned by checksum — see androidApp/src/main/jniLibs/PROVENANCE.md.
-# x86_64 is only for emulators, so it stays a local concern rather than 10 MB in everyone's clone
-androidApp/src/main/jniLibs/x86_64/*.so

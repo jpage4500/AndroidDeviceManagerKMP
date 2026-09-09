@@ -37,24 +37,20 @@
     <string name="connect_title">Connect to a wireless device</string>
 
     <!-- connect panel (mobile) -->
-    <string name="connect_add">Add a device</string>
     <string name="connect_connected">Connected to %1$s · %2$d devices</string>
     <string name="connect_device_by_ip">Connect to a device</string>
     <string name="connect_device_by_ip_msg">Straight to another device, no computer involved</string>
     <string name="connect_direct_connected">Connected to %1$s</string>
     <string name="connect_direct_msg">Needs "adb tcpip 5555" run on the device once — then use its IP with port 5555, and tap Allow when it asks. The port shown on its Wireless debugging screen is a different, encrypted one.</string>
     <string name="connect_forget">Forget</string>
+    <string name="connect_found_none">Nothing yet — still looking…</string>
     <string name="connect_host">Host</string>
     <string name="connect_host_hint">192.168.0.12</string>
     <string name="connect_later">Later</string>
-    <string name="connect_manual">Manual entry</string>
     <string name="connect_name">Name</string>
-    <string name="connect_pair_cancel">Stop waiting</string>
     <string name="connect_pair_checking">Checking the adb server…</string>
-    <string name="connect_pair_found">Found %1$s — pairing…</string>
     <string name="connect_pair_connecting">Paired. Connecting to it…</string>
-    <string name="connect_pair_bundled">Starts an adb server inside this app, so no computer is needed.</string>
-    <string name="connect_pair_starting">Starting the built-in adb server…</string>
+    <string name="connect_pair_found">Found %1$s — pairing…</string>
     <string name="connect_pair_needs_adb">Set the adb server host in Settings first — pairing is done by a computer running adb.</string>
     <string name="connect_pair_qr">Pair with a QR code</string>
     <string name="connect_pair_retry">Try again</string>
@@ -62,8 +58,11 @@
     <string name="connect_pair_waiting">Waiting for a device to scan…</string>
     <string name="connect_scan_none">That QR code is not a Device Manager connection</string>
     <string name="connect_scan_qr">Scan a QR code</string>
-    <string name="connect_scan_qr_msg">Device Manager on your computer shows one under Server ▸ Share</string>
+    <string name="connect_scan_steps">In Device Manager on your computer: Share ▸ Start Server ▸ QR Code, then scan it here.</string>
     <string name="connect_scan_unsupported">This device has no scanner — type the address below.</string>
+    <string name="connect_section_address">Or enter its address</string>
+    <string name="connect_section_found">Found on this network</string>
+    <string name="connect_section_manual">Or enter it by hand</string>
     <string name="connect_server">Connect to a computer</string>
     <string name="connect_server_msg">Running Device Manager on your network</string>
     <string name="connect_token">Auth token</string>

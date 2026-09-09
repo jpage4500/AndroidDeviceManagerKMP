@@ -35,6 +35,17 @@ actual class AdbKeyPair internal constructor(private val key: RSAPrivateKey) {
         log.e("signToken: ${e.message}")
         null
     }
+
+    actual fun signSha256(data: ByteArray): ByteArray? = try {
+        Signature.getInstance("SHA256withRSA").run {
+            initSign(key)
+            update(data)
+            sign()
+        }
+    } catch (e: GeneralSecurityException) {
+        log.e("signSha256: ${e.message}")
+        null
+    }
 }
 
 /**

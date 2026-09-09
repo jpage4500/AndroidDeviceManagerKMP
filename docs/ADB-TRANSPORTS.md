@@ -280,65 +280,86 @@ Two smaller things in the same area, both found in a log rather than reasoned ab
   `retry()` re-dials rather than pairing again — a second `host:pair` with the same code is refused,
   which would read as the pairing itself having broken.
 
-### The way out on Android: ship Google's binary
+### The crypto, and how far it is actually verified
 
-Which is why `PairingSession` hands the handshake to an adb server's `host:pair` — and why, on
-Android, **this app can now be that server**. `manager/LocalAdbServer.kt` runs a bundled `adb` with
-`-L tcp:127.0.0.1:5037 server nodaemon`, and nothing above it changed at all: it is an ordinary adb
-server on loopback, so `AdbServerTransport` reads it and `PairingSession` pairs through it exactly as
-they do with a desk's. The exporter problem doesn't get solved, it gets delegated to the one
-implementation that already has BoringSSL in it.
+`crypto/` is the portable half: `Spake2` byte-compatible with `spake25519.c`, on an `Ed25519` that
+does decode/encode/add/subtract/multiply, over a deliberately slow `BigUInt` — schoolbook
+multiplication and bit-by-bit division, chosen because a pairing does one scalar multiplication and
+then nothing, and the fast 51-bit-limb representation is where this kind of code goes wrong.
+Measured at 146 ms for one side on a desktop JVM, which is a spinner, not a problem. `PairingCipher`,
+`X509Self` and `Der` sit beside it; only `PairingTls` and the AEAD primitives are platform code.
 
-`AdbServerTransport(bundled = true)` is the only new concept — a flag saying "this loopback address
-is ours", since `canPair` is otherwise false for loopback on a phone precisely because there is
-normally nothing there.
+It is **verified against vectors that did not come from this repo** — `composeApp/src/desktopTest`,
+the only tests in the project, and they exist because the alternative is unfalsifiable: this either
+matches BoringSSL byte for byte or a handshake fails with nothing to debug.
 
-Three things about it worth knowing before touching it:
+- SHA-512 against FIPS 180-4, including a message longer than one block
+- **M and N decoded to the decimal coordinates written in `spake25519.c`'s own comments**, which
+  checks the decoder against BoringSSL rather than against itself
+- Ed25519 key generation against RFC 8032, exercising SHA-512, scalar clamping, the ladder and point
+  encoding end to end in one comparison
+- `L * B == identity`, which is the group order and the ladder agreeing
+- the hand-rolled certificate handed to the JVM's own X.509 parser, signature verified
+- DER's long-form length boundary, and `PeerInfo`'s fixed 8192 bytes
 
-- **The binary is committed for arm64 and pinned by checksum**, because building it needs a ~100 GB
-  AOSP tree and so cannot be a CI step — at ~10 MB changing about once a year, checking it in beats
-  LFS or fetching a release asset, both of which keep the trust decision and add a failure mode.
-  `:androidApp:verifyAdbBinary` runs on every build: a release refuses a binary with no recorded
-  checksum, a debug build warns, and either way a mismatch fails the build naming both hashes.
-  x86_64 stays local. The app is correct with none of it — `AdbDaemon.isBundled` is false, the
-  Connect panel says so, every other route is unaffected. What is committed today is LADB's
-  prebuilt, 4.9 MB, verified to need nothing outside bionic; `androidApp/src/main/jniLibs/
-  PROVENANCE.md` is the record, and it is a third-party build rather than one made here, which is
-  the weak link and is written down as such.
-- **It has to be a *statically* linked adb.** Termux's `android-tools` is the same upstream source
-  but links against Termux's own C++ runtime, and bundling it means bundling its closure — measured
-  at 108 shared objects and 12 MB per ABI, with `libc++` missing from that repository entirely.
-  `LD_LIBRARY_PATH` is pointed at the binary's directory so a dynamically linked one *could* work,
-  but that is a fallback rather than the plan.
-- **The listen spec is `tcp:localhost:5037`, never `tcp:127.0.0.1:5037`.** adb rejects the second
-  with *"listening on specified hostname currently unsupported"* and exits, because
-  `socket_spec.cpp` decides what counts as loopback like this:
+Three constants differ from each other in a way that is easy to get backwards:
 
-  ```cpp
-  static bool tcp_host_is_local(std::string_view hostname) {
-      // FIXME
-      return hostname.empty() || hostname == "localhost";
-  }
-  ```
+- the **exporter label** `"adb-label"` carries its trailing NUL (`sizeof` on a `char[]`), and so do
+  the SPAKE2 names `"adb pair client"` / `"adb pair server"`
+- the **HKDF info** `"adb pairing_auth aes-128-gcm key"` does *not* — adb passes `sizeof(info) - 1`
 
-  A literal loopback address is not recognised as loopback. Naming the host at all is also what pins
-  it to the loopback path — an empty host binds *every* interface whenever adb's own `gListenAll` is
-  set, and 5037 has no authentication whatsoever, so that is not a default to lean on.
+And a wrong pairing code is **not** detected by SPAKE2: both sides complete it holding different
+keys, and it is the AES-GCM tag on the first `PeerInfo` that fails. That is where "the pairing code
+was wrong" comes from.
 
-- **`libadb.so` in `jniLibs`, and `useLegacyPackaging = true`.** Android mounts an app's data
-  directory no-exec (API 29+), so `nativeLibraryDir` is the only place left to run something from,
-  and only `lib*.so` gets packaged there — so an executable must be named like a library to be
-  installed anywhere runnable. Legacy packaging is what makes it a real file on disk rather than a
-  mapping inside the APK. Verified: `lib/arm64-v8a/libadb.so` appears in the APK and the merged
-  manifest carries `extractNativeLibs="true"`.
+What remains unanchored is the SPAKE2 transcript layout — the order of names and messages and their
+8-byte length prefixes — which was read straight from the source. Only a device confirms that.
 
-A loose end, deliberately left: the child process can outlive the app if Android kills it without
-unwinding, leaving an orphan holding 5037. That is self-healing rather than broken — the next launch
-finds a server already answering on loopback and uses it — but it is why `launch()` kills its own
-handle first.
 
-**iOS gets none of this.** It executes nothing an app brought with it, so iOS pairs only through an
-adb server somewhere else, permanently.
+### Pairing, in this app, on Android
+
+No server, no bundled binary. `manager/PairingSession` shows a QR, finds the device over mDNS and
+then does the handshake itself through `adb/pairing/AdbPairing` — TLS with a self-signed certificate
+over this app's own adb key, 64 bytes of keying material exported and appended to the code, SPAKE2,
+then AES-128-GCM for one fixed-size `PeerInfo` each way.
+
+`canPairDirectly` decides which route a platform takes, and it is true only where the exporter is:
+Android. A desktop pairs through its own adb server and iOS through one elsewhere.
+
+**Pairing and connecting are the same key or neither works**, and this is the single most important
+thing in this file. `adbd_tls_verify_cert` matches on the public key inside the certificate, so
+whoever pairs is the only one who can then connect — which is why the two switched together and why
+pairing through someone else's server leaves this app still unable to reach the device.
+
+So the connect side had to exist first: `A_STLS` in `AdbDeviceConnection`. The device answers the
+opening `CNXN` with `A_STLS`; the client replies with the same command and `A_STLS_VERSION`, hands
+over the certificate, and then **waits** — adbd sends `CNXN` once the handshake succeeds, so nothing
+is re-sent. That upgrade happens *in place* on the live socket, which is why `AdbSocket` is an
+`expect`: only a `java.net.Socket` can be handed to `SSLSocketFactory`, so Android uses one and the
+other two keep the ktor socket and answer false to `canStartTls`.
+
+adbd rejects a certificate for a key it has not been paired with by dropping the connection and
+saying nothing, so a failed upgrade is reported as "pair with it first" — which is the true reason
+almost every time.
+
+### What this replaced, and what it cost
+
+An earlier pass shipped Google's `adb` binary in the APK and ran it as a loopback server, on the
+reading that the exporter was out of reach without vendoring BoringSSL. That was wrong about
+Android, and the binary is gone. Worth keeping the measurements, because they are the argument
+against going back:
+
+| | bundled binary | in-process |
+|---|---|---|
+| APK | ~5 MB of compressed `libadb.so` entries, two ABIs | nothing |
+| 16 KB page sizes | the prebuilt's LOAD segments were 4 KB-aligned, which **blocks a Play release** targeting SDK 35+, and could not be patched — segment offsets would have to move, so it needs relinking | no native code involved |
+| side effects | `useLegacyPackaging = true` is required to execute anything out of `nativeLibraryDir`, and it compresses *every* native library, which made the 16 KB checker report "Unknown error" for an unrelated, correctly-aligned androidx library | none; `extractNativeLibs` is back to false and the remaining libraries are stored uncompressed |
+| supply chain | a third-party prebuilt running with the app's permissions, pinned by checksum and recorded in a provenance file | code in this repo |
+| lifecycle | a child process that could outlive the app and hold port 5037 | none |
+
+The one thing it had going for it: it worked, and it proved the SPAKE2 exchange end to end against a
+real device before any of this existed.
+
 
 ## Three tiers hide behind "remote control"
 

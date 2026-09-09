@@ -1,5 +1,9 @@
 package com.jpage4500.devicemanager.manager
 
+import com.jpage4500.devicemanager.adb.*
+import com.jpage4500.devicemanager.adb.device.*
+import com.jpage4500.devicemanager.adb.pairing.*
+import com.jpage4500.devicemanager.crypto.*
 import com.jpage4500.devicemanager.transport.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
@@ -40,13 +44,18 @@ sealed interface PairState {
  * 2. the other phone scans it from Settings ▸ Developer options ▸ Wireless debugging
  * 3. that phone starts advertising `_adb-tls-pairing._tcp` on a **random** port
  * 4. this app finds that advertisement over mDNS — the one part that is platform code
- * 5. an **adb server** is handed the address and the password and does the actual handshake
+ * 5. the address and the password go into the actual handshake
  *
- * Step 5 is the one that decides the design. Pairing is SPAKE2 followed by a TLS 1.3 session with
- * client certificates, and there is no pure-Kotlin SPAKE2 — so the phone cannot do it alone, and
- * this only works while the app is reading an adb server. That is what [DeviceTransport.canPair]
- * says, and it is checked before the button is offered rather than after it fails. The Swing app
- * takes exactly this route through jadb's `host:pair`. See docs/MOBILE-UI.md.
+ * Step 5 is the one that decides the design, and it has two answers:
+ *
+ * - **Android does it itself** — [AdbPairing], over `crypto/Spake2` and a TLS keying-material
+ *   exporter reached through the platform's own Conscrypt. No server, no computer, nothing bundled.
+ * - **everything else hands it to an adb server** through `host:pair`, which is the route the Swing
+ *   app takes and the only one iOS can ever have: no Apple TLS API exports keying material.
+ *
+ * [canPairDirectly] chooses. Either way the choice is made before a code is drawn rather than after
+ * a scan of one fails — that is what [DeviceTransport.canPair] is for on the server route. See
+ * docs/ADB-TRANSPORTS.md.
  */
 class PairingSession {
     private val log = LoggerConfig.createLogger("PairingSession")
@@ -54,13 +63,13 @@ class PairingSession {
     /**
      * the service name and password the QR carries.
      *
-     * `Random.Default` rather than a cryptographic one, which `commonMain` has no access to: this is
-     * a 20-character code that exists for the few seconds a dialog is open, on a network an attacker
-     * would already have to be inside. The Swing app uses `SecureRandom` here, and a platform seam
-     * for one is the fix if this ever guards anything that outlives the dialog.
+     * The password is the **only** secret protecting the exchange, so it comes from the platform's
+     * cryptographic generator now that [secureRandomBytes] exists — `Random.Default` is explicitly
+     * not one, and a predictable code is a pairing anyone on the network can complete. The name is
+     * only a label and is left on the cheap generator.
      */
     private val serviceName = "ADB_WIFI_" + randomString(NAME_LENGTH)
-    private val password = randomString(PASSWORD_LENGTH)
+    private val password = secureString(PASSWORD_LENGTH)
 
     /** what to draw as a QR code — the format Android's own pairing screen expects. */
     val qrContent: String = "WIFI:T:ADB;S:$serviceName;P:$password;;"
@@ -145,6 +154,43 @@ class PairingSession {
         _state.value = PairState.Found("${service.host}:${service.port}")
         log.i("onFound: pairing with ${service.name} at ${service.host}:${service.port}")
 
+        if (canPairDirectly) pairOurselves(service) else pairThroughServer(service)
+    }
+
+    /**
+     * pair with **our own key**, so that we are the one the device ends up trusting.
+     *
+     * That is the whole reason this replaced the route through a bundled adb server rather than
+     * sitting beside it: `adbd_tls_verify_cert` matches on the public key inside the certificate, so
+     * whoever pairs is the only one who can subsequently connect. A server pairing on this app's
+     * behalf hands over *its* key and leaves the app still unable to reach the device.
+     */
+    private suspend fun pairOurselves(service: MdnsService) {
+        val key = AdbIdentity.keyPair()
+        if (key == null) {
+            _state.value = PairState.Failed("this app has no key to pair with")
+            attempting = false
+            return
+        }
+        val outcome = AdbPairing(key, AdbIdentity.name())
+            .pair(service.host, service.port, password)
+        when (outcome) {
+            is AdbOutcome.Err -> {
+                log.w("pairOurselves: ${outcome.message}")
+                _state.value = PairState.Failed(outcome.message, canRetry = true)
+                attempting = false
+            }
+            is AdbOutcome.Ok -> {
+                // the device answers with its own guid, which is exactly what names its connect
+                // service over mDNS — so there is no sentence to parse a guid out of here
+                pairedGuid = outcome.value.text().takeIf { it.isNotBlank() }
+                log.i("pairOurselves: paired with ${pairedGuid ?: "a device"}")
+                connectPaired(null)
+            }
+        }
+    }
+
+    private suspend fun pairThroughServer(service: MdnsService) {
         val transport = DeviceManager.pairer()
         if (transport == null) {
             _state.value = PairState.Failed("no adb server to pair through")
@@ -153,12 +199,12 @@ class PairingSession {
         }
         transport.pair(service.host, service.port, password)
             .onSuccess { reply ->
-                log.i("onFound: paired: $reply")
+                log.i("pairThroughServer: paired: $reply")
                 pairedGuid = guidOf(reply)
                 connectPaired(transport)
             }
             .onFailure {
-                log.w("onFound: ${it.message}")
+                log.w("pairThroughServer: ${it.message}")
                 _state.value = PairState.Failed(it.message ?: "pairing failed", canRetry = true)
                 attempting = false
             }
@@ -177,7 +223,7 @@ class PairingSession {
      * Matched on the guid `host:pair` reported, because that guid *is* the service's name — with two
      * devices paired, connecting to whichever answered first would attach the wrong one.
      */
-    private suspend fun connectPaired(transport: DeviceTransport) {
+    private suspend fun connectPaired(transport: DeviceTransport?) {
         _state.value = PairState.Connecting
         val guid = pairedGuid
         log.d("connectPaired: looking for ${guid ?: "any device"} on $MDNS_ADB_CONNECT_TLS")
@@ -193,7 +239,20 @@ class PairingSession {
         }
 
         log.i("connectPaired: connecting to ${service.host}:${service.port}")
-        transport.connect(service.host, service.port)
+
+        // a null transport means we paired ourselves, so we hold the key the device now trusts and
+        // must be the one to dial it — a server asked to connect would present its own key and be
+        // refused. `DirectDeviceTransport` reaches the TLS port through the STLS upgrade
+        val result = if (transport == null) {
+            val direct = DirectDeviceTransport(service.host, service.port)
+            direct.probe()
+                .onSuccess { DeviceManager.addConnection(direct) }
+                .onFailure { direct.close() }
+        } else {
+            transport.connect(service.host, service.port)
+        }
+
+        result
             .onSuccess {
                 log.i("connectPaired: $it")
                 _state.value = PairState.Paired(it)
@@ -245,9 +304,9 @@ class PairingSession {
      * browse can't drive a retry itself.
      */
     suspend fun retry() {
-        val transport = DeviceManager.pairer()
-        if (pairedGuid != null && transport != null) {
-            connectPaired(transport)
+        if (pairedGuid != null) {
+            // paired already, so only the dial failed; null keeps the direct route direct
+            connectPaired(if (canPairDirectly) null else DeviceManager.pairer() ?: return)
             return
         }
         val service = lastFound ?: return
@@ -257,6 +316,20 @@ class PairingSession {
 
     private fun randomString(length: Int): String =
         CharArray(length) { ALPHABET[Random.nextInt(ALPHABET.length)] }.concatToString()
+
+    /**
+     * the same alphabet, from the platform's cryptographic generator.
+     *
+     * The modulo is a bias, and a deliberate one: 62 does not divide 256, so the first 8 characters
+     * of the alphabet are very slightly likelier. Over 20 characters that costs a fraction of a bit
+     * against a code that lives for seconds, and rejection sampling here would be ceremony. Falls
+     * back rather than failing, because a weaker code still beats offering no pairing at all.
+     */
+    private fun secureString(length: Int): String {
+        val bytes = secureRandomBytes(length) ?: return randomString(length)
+        return CharArray(length) { ALPHABET[(bytes[it].toInt() and 0xFF) % ALPHABET.length] }
+            .concatToString()
+    }
 
     private companion object {
         // the Swing app's own lengths, and its alphabet
