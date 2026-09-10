@@ -225,6 +225,11 @@ private fun MirrorImage(
  * the time a pinch started more than [LONG_PRESS_MS] apart becomes one; a pinch that slow is rare
  * enough to live with. Letting go of one finger doesn't hand it back either — that would send the
  * remains of a pinch to the device as a swipe.
+ *
+ * **While the frame is zoomed in, one finger moves the view too.** A drag then pans instead of
+ * reaching the device: at 4x it could only ever cross a quarter of the screen, and what it was
+ * reaching for is usually the part that has been panned off it. Taps and holds still go through —
+ * it is the swipe that is being spent, and zooming back out hands it straight back.
  */
 private suspend fun AwaitPointerEventScope.detectMirrorGesture(
     zoom: MirrorZoom,
@@ -238,6 +243,7 @@ private suspend fun AwaitPointerEventScope.detectMirrorGesture(
     var isHold = false
     var isUp = false
     var isZoom = false
+    var isPan = false
 
     /** @return false once the gesture is over. */
     fun track(event: PointerEvent): Boolean {
@@ -252,7 +258,14 @@ private suspend fun AwaitPointerEventScope.detectMirrorGesture(
         // against the screen and not the frame: the frame's own pixels are [MirrorZoom.scale] times
         // smaller than they look, so at 4x a swipe would start on a quarter of the movement
         val moved = (change.position - down.position).getDistance() * zoom.scale
-        if (!isSwipe && moved > viewConfiguration.touchSlop) isSwipe = true
+        // a drag on a zoomed frame is the view's, not the device's — see the note above
+        if (!isSwipe && moved > viewConfiguration.touchSlop) {
+            isSwipe = true
+            isPan = zoom.zoomed
+        }
+        // the delta comes in the frame's own pixels, which are [MirrorZoom.scale] times smaller
+        // than the ones the offset is in
+        if (isPan) zoom.panBy(change.positionChange() * zoom.scale)
         // a swipe or a hold owns the gesture from here; nothing under it should act on it as well
         if (isSwipe || isHold) change.consume()
         return change.pressed
@@ -277,7 +290,7 @@ private suspend fun AwaitPointerEventScope.detectMirrorGesture(
 
     when {
         // it belonged to the view; the device was never told any of it
-        isZoom -> Unit
+        isZoom || isPan -> Unit
         // the hold was reported the moment it happened; what the finger did after it is nothing
         isHold -> Unit
         // replayed over the time the finger actually took, so a flick reads as a flick; the ceiling

@@ -103,3 +103,6 @@
 - phone: a device opens on its storage and battery, with its properties last
 - connecting to a computer closes the form and shows its devices
 - iOS: fixed the wide empty bands above and below every screen
+
+09/10
+- Mirror: a drag pans the zoomed screen instead of swiping the device

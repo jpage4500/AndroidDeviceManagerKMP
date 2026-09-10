@@ -128,7 +128,7 @@ screen: `MirrorScreen` — `ui/screen/MirrorScreen.kt`, from the Mirror tile
 | element | what it is |
 |---|---|
 | `DialogTitle` | the same band the device's page wore, drawn by `CompactLayout`; the whole band closes the mirror |
-| `MirrorImage` | the frame, with its border: tap, hold and swipe go to the device, pinch zooms, two fingers pan |
+| `MirrorImage` | the frame, with its border: tap, hold and swipe go to the device, pinch zooms, and a drag pans once it is zoomed |
 | `MirrorFeedbackOverlay` | the rings, the swipe arrow and the key bubbles, drawn over the frame |
 | `EmptyState` | "Can't mirror this device", with the reason under it |
 | `MirrorBar` | the bar under the frame |
@@ -512,11 +512,11 @@ exactly these — Mirror, Logs, Files, Info, Connect, Settings, Message. Reuse i
 type and one enum names both a desktop window and a phone screen, so the shared action that opens a
 mirror doesn't need to know which it is.
 
-**Two fingers move the view, one finger always reaches the device.** Pinch zooms up to 4×, a
+**Two fingers move the view, and so does one once the frame is zoomed.** Pinch zooms up to 4×, a
 two-finger drag pans, and neither is anything the device is told about — it is the picture being
 scaled, so it works the same over every transport. Two fingers are free to spend on this because
 `input` has no multi-touch to send in the first place: pinching *inside* the mirrored app was never
-possible. Four things make it work without breaking the gestures that were already there:
+possible. Five things make it work without breaking the gestures that were already there:
 
 - **The transform is a `graphicsLayer`, so the tap arithmetic is untouched.** Compose reports
   pointer positions in a node's own pre-transform space, so `toDevice` maps a tap the same way at 4×
@@ -530,6 +530,11 @@ possible. Four things make it work without breaking the gestures that were alrea
 - **The touch slop is measured against the screen, not the frame.** The frame's pixels are `scale`
   times smaller than they look, so without multiplying it back a swipe would start on a quarter of
   the movement at 4×.
+- **A one-finger drag pans while the frame is zoomed in**, and only then: at 4× a swipe could
+  cross a quarter of the screen at most, and the part of the frame it was reaching for is usually
+  the part that has been panned off it. Taps and holds still reach the device at every zoom — the
+  swipe is the one gesture spent on the view, and **Reset zoom** or a pinch back to fit hands it
+  straight back.
 - **The marks are drawn outside the transform.** `MirrorFeedbackOverlay` takes the point mapping
   rather than sitting inside the layer, so a tap ring stays the size of a fingertip instead of
   growing with the zoom, and the key bubble centres on what is being looked at rather than on the
@@ -548,7 +553,8 @@ sends.
 than through `detectTapGestures`, which reports a drag as a tap wherever the finger lifted — on a
 phone that turns every attempt to scroll the mirrored device into a click on whatever was under the
 thumb. Past the touch slop it becomes `input swipe`, replayed over the time the finger actually took
-so a flick reads as a flick, clamped to 50–2000 ms.
+so a flick reads as a flick, clamped to 50–2000 ms — at fit size, where nothing is zoomed; past the
+slop on a zoomed frame the drag pans the view instead.
 
 **A press held in place is a long press.** adb has no such command — `DeviceInput.longPress` is an
 `input swipe` from a point to itself over 650ms, which is what the Swing window sends. It fires at
