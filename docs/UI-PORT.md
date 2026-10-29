@@ -11,34 +11,93 @@ the actions, and almost none of the layout.
 
 ---
 
+## The shell
+
+The desktop is **one window**: a sidebar, and the page it has picked — Devices, Files or Logs. Logs
+and Files used to be a window per device; they are pages now, with a tab per device. Mirror, device
+details, Connect and the message viewer are still windows of their own. The design and the rest of
+the plan are in [REDESIGN.md](REDESIGN.md).
+
+| Piece | Where | What it does |
+|---|---|---|
+| `AppShell` | `ui/shell/AppShell.kt` | The sidebar and the page; the desktop branch of `App` |
+| `ShellState` | `manager/PageManager.kt` | One per window: the page, the open log and file tabs |
+| `PageManager` | `manager/PageManager.kt` | Sends "logs for this device" to the window last in front |
+| `DeviceTabStrip` | `ui/components/DeviceTabStrip.kt` | The tabs over Logs and Files |
+
+**A tab's stream belongs to the window, not to the tab's composable.** `ShellState` starts each
+`LogsSource` on the window's scope and hands it to `LogsScreen` as `owned`, so opening another tab
+doesn't stop the first one's log — it is still filling its buffer when you come back. `ExploreScreen`
+takes its `FileBrowser` the same way, which is what keeps a tab's folder. What a tab does *not* keep
+yet is the screen's own state — its scroll, its filters — because the screen is re-created per tab;
+that is Phase 2 of the redesign. Closing a tab, or the window, is what stops a stream.
+
+**Requests with no window go to the last one in front.** `WindowManager.openLogs` / `openFiles` are
+called from places that belong to no window — the tray most of all — so `PageManager` keeps the
+windows' shells in the order they were last focused. With none open it opens a device-list window and
+hands it the request once its shell registers.
+
+**The sidebar is EngageAdminKMP's.** Wide, it is a light list — the open page a raised white card
+with its icon in the brand green, counts in pills, a collapse button by the name. Collapsed, it is a
+72dp **dark** rail of icons with their labels under them, and the logo expands it again. The logo is
+the app's own icon, `drawable/app_logo.png` — a 256px cut of `resources/images/logo.png` that
+`scripts/generate-icons.sh` writes along with the launcher icons.
+
+**The sidebar's width is stored raw.** Under 106dp — halfway between the 72dp rail and the 140dp
+minimum, EngageAdminKMP's number — it is the rail; anything else is clamped to 140–320dp. Storing what the drag left rather than the clamped value is what lets one drag go into the
+rail and back out again without letting go.
+
+**The drag is watched from the row that holds both panes, not from a handle on the edge**
+(`Modifier.sidebarEdge`). The edge moves: a handle that is itself being dragged reads the pointer in
+its own coordinates, and when the sidebar snaps to the rail the handle jumps 150dp under a pointer
+that hasn't moved — which reads as a 150dp drag, and is why the first version could drag into the
+rail and never back out. The row doesn't move, so the edge simply follows the pointer. A press there
+that doesn't travel is a click, and two of them toggle the rail.
+
+**Light by default.** `AppPref.THEME` is light, dark or the OS's; the app used to follow the OS, and
+the redesign was drawn light-first. The shell's tokens — sidebar, its border, the selected item, the
+idle tab, the green tab cap — are in both palettes, so dark still works, unpolished.
+
 ## The desktop device screen
 
-What's on screen today, from `ui/DeviceScreen.java` (1235 lines) and `table/DeviceTableModel.java`:
+The Devices page, as the redesign has it (`ui/screen/DeviceScreen.kt`, with its header and selection
+bar in `DeviceHeader.kt`):
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│ [+ Connect] [Browse] [View Logs] [Input] │ [Mirror] [Screenshot]         │  toolbar
-│ [Install] │ [Stats] [ADB] [Scripts]        …  [Refresh][Share][Logs][⚙]  │  (icon + label)
-├──────────────────────────────────────────────────────────────────────────┤
-│ Name ▲    │ Serial      │ Model   │ Battery │ OS │ Custom 1 │ Free │ PM  │  sortable header
-├──────────────────────────────────────────────────────────────────────────┤
-│ 🤖 bathroom 2   adb-2025…  T26-EEA   [▓▓▓]⚡  13   HD+        42.8G      │  alternating rows
-│ 🤖 front door…  192.168…   Fire HD10 [▓▓▓]   7.1  HD+        21.7G      │
-├──────────────────────────────────────────────────────────────────────────┤
-│ ⟳ v1.0.0  🖫 17.2M              History                        total: 7  │  status bar
-└──────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│ Devices (All 12)(USB 5)(Wi-Fi 7)(Needs attention 2)   [Search] [⟳] [+ Connect] │  header
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │ 2 selected  Mirror Screenshot Logs Files Install Type text …  Clear│ │  selection bar
+│ └────────────────────────────────────────────────────────────────────┘ │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │ Name ▲          │ Serial     │ Model   │ Battery │ OS │ Free │ …   │ │  sortable header
+│ │ ● bathroom 2     adb-2025…   T26-EEA   [▓▓▓]⚡   13   42.8G       │ │  name over model
+│ │   T26-EEA                                                          │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+│ ⟳ v1.0.0  🖫 17.2M              History                        total: 7 │  status bar
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-Three regions, each its own composable:
+**Header** — the title, filter chips that each count what they'd leave (a chip only shows while it
+has something to count, except the one that's on), search (⌘F), refresh and Connect. The Swing
+toolbar is gone: Settings is in the sidebar, and everything that acts on a device is in the selection
+bar, the row's menu, or both.
 
-**Toolbar** — icon-above-label buttons, grouped by separators, with a right-aligned trailing group.
-Which buttons show is user-configurable (`ToolbarButton.hideByDefault()`, a right-click "Manage
-Toolbar"). Most act on the *selected* device, so they're disabled with none selected.
+**Selection bar** — a hint with nothing selected; with a selection, its count and Mirror, Screenshot,
+Logs, Files, Install, Type text, Commands and Details. They act on the selected devices that are
+**ready**, so one offline device in a selection of ten doesn't stop the other nine, and Logs opens a
+tab per device in the Logs page.
 
-**Table** — the hard part, see below.
+**Table** — the hard part, see below. Rows are two lines, name over model, with a dot for the device's
+state; an unauthorized device says to accept the prompt instead of its model. **Compact device rows**
+in Settings puts them back to one 28dp line, which is what the 45-device rig wants.
 
-**Status bar** — refresh state and version on the left, memory used, a "History" affordance in the
-centre, device count on the right.
+**No devices** — three cards in place of the table: the USB steps, Wi-Fi pairing, and another
+computer, the last two opening the Connect window, which already does both. Under them, which adb
+server the app is reading and a link to change it.
+
+**Status bar** — version and memory on the left, a "History" affordance in the centre, the device
+count on the right.
 
 ### The table is the piece with no shortcut
 
@@ -119,8 +178,8 @@ across this one would select every row it passed.
 `rowMenu` is handed the column the right-click landed on, worked out from the press x and the widths
 by the same `columnAt` the header uses — they have to agree, or a menu would name a different column
 than the one under the pointer. That is what "Copy Field" means by *field* (the Swing menu copies the
-cell you clicked, not the row's name), and it is why the log viewer's **Filter…** item appears once,
-on the tag column or the level column, rather than twice on every cell.
+cell you clicked, not the row's name), and it is why the log viewer's Show only / Hide are about the
+tag or app that was clicked, and only appear on those columns.
 
 ### Dragging a column
 
@@ -192,26 +251,27 @@ comparing against is worse than none.
 
 ### Colours
 
-The palette is FileExplorerKMP's (`ui/theme/Theme.kt`) with the **table** greys taken from the Swing
-app instead, so the two look like the same product side by side: alternate row `#F6F6F6`, and a
-header at `#C5C5C5` — deliberately much darker than a Material one, which is what makes the column
-titles read as a *bar* rather than as another row. The device-state colours are the Swing app's too
-(`#188600` online, `#808080` offline, `#FB6D08` busy, `#FBF708` not-ready).
+The palette is FileExplorerKMP's (`ui/theme/Theme.kt`); the **table** looks like EngageAdminKMP's, so
+the two apps' tables read the same: a 38dp header on a pale `#F7F8FA` band with 12sp semibold titles
+in `#4A505C`, a chevron for the sort, short separators in the header only, and full-width stripes of
+`#FAFBFC` with a hairline `#EEF0F3` under each row. EngageAdminKMP gets that look from
+`ua.wwind.table-kmp`; this app copies it into `DataTable` rather than taking the library — it pulls in
+`material-icons-extended` (about 37MB, which EngageAdminKMP trims by hand), its cache here holds no iOS
+artifact, and it would trade away `DataTable`'s keyboard, type-ahead, column drag, tooltips and the
+log's scroll anchoring. The device-state colours are the Swing app's (`#188600` online, `#808080`
+offline, `#FB6D08` busy, `#FBF708` not-ready).
 
 That last one is unreadable as a thin bar on white, so the battery gauge's amber band uses `busy`
 rather than `unauthorized`.
 
-Text is **16sp** in both the header and the cells, and rows are 28dp. 16 is the Swing table's own
-size: `MainApplication.initializeUI` hands FlatLaf `Arial PLAIN 16` as the app's `defaultFont` and
-the table inherits it, header included — measured off a screenshot of it, the glyph advances come
-back at 16px to within a rounding error. `Fonts.table` names the face as the platform's sans rather
-than leaving it to Material, which is free to be the system *UI* font (SF on macOS, wider at the same
-size); the platform sans is Arial on Windows, Helvetica on macOS and Liberation Sans on Linux, and
-all three are Arial's metrics.
+Cells are **13sp** and header titles 12sp, EngageAdminKMP's sizes; a compact device row is 32dp and
+a comfortable one 44dp (name over model). It used to copy the Swing table's 16sp Arial. `Fonts.table`
+still names the face as the platform's sans rather than leaving it to Material, which is free to be
+the system *UI* font (SF on macOS, wider at the same size). The log table sizes itself (⌘+ / ⌘-).
 
 The size is set through `tableTextStyle`, not by overriding `fontSize` on a Material style, because
-that keeps the style's **line height** — `bodySmall` is 16sp — and a 16sp glyph in a line box exactly
-its own size loses its descenders. Unspecified hands the line height back to the font.
+that keeps the style's **line height** — `bodySmall` is 16sp — and a glyph in a line box exactly its
+own size loses its descenders. Unspecified hands the line height back to the font.
 
 Two more things about the colours are worth keeping rather than re-deriving:
 
@@ -220,38 +280,27 @@ Two more things about the colours are worth keeping rather than re-deriving:
 - **The scrollbar thumbs flip ground**, black at low alpha on light and white at low alpha on dark,
   and at a *lower* alpha there — a light thumb reads heavier than a dark one at the same opacity.
 
-Stripes are drawn as **inset rounded rects** (6dp in, 4dp radius) rather than full-bleed bands, which
-is what makes them read as a list rather than as table rules.
+Stripes are **full-width bands** with a hairline under each real row; past the last row the stripes
+carry on to the bottom of the viewport but the rules don't, so the empty space doesn't read as rows
+waiting to be filled.
 
-The Swing app's `background.png` is tiled behind the window and behind the table at 10% alpha
-(`Modifier.watermark()`) — **tiled at its own size, never stretched**, because it is a repeating
-pattern and scaling it to the window would make it a different size in every window. That faint green
-wash under the rows is where the table's colour actually comes from; the row greys themselves are
-neutral.
-
-It is a table's own choice: `DataTable(showBackground = …)`, on everywhere but the **log table**. At
-30,000 dense lines the wash is one more thing between the eye and the text, and the pattern shows
-through every un-banded row. The log window has no window-level watermark to fall back to, so
-turning it off there leaves the table flat.
+**No table has the tiled background any more.** The Swing app's `background.png` used to be tiled
+behind the rows (`Modifier.watermark()`); the redesign's tables are plain white, and the phone is
+the only place the watermark is still drawn, behind its whole screen.
 
 The device-state colours (online / offline / unauthorized / error) stay fixed values: they mean
 something regardless of appearance, and both read on either ground. Everything else comes from
-`LocalPalette`, so it follows the OS.
+`LocalPalette`, which follows the Theme setting — light unless it's changed.
 
-### The window has no title bar
+**A selected row is a green tint under the row's own text**, not the blue band with white text the
+Swing table draws — the redesign's selection, and it keeps a log line's level colour readable while
+it is selected.
 
-On macOS the device-list window sets `apple.awt.fullWindowContent` and `apple.awt.transparentTitleBar`,
-so the content starts at the top of the frame and the toolbar sits beside the traffic lights — the
-Finder layout. Three consequences, all handled:
+### Every window keeps its title bar
 
-- The toolbar's leading edge is padded by `windowChromeInsetStart()` (78dp on macOS, 0 elsewhere) so
-  the first button clears the traffic lights.
-- The window title is set to `""`, or it would draw over the toolbar. The name in the menu bar and
-  the Dock comes from `apple.awt.application.name` instead.
-- **The toolbar has to move the window**, since there is no title bar left to drag. `windowDragHandle()`
-  tracks the pointer in *screen* coordinates rather than accumulating the drag delta — moving the
-  window moves the toolbar under the cursor too, and a delta-based version fights itself and creeps
-  away. Double-click zooms, as a title bar does.
+The device list's window had its toolbar in the title bar for a while (macOS `fullWindowContent`),
+which looked closer to Finder — but the window then had nothing to drag by except the toolbar's own
+gaps, and a title says which device a window is for. So every window has an ordinary title bar.
 
 **Mirror windows keep their title bar.** They have nothing at the top but the device's screen, the
 traffic lights would sit on top of it, and the title is the device's name — which is worth reading.
@@ -465,9 +514,11 @@ state, plus a field for one it hasn't. The address field opens on the *last* one
 its final octet selected, so reaching the phone next to the last one is four keystrokes. Devices are
 remembered automatically: anything with a `host:port` serial that shows up in the list is added.
 
-**Logs** (`LogsScreen`) — laid out like the Swing `ViewLogsScreen`: filters down the left with their
-own search box and Add Filter pinned to the bottom, the table on the right, and Tooltip / Auto Scroll
-in the bottom-right corner.
+**Logs** (`LogsScreen`) — a toolbar with the level buttons (V D I W E, the lowest level shown), a
+filter bar under it, the table, and Tooltip / Auto Scroll in the bottom-right corner. It is a tab of
+the Logs page, and what it is showing — filters, search, scroll, Auto Scroll — lives in the tab's
+`LogsView`, so leaving a tab and coming back finds it as it was. A background tab badges the errors
+that arrived since it was last open (`LogsSource.errors`, a count, so it costs nothing to keep).
 
 Three things carry most of its usefulness:
 
@@ -477,17 +528,19 @@ Three things carry most of its usefulness:
 - **Auto Scroll is a mode.** It follows the tail until something the user did says stop — scrolling
   up, or picking a line. A log that yanks you back to the tail the moment you look at something is
   unusable; one that quietly stops following because a frame landed badly is worse (see below).
-- **Filters are a selection, not checkboxes.** That is what lets "All Messages" be a member of the
-  same list rather than a special control, and ⌘-click combines several. The five built-ins are the
-  Swing app's, in its own syntax — `level:D+` as well as the `level:D*` its `LOGS.md` documents.
-- **The two typed boxes are extra terms, not replacements.** "Filter…" beside the list and "Search…"
-  in the toolbar both AND with whatever is selected, which is how the Swing app wires its sidebar
-  field — and what makes "everything at warn and above mentioning gralloc" one step. Getting this
-  backwards (narrowing the *filter list* instead of the log) was the first version's mistake.
-- **The right-click menu offers one filter, and only where filtering means something.** On the tag
-  column it offers that tag, on the level column that level and above, and on a message or a date it
-  offers neither — which is the Swing menu's own rule (`APP`/`TID`/`LEVEL`/`TAG` and nothing else).
-  Offering both at once asked which of two filters you meant, on a cell that was usually neither.
+- **The filters that are on are pills, joined by AND.** + Add filter lists every saved filter as a
+  tick, and ticking several combines them — the AND the Swing app applies to a multi-selection in its
+  filter list, said out loud between the pills. Clicking a pill edits it; right-clicking a saved one
+  offers edit, duplicate and delete. The Swing app's five built-ins ("All Messages", "Log Level …+")
+  are the level buttons now; `level:D+` is still the syntax under them.
+- **Everything is ANDed:** the level floor, each saved filter that's on, each quick filter, and the
+  expression typed into the filter bar. "Search…" in the toolbar highlights rather than filters —
+  a hit is only useful with the lines around it.
+- **The right-click menu filters on the cell, and only where that means something.** On the tag or
+  app column: Show only, Hide, and New filter from this…; on the level column, that level and above.
+  Show only and Hide are **quick filters** — a dashed pill, this tab's alone and not saved; clicking
+  it opens the editor to save it as a filter. On a message or a date it offers no filter, the Swing
+  menu's own rule.
 - **The message panel is fixed, not a floating tooltip.** The Swing app pins it to the top or bottom
   edge of the table at the table's own width (`MessageTooltipPanel`, light yellow on a darker
   hairline, monospaced, 100dp cap) — a bubble that follows the cursor is either too narrow to help or

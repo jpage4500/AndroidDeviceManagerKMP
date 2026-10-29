@@ -106,3 +106,23 @@
 
 09/10
 - Mirror: a drag pans the zoomed screen instead of swiping the device
+
+10/28
+- Desktop: one window holds Devices, Files and Logs, switched from a sidebar
+- Desktop: drag the sidebar's edge to resize it, or collapse it to icons
+- Logs and Files: each device opens as a tab in the main window instead of a window of its own
+- Logs: a device's log keeps capturing while another tab is open
+- Settings: choose a light or dark theme, starting from light
+- Devices: filter chips count USB, Wi-Fi, low battery and devices that need attention
+- Devices: a bar over the table acts on every selected device at once
+- Devices: each row shows the model under the name, or Compact device rows in Settings
+- Devices: with nothing connected, the page shows how to connect a device
+- Devices: the toolbar's actions moved to the header, the sidebar and the selection bar
+- Tables: a lighter header and rows, with no background image behind them
+- Devices: a details panel beside the table shows one device's facts and actions
+- Devices: tick boxes on each row add it to the selection
+- Logs: filters that are on show as pills over the log, and several combine
+- Logs: level buttons show only warnings and above, errors only, and so on
+- Logs: right-click a tag or app to show only it or hide it
+- Logs: a background tab counts the errors that arrived while it wasn't open
+- Logs: each tab keeps its own filters, search and scroll position

@@ -41,8 +41,8 @@ fun ApplicationScope.AppTray(onQuit: () -> Unit) {
         devices.forEach { device ->
             Menu(device.displayName) {
                 Item("Mirror", enabled = device.isReady) { WindowManager.openMirror(device.serial) }
-                Item("Browse", enabled = device.isReady) { WindowManager.openFiles(device.serial) }
-                Item("Logs", enabled = device.isReady) { WindowManager.openLogs(device.serial) }
+                Item("Browse", enabled = device.isReady) { WindowManager.openFiles(device.id) }
+                Item("Logs", enabled = device.isReady) { WindowManager.openLogs(device.id) }
                 Item("Details") { WindowManager.openInfo(device.serial) }
             }
         }

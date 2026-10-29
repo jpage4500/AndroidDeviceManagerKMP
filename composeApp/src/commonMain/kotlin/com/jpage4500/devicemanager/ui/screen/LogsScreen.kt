@@ -24,19 +24,23 @@ import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import org.jetbrains.compose.resources.stringResource
 
 /**
  * one device's logcat.
  *
- * Laid out like the Swing app's `ViewLogsScreen`: a filter list down the left with its own search
- * box and an Add Filter button pinned to the bottom, the log table on the right, and the two
- * switches that matter — Tooltip and Auto Scroll — in the bottom-right corner.
+ * A toolbar with the level buttons, a filter bar under it — the filters that are on, as pills
+ * joined by AND — then the log table, and the two switches that matter, Tooltip and Auto Scroll, in
+ * the bottom-right corner. See docs/REDESIGN.md.
  *
- * The two typed boxes — "Filter…" beside the list and "Search…" in the toolbar — are extra terms
- * ANDed with whatever is selected, not replacements for it. That is how the Swing app wires its
- * sidebar field, and it is what makes "everything at warn and above, mentioning gralloc" one step.
+ * Everything that narrows the log is ANDed: the level floor, each saved filter that's on, each
+ * quick filter a right-click made, and the expression typed into the filter bar. That is the AND
+ * the Swing app applies to a multi-selection in its filter list, and it is what makes "everything
+ * at warn and above, mentioning gralloc" one step. "Search…" in the toolbar highlights instead.
+ *
+ * [view] is what the screen is showing — filters, search, scroll — kept by the Logs page's tab so
+ * it survives the tab being left and come back to.
  *
  * Two things carry most of the usefulness:
  *
@@ -46,11 +50,24 @@ import org.jetbrains.compose.resources.stringResource
  * - **Auto Scroll turns itself off when you scroll up**, and back on when you reach the bottom
  *   again. A log that yanks you back to the tail the moment you look at something is unusable, and
  *   a log you have to keep dragging down is nearly as bad.
+ *
+ * [owned] is a stream someone else started and will stop — a tab in the Logs page, whose log keeps
+ * running while another tab is open. Without one this screen makes its own, and it lives as long as
+ * the screen does. Pause and Resume start it again on [ownerScope], so the stream still belongs to
+ * whoever owns it rather than to this composable.
  */
 @Composable
-fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
-    val source = remember(deviceId) { LogsSource(deviceId) }
+fun LogsScreen(
+    deviceId: String,
+    modifier: Modifier = Modifier,
+    owned: LogsSource? = null,
+    ownerScope: CoroutineScope? = null,
+    view: LogsView? = null,
+) {
+    val state = view ?: remember(deviceId) { LogsView() }
+    val source = owned ?: remember(deviceId) { LogsSource(deviceId) }
     val scope = rememberCoroutineScope()
+    val streamScope = ownerScope ?: scope
     val page by source.entries.collectAsState()
     val shown = page.entries
     val total by source.total.collectAsState()
@@ -61,17 +78,19 @@ fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
     val columns by LogsTableState.visible.collectAsState()
     val widths by LogsTableState.widths.collectAsState()
     val copyToClipboard = rememberClipboardCopy()
-    val listState = rememberLazyListState()
+    val listState = state.listState
     val focusManager = LocalFocusManager.current
 
-    var search by remember { mutableStateOf("") }
-    // the sidebar's "Filter…" box, which the Swing app wires to the *log* filter — it ANDs with
-    // whatever is selected in the list rather than narrowing the list itself
-    var filterText by remember { mutableStateOf("") }
-    var selectedFilters by remember { mutableStateOf(setOf(LogFilter.ALL_MESSAGES)) }
+    var search by state::search
+    var filterText by state::filterText
+    var selectedFilters by state::selectedFilters
+    var quick by state::quick
+    var floor by state::floor
     var selection by remember { mutableStateOf(TableSelection<Any?>()) }
     var editing by remember { mutableStateOf<LogFilter?>(null) }
-    var autoScroll by remember { mutableStateOf(true) }
+    // the quick filter being saved through the editor, so saving it can take its dashed pill away
+    var savingQuick by remember { mutableStateOf<String?>(null) }
+    var autoScroll by state::autoScroll
     // read here, not per row: the row colour lambda runs once per visible row per frame
     val defaultTextColor = Colors.primaryText
     var showTooltip by remember { mutableStateOf(true) }
@@ -83,9 +102,6 @@ fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
     val pointerY = remember { mutableStateOf(0f) }
     val panelHeightPx = with(LocalDensity.current) { MESSAGE_PANEL_HEIGHT.toPx() }
     var currentMatch by remember { mutableStateOf<Long?>(null) }
-    var paneWidth by remember {
-        mutableStateOf(SettingsManager.getInt(AppPref.LOGS_FILTER_WIDTH).dp)
-    }
     val searchFocus = remember { FocusRequester() }
     // whether a text field already has the keyboard; typing-to-search must not steal from one
     var fieldFocused by remember { mutableStateOf(false) }
@@ -93,12 +109,12 @@ fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
         mutableStateOf(SettingsManager.getInt(AppPref.LOGS_FONT_SIZE).coerceIn(MIN_FONT, MAX_FONT))
     }
 
-    val allFilters = remember(savedFilters) { LogFilter.BUILT_IN + savedFilters }
-
-    // every selected filter must pass, plus the search box. "All Messages" carries no terms, so it
-    // costs nothing to leave in the set
-    val active = remember(allFilters, selectedFilters) {
-        allFilters.filter { it.name in selectedFilters && it.expression.isNotBlank() }
+    // the level floor, the saved filters switched on here, and the right-click ones — every one of
+    // them must pass. The built-in "Log Level …+" filters are the level buttons now
+    val active = remember(savedFilters, selectedFilters, quick, floor) {
+        listOfNotNull(floor.expression?.let { LogFilter(floor.name, it) }) +
+            savedFilters.filter { it.name in selectedFilters && it.expression.isNotBlank() } +
+            quick.map { LogFilter(it, it) }
     }
     // only the sidebar box filters; "Search…" highlights instead — a hit is only useful with the
     // lines around it, and filtering to the hits throws those away
@@ -113,8 +129,10 @@ fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
         source.setFilter(if (terms.isEmpty()) null else { entry -> terms.all { it.accepts(entry) } })
     }
 
-    LaunchedEffect(deviceId) { source.start(scope) }
-    DisposableEffect(deviceId) { onDispose { source.stop() } }
+    if (owned == null) {
+        LaunchedEffect(deviceId) { source.start(scope) }
+        DisposableEffect(deviceId) { onDispose { source.stop() } }
+    }
 
     /**
      * hold the oldest lines while they are being read.
@@ -301,7 +319,7 @@ fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
             },
             searchFocus = searchFocus,
             onFieldFocus = { fieldFocused = it },
-            onToggle = { if (running) source.stop() else source.start(scope) },
+            onToggle = { if (running) source.stop() else source.start(streamScope) },
             onHide = { LogsTableState.toggleCompact() },
             onSave = {
                 scope.launch {
@@ -312,40 +330,64 @@ fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
                 }
             },
             onClear = { source.clear() },
+            floor = floor,
+            onFloor = { floor = it },
         )
-        HorizontalDivider(color = Colors.divider)
 
-        Row(Modifier.weight(1f)) {
-            FilterPane(
-                width = paneWidth,
-                filters = allFilters,
-                selected = selectedFilters,
+        val editLabel = stringResource(Res.string.logs_edit_filter)
+        val duplicateLabel = stringResource(Res.string.logs_duplicate_filter)
+        val removeLabel = stringResource(Res.string.remove)
+        val pills = savedFilters.filter { it.name in selectedFilters }.map { filter ->
+            ActiveFilter(
+                label = filter.name,
+                expression = filter.expression,
+                quick = false,
+                onClick = { editing = filter },
+                onRemove = { selectedFilters = selectedFilters - filter.name },
+                menu = {
+                    Item(editLabel) { editing = filter }
+                    Item(duplicateLabel) { LogFilterStore.save(filter.copy(name = LogFilterStore.uniqueName(filter.name))) }
+                    Separator()
+                    Item(removeLabel) {
+                        selectedFilters = selectedFilters - filter.name
+                        LogFilterStore.delete(filter.name)
+                    }
+                },
+            )
+        } + quick.map { expression ->
+            ActiveFilter(
+                label = expression,
+                expression = stringResource(Res.string.logs_quick_hint, expression),
+                quick = true,
+                onClick = {
+                    savingQuick = expression
+                    editing = LogFilter("", expression)
+                },
+                onRemove = { quick = quick - expression },
+            )
+        }
+        Box(Modifier.fillMaxWidth().background(Colors.toolbarBg)) {
+            LogFilterBar(
                 filterText = filterText,
                 onFilterText = { filterText = it },
                 onFieldFocus = { fieldFocused = it },
-                onSelect = { filter, toggle ->
-                    selectedFilters = when {
-                        filter.name == LogFilter.ALL_MESSAGES -> setOf(LogFilter.ALL_MESSAGES)
-                        // cmd-click adds to the set; a plain click replaces it
-                        toggle -> (selectedFilters - LogFilter.ALL_MESSAGES).let { current ->
-                            if (filter.name in current) current - filter.name else current + filter.name
-                        }.ifEmpty { setOf(LogFilter.ALL_MESSAGES) }
-                        else -> setOf(filter.name)
-                    }
+                active = pills,
+                saved = savedFilters,
+                selected = selectedFilters,
+                onToggleSaved = { filter ->
+                    selectedFilters = if (filter.name in selectedFilters) selectedFilters - filter.name else selectedFilters + filter.name
                 },
-                onEdit = { editing = it },
-                onDuplicate = { LogFilterStore.save(it.copy(name = LogFilterStore.uniqueName(it.name))) },
-                onDelete = { LogFilterStore.delete(it.name) },
-                onAdd = { editing = LogFilter("", "") },
-            )
-            VerticalSplitter(
-                width = paneWidth,
-                onWidthChange = {
-                    paneWidth = it
-                    SettingsManager.setInt(AppPref.LOGS_FILTER_WIDTH, it.value.toInt())
+                onNewFilter = { editing = LogFilter("", "") },
+                onClear = {
+                    selectedFilters = emptySet()
+                    quick = emptyList()
+                    floor = LogLevelFloor.VERBOSE
                 },
             )
+        }
+        HorizontalDivider(color = Colors.divider)
 
+        Row(Modifier.weight(1f)) {
             Box(
                 Modifier
                     .weight(1f)
@@ -378,8 +420,6 @@ fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
                 // how many lines have already dropped off the front, so the banding stays with the
                 // row: the offset rises by exactly what every index fell by
                 stripeOffset = page.dropped,
-                // the one table without the tiled background — see DataTable's showBackground
-                showBackground = false,
                 rowContentColor = { logLevelColor(it.level, defaultTextColor) },
                 onSelectionChange = {
                     selection = it
@@ -395,29 +435,37 @@ fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
                     Item(stringResource(Res.string.logs_view_message)) {
                         WindowManager.openMessage(entry.message)
                     }
-                    // **one** filter item, and only in a column whose value is worth filtering on —
-                    // the Swing menu offers Add Filter on the tag and the level and nowhere else.
-                    // Offering both at once asked which of two filters you meant on a cell that was
-                    // neither
-                    when (column) {
-                        LogColumn.TAG -> entry.tag?.let { tag ->
-                            Separator()
-                            Item(stringResource(Res.string.logs_filter_tag, tag)) {
-                                LogFilterStore.save(LogFilter(tag, "tag:$tag"))
-                                selectedFilters = setOf(tag)
-                            }
+                    // filters about the cell that was clicked, and only in a column whose value is
+                    // worth filtering on — the tag and the app, as the Swing menu offers, and the
+                    // level as a floor. Show only and Hide are quick filters: this tab's, unsaved,
+                    // and a click on their pill saves them
+                    val field = when (column) {
+                        LogColumn.TAG -> entry.tag?.let { LogTerm.Field.TAG to it }
+                        LogColumn.APP -> entry.pid?.let { LogTerm.Field.APP to it }
+                        else -> null
+                    }
+                    if (field != null) {
+                        val (on, value) = field
+                        // the App column holds a pid; the menu names the process when it's known
+                        val named = if (on == LogTerm.Field.APP) apps[value] ?: value else value
+                        val only = LogTermSpec(on, LogOperator.EQUALS, value).asExpression()
+                        val hide = LogTermSpec(on, LogOperator.NOT_EQUALS, value).asExpression()
+                        Separator()
+                        Item(stringResource(Res.string.logs_show_only, named)) {
+                            if (only !in quick) quick = quick + only
                         }
-
-                        // only the levels that have a built-in to select; "Verbose+" would name a
-                        // filter that doesn't exist and would silently filter nothing
-                        LogColumn.LEVEL -> builtInLevelFilter(entry.level)?.let { (level, filter) ->
-                            Separator()
-                            Item(stringResource(Res.string.logs_filter_level, level)) {
-                                selectedFilters = setOf(filter)
-                            }
+                        Item(stringResource(Res.string.logs_hide_value, named)) {
+                            if (hide !in quick) quick = quick + hide
                         }
-
-                        else -> Unit
+                        Item(stringResource(Res.string.logs_new_filter_from)) {
+                            editing = LogFilter("", only)
+                        }
+                    }
+                    if (column == LogColumn.LEVEL) {
+                        LogLevelFloor.of(entry.level)?.takeIf { it != LogLevelFloor.VERBOSE }?.let { level ->
+                            Separator()
+                            Item(stringResource(Res.string.logs_filter_level, entry.level.orEmpty())) { floor = level }
+                        }
                     }
                 },
                 headerMenu = { column ->
@@ -489,34 +537,18 @@ fun LogsScreen(deviceId: String, modifier: Modifier = Modifier) {
 
     FilterDialog(
         filter = editing,
-        onDismiss = { editing = null },
+        onDismiss = {
+            editing = null
+            savingQuick = null
+        },
         onSave = { original, saved ->
             LogFilterStore.save(saved, replacing = original.name.ifBlank { null })
-            selectedFilters = setOf(saved.name)
+            // a renamed filter keeps its place among the ones that are on
+            selectedFilters = selectedFilters - original.name + saved.name
+            savingQuick?.let { quick = quick - it }
+            savingQuick = null
         },
     )
-}
-
-/**
- * the built-in filter that covers [level] and above, or null if there isn't one.
- *
- * verbose has no built-in — everything is verbose-and-above — so a line at that level offers no
- * level filter rather than one that would select a name nothing matches.
- *
- * Two names come back because the menu and the filter list want different ones: the level on its own
- * for the menu item, which already reads "Filter level … and above", and the saved filter's full
- * name for the selection. Handing the filter name to the menu got "Filter level Log Level Warn+ and
- * above".
- */
-private fun builtInLevelFilter(level: String?): Pair<String, String>? {
-    val name = when (level?.firstOrNull()?.uppercaseChar()) {
-        'D' -> "Debug"
-        'I' -> "Info"
-        'W' -> "Warn"
-        'E', 'A', 'F' -> "Error"
-        else -> return null
-    }
-    return name to "Log Level $name+"
 }
 
 @Composable
@@ -530,6 +562,8 @@ private fun LogsToolbar(
     onHide: () -> Unit,
     onSave: () -> Unit,
     onClear: () -> Unit,
+    floor: LogLevelFloor,
+    onFloor: (LogLevelFloor) -> Unit,
 ) {
     Row(
         Modifier
@@ -547,6 +581,8 @@ private fun LogsToolbar(
         )
         ToolbarButton(Res.drawable.eye_closed, stringResource(Res.string.logs_hide), onClick = onHide, tint = Colors.toolbarIcon)
         ToolbarButton(Res.drawable.file_save, stringResource(Res.string.logs_save), onClick = onSave, tint = Colors.toolbarIcon)
+        Spacer(Modifier.width(Dimens.gapLarge))
+        LevelFloorButtons(floor, onFloor)
 
         Spacer(Modifier.weight(1f))
 
@@ -565,103 +601,6 @@ private fun LogsToolbar(
         )
         Spacer(Modifier.width(Dimens.gap))
         ToolbarButton(Res.drawable.trash, stringResource(Res.string.logs_clear), onClick = onClear, tint = Colors.toolbarIcon)
-    }
-}
-
-/**
- * the filters down the left: a box to search them, the list, and Add Filter pinned to the bottom.
- *
- * a **selection**, not checkboxes — the Swing list works this way and it is what makes "All
- * Messages" a member of the same list rather than a special control. ⌘-click adds to the selection;
- * every selected filter must pass.
- */
-@Composable
-private fun FilterPane(
-    width: Dp,
-    filters: List<LogFilter>,
-    selected: Set<String>,
-    /** an extra filter expression, ANDed with whatever is selected below it. */
-    filterText: String,
-    onFilterText: (String) -> Unit,
-    onFieldFocus: (Boolean) -> Unit,
-    onSelect: (LogFilter, toggle: Boolean) -> Unit,
-    onEdit: (LogFilter) -> Unit,
-    onDuplicate: (LogFilter) -> Unit,
-    onDelete: (LogFilter) -> Unit,
-    onAdd: () -> Unit,
-) {
-    Column(Modifier.width(width).fillMaxHeight().background(Colors.listBg)) {
-        FilterField(
-            value = filterText,
-            onValueChange = onFilterText,
-            hint = stringResource(Res.string.logs_filter_hint),
-            modifier = Modifier
-                .onFocusChanged { onFieldFocus(it.isFocused) }
-                .fillMaxWidth()
-                .padding(Dimens.gap / 2)
-                .clip(RoundedCornerShape(Dimens.corner))
-                .background(Colors.headerBackground)
-                .padding(horizontal = Dimens.gap, vertical = 4.dp),
-        )
-
-        LazyColumn(Modifier.weight(1f)) {
-            items(filters, key = { it.name }) { filter ->
-                FilterRow(
-                    filter = filter,
-                    selected = filter.name in selected,
-                    onSelect = onSelect,
-                    onEdit = onEdit,
-                    onDuplicate = onDuplicate,
-                    onDelete = onDelete,
-                )
-            }
-        }
-
-        HorizontalDivider(color = Colors.divider)
-        Box(Modifier.padding(Dimens.gap / 2)) {
-            DialogButton(
-                label = stringResource(Res.string.logs_add_filter),
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onAdd,
-            )
-        }
-    }
-}
-
-@Composable
-private fun FilterRow(
-    filter: LogFilter,
-    selected: Boolean,
-    onSelect: (LogFilter, Boolean) -> Unit,
-    onEdit: (LogFilter) -> Unit,
-    onDuplicate: (LogFilter) -> Unit,
-    onDelete: (LogFilter) -> Unit,
-) {
-    var menuOpen by remember { mutableStateOf(false) }
-    val builtIn = LogFilter.BUILT_IN.any { it.name == filter.name }
-    Box {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .background(if (selected) Colors.rowSelectedInactive else Color.Transparent)
-                .modifierClick { toggle -> onSelect(filter, toggle) }
-                .contextClickable { if (!builtIn) menuOpen = true }
-                .padding(horizontal = Dimens.gap, vertical = 3.dp),
-        ) {
-            Text(
-                text = filter.name,
-                style = MaterialTheme.typography.bodySmall,
-                color = Colors.primaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        AppPopupMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            Item(stringResource(Res.string.logs_edit_filter)) { onEdit(filter) }
-            Item(stringResource(Res.string.logs_duplicate_filter)) { onDuplicate(filter) }
-            Separator()
-            Item(stringResource(Res.string.remove)) { onDelete(filter) }
-        }
     }
 }
 

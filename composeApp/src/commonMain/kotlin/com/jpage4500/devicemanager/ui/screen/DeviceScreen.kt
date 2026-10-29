@@ -26,11 +26,14 @@ import kotlinx.coroutines.*
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * the desktop app's main screen: a toolbar, every device as a row in a table, and a status bar.
+ * the Devices page: a header with filter chips, a bar of actions for the selection, every device as
+ * a row in a table, and a status bar. See docs/REDESIGN.md.
  *
- * Deliberately the same shape as the Swing app's `DeviceScreen` rather than a two-pane list — this
- * is a screen for watching 45 devices at once, and a split view spends half the window on one of
- * them. Mirroring opens a window of its own (see [WindowManager]).
+ * Still a table rather than a two-pane list — this is a screen for watching 45 devices at once, and
+ * a split view spends half the window on one of them. The toolbar it used to have is gone: Connect
+ * and refresh are in the header, Settings in the sidebar, and everything that acts on a device is in
+ * the selection bar, the row's menu, or both. Mirroring opens a window of its own (see
+ * [WindowManager]).
  */
 @Composable
 fun DeviceScreen(modifier: Modifier = Modifier) {
@@ -50,6 +53,10 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     var commandsOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var dropping by remember { mutableStateOf(false) }
+    var chip by remember { mutableStateOf(DeviceChip.ALL) }
+    // the details panel beside the table; it shows whichever device leads the selection
+    var detailsOpen by remember { mutableStateOf(false) }
+    val compact by SettingsManager.getBoolAsState(AppPref.DEVICES_COMPACT)
     val installTitle = stringResource(Res.string.install_title)
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -63,7 +70,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
         deviceTooltip(row, column, clipped, upLabel)
     }
 
-    val visible = remember(devices, filter) { devices.filter { it.matches(filter) } }
+    val visible = remember(devices, filter, chip) { devices.filter { chip.matches(it) && it.matches(filter) } }
     val sorted = remember(visible, sort) { DeviceTableState.sorted(visible) }
 
     // the first device to arrive is selected, so the toolbar has something to act on straight away.
@@ -78,6 +85,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     // the lead is the device the toolbar acts on; the rest of the selection is what a menu offers to
     // act on in bulk
     val device = devices.firstOrNull { it.id == selection.lead }
+    val selected = remember(devices, selection) { devices.filter { it.id in selection.keys } }
 
 
     Column(
@@ -91,96 +99,135 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                 true
             }
     ) {
-        DeviceToolbar(
-            device = device,
+        DeviceHeader(
+            devices = devices,
+            chip = chip,
+            onChip = { chip = it },
             filter = filter,
             onFilterChange = { filter = it },
             filterFocus = filterFocus,
-            onMirror = { it?.let { d -> WindowManager.openMirror(d.id) } },
-            onScreenshot = { d -> scope.launch { saveScreenshot(d) } },
-            onInput = { inputFor = DeviceManager.selectedIds.value },
-            onInstall = {
-                scope.launch {
-                    val files = pickLocalFiles(installTitle, extensions = listOf("apk"))
-                    if (files.isNotEmpty()) InstallManager.send(DeviceManager.selectedIds.value, files)
-                }
-            },
-            onCommands = { commandsOpen = true },
-            onSettings = { settingsOpen = true },
             onRefresh = { DeviceManager.refresh() },
         )
-        HorizontalDivider(color = Colors.divider)
 
-        Box(
-            Modifier
-                .weight(1f)
-                // an APK installs, anything else is copied — see InstallManager
-                .fileDropTarget(
-                    enabled = selection.size > 0,
-                    onDragChanged = { dropping = it },
-                    onDrop = { files ->
-                        scope.launch { InstallManager.send(DeviceManager.selectedIds.value, files) }
-                    },
-                )
-                .then(
-                    if (dropping) Modifier.border(2.dp, Colors.accent) else Modifier
-                )
-        ) {
-            if (sorted.isEmpty()) {
-                EmptyState(
-                    title = stringResource(
-                        if (filter.isBlank()) Res.string.no_devices else Res.string.no_matches
-                    ),
-                    detail = stringResource(
-                        if (filter.isBlank()) Res.string.no_devices_msg else Res.string.no_matches_msg
-                    ),
-                )
-            } else {
-                DataTable(
-                    rows = sorted,
-                    columns = columns,
-                    widths = widths.withDefaults(columns),
-                    sortedBy = sort.column,
-                    sortAscending = sort.ascending,
-                    selection = selection,
-                    rowKey = { it.id },
-                    header = { it.label },
-                    rowHeight = Dimens.tableRowHeight,
-                    // typing "gal" jumps to the Galaxy, the way it does in any file manager
-                    typeAheadText = { it.displayName },
-                    onSelectionChange = { DeviceManager.setSelection(it) },
-                    onSort = { DeviceTableState.sortBy(it) },
-                    onResize = { column, width -> DeviceTableState.resize(column, width) },
-                    onReorder = { from, to -> DeviceTableState.moveColumn(from, to) },
-                    onActivate = { row -> WindowManager.openMirror(row.id) },
-                    tooltip = cellTooltip.takeIf { showTooltips },
-                    rowMenu = { row, column ->
-                        DeviceMenu(
-                            device = row,
-                            column = column,
-                            onCopy = copyToClipboard,
-                            onEdit = { input = it },
-                            onAction = { action -> scope.launch { action() } },
-                        )
-                    },
-                    headerMenu = { column ->
-                        ColumnMenu(
-                            column = column,
-                            hidden = hidden,
-                            onSizeToFit = { target ->
-                                DeviceTableState.sizeToFit(target, widestIn(sorted, target, measurer, density))
-                            },
-                            onSizeAllToFit = {
-                                columns.forEach { each ->
-                                    DeviceTableState.sizeToFit(each, widestIn(sorted, each, measurer, density))
-                                }
+        if (devices.isEmpty()) {
+            DeviceOnboarding(onSettings = { settingsOpen = true }, modifier = Modifier.weight(1f))
+        } else {
+            SelectionBar(
+                selected = selected,
+                onMirror = { list -> list.forEach { WindowManager.openMirror(it.id) } },
+                onScreenshot = { list -> scope.launch { list.forEach { saveScreenshot(it) } } },
+                onLogs = { list -> PageManager.openLogs(list.map { it.id }) },
+                onFiles = { d -> WindowManager.openFiles(d.id) },
+                onInstall = {
+                    scope.launch {
+                        val files = pickLocalFiles(installTitle, extensions = listOf("apk"))
+                        if (files.isNotEmpty()) InstallManager.send(DeviceManager.selectedIds.value, files)
+                    }
+                },
+                onInput = { inputFor = DeviceManager.selectedIds.value },
+                onCommands = { commandsOpen = true },
+                onDetails = { detailsOpen = true },
+                onClear = { DeviceManager.setSelection(TableSelection()) },
+            )
+
+            val cardShape = RoundedCornerShape(Dimens.cardCorner)
+            val sortedKeys = remember(sorted) { sorted.map<Device, Any?> { it.id } }
+            Row(Modifier.weight(1f).padding(horizontal = Dimens.pageGutter)) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(cardShape)
+                        .border(Dimens.hairline, if (dropping) Colors.tabAccent else Colors.sidebarBorder, cardShape)
+                        // an APK installs, anything else is copied — see InstallManager
+                        .fileDropTarget(
+                            enabled = selection.size > 0,
+                            onDragChanged = { dropping = it },
+                            onDrop = { files ->
+                                scope.launch { InstallManager.send(DeviceManager.selectedIds.value, files) }
                             },
                         )
-                    },
-                ) { row, column ->
-                    DeviceCell(row, column, busy = row.id in busy)
+                ) {
+                    if (sorted.isEmpty()) {
+                        EmptyState(
+                            title = stringResource(Res.string.no_matches),
+                            detail = stringResource(Res.string.no_matches_msg),
+                        )
+                    } else {
+                        DataTable(
+                            rows = sorted,
+                            columns = columns,
+                            widths = widths.withDefaults(columns),
+                            sortedBy = sort.column,
+                            sortAscending = sort.ascending,
+                            selection = selection,
+                            rowKey = { it.id },
+                            header = { it.label },
+                            rowHeight = if (compact) Dimens.tableRowHeight else Dimens.deviceRowHeight,
+                            // typing "gal" jumps to the Galaxy, the way it does in any file manager
+                            typeAheadText = { it.displayName },
+                            onSelectionChange = { DeviceManager.setSelection(it) },
+                            onSort = { DeviceTableState.sortBy(it) },
+                            onResize = { column, width -> DeviceTableState.resize(column, width) },
+                            onReorder = { from, to -> DeviceTableState.moveColumn(from, to) },
+                            onActivate = { row -> WindowManager.openMirror(row.id) },
+                            tooltip = cellTooltip.takeIf { showTooltips },
+                            rowMenu = { row, column ->
+                                DeviceMenu(
+                                    device = row,
+                                    column = column,
+                                    onCopy = copyToClipboard,
+                                    onEdit = { input = it },
+                                    onAction = { action -> scope.launch { action() } },
+                                )
+                            },
+                            headerMenu = { column ->
+                                ColumnMenu(
+                                    column = column,
+                                    hidden = hidden,
+                                    onSizeToFit = { target ->
+                                        DeviceTableState.sizeToFit(target, widestIn(sorted, target, measurer, density))
+                                    },
+                                    onSizeAllToFit = {
+                                        columns.forEach { each ->
+                                            DeviceTableState.sizeToFit(each, widestIn(sorted, each, measurer, density))
+                                        }
+                                    },
+                                )
+                            },
+                        ) { row, column ->
+                            DeviceCell(
+                                device = row,
+                                column = column,
+                                busy = row.id in busy,
+                                compact = compact,
+                                checked = row.id in selection.keys,
+                                onCheck = {
+                                    DeviceManager.setSelection(selection.onPress(row.id, sortedKeys, toggle = true, range = false))
+                                },
+                            )
+                        }
+                    }
+                }
+                val shown = device
+                if (detailsOpen && shown != null) {
+                    Spacer(Modifier.width(Dimens.rowPadding))
+                    DeviceDetailsPanel(
+                        device = shown,
+                        busy = shown.id in busy,
+                        onClose = { detailsOpen = false },
+                        onScreenshot = { d -> scope.launch { saveScreenshot(d) } },
+                        onInstall = {
+                            scope.launch {
+                                val files = pickLocalFiles(installTitle, extensions = listOf("apk"))
+                                if (files.isNotEmpty()) InstallManager.send(listOf(shown.id), files)
+                            }
+                        },
+                        onInput = { inputFor = listOf(shown.id) },
+                    )
                 }
             }
+            Spacer(Modifier.height(Dimens.gap))
         }
 
         HorizontalDivider(color = Colors.divider)
@@ -217,16 +264,37 @@ private fun Map<DeviceColumn, Dp>.withDefaults(columns: List<DeviceColumn>): Map
  * a lookup table of one-line composables is harder to read than the list of exceptions.
  */
 @Composable
-private fun DeviceCell(device: Device, column: DeviceColumn, busy: Boolean) {
+private fun DeviceCell(
+    device: Device,
+    column: DeviceColumn,
+    busy: Boolean,
+    compact: Boolean,
+    checked: Boolean,
+    onCheck: () -> Unit,
+) {
     when (column) {
+        // a tick box, a dot for the state, and — unless the rows are compact — what the device is
+        // under its name, or what it's waiting for when it can't be used yet. The box adds a row to
+        // the selection or takes it out, the way ⌘-click does, without having to know the key
         DeviceColumn.NAME -> Row(verticalAlignment = Alignment.CenterVertically) {
-            AppIcon(
-                res = if (device.isWireless) Res.drawable.device_remote else Res.drawable.android,
-                size = Dimens.icon,
-                tint = device.stateColor(busy),
-            )
-            Spacer(Modifier.width(Dimens.gap / 2))
-            TableText(device.displayName)
+            RowCheckbox(checked, onCheck, stringResource(Res.string.row_select, device.displayName))
+            Spacer(Modifier.width(Dimens.navGap))
+            Box(Modifier.size(Dimens.stateDot).clip(CircleShape).background(device.stateColor(busy)))
+            Spacer(Modifier.width(Dimens.gap))
+            if (compact) {
+                TableText(device.displayName)
+            } else {
+                Column {
+                    TableText(device.displayName, color = if (device.isOnline) Color.Unspecified else Colors.secondaryText)
+                    Text(
+                        text = device.subtitle(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (device.needsAccepting) Colors.busy else Colors.secondaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
 
         DeviceColumn.BATTERY -> BatteryLevel(
@@ -245,132 +313,27 @@ private fun DeviceCell(device: Device, column: DeviceColumn, busy: Boolean) {
     }
 }
 
-/** the device icon's colour: busy and not-ready both outrank the connection state. */
+/** waiting on someone to tap Allow on the device itself. */
+private val Device.needsAccepting: Boolean
+    get() = state == DeviceState.UNAUTHORIZED || state == DeviceState.AUTHORIZING
+
+/** the line under a device's name: its model, or what's stopping it from being used. */
 @Composable
-private fun Device.stateColor(busy: Boolean): Color = when {
+private fun Device.subtitle(): String = when {
+    needsAccepting -> stringResource(Res.string.state_unauthorized)
+    !isOnline -> stringResource(Res.string.state_offline)
+    else -> model ?: serial
+}
+
+/** the device's state as a colour: busy and not-ready both outrank the connection state. */
+@Composable
+fun Device.stateColor(busy: Boolean): Color = when {
     busy -> Colors.busy
     isOnline && !isBooted -> Colors.unauthorized
     state == DeviceState.DEVICE -> Colors.online
     state == DeviceState.UNAUTHORIZED || state == DeviceState.AUTHORIZING -> Colors.unauthorized
     state == DeviceState.OFFLINE || state == DeviceState.DETACHED -> Colors.offline
     else -> Colors.error
-}
-
-/** the toolbar. everything acting on one device is disabled until one is selected. */
-@Composable
-private fun DeviceToolbar(
-    device: Device?,
-    filter: String,
-    onFilterChange: (String) -> Unit,
-    filterFocus: FocusRequester,
-    onMirror: (Device?) -> Unit,
-    onScreenshot: (Device) -> Unit,
-    onInput: () -> Unit,
-    onInstall: () -> Unit,
-    onCommands: () -> Unit,
-    onSettings: () -> Unit,
-    onRefresh: () -> Unit,
-) {
-    val hasDevice = device != null && device.isOnline
-    val iconTint = Colors.toolbarIcon
-    // deliberately NOT horizontally scrollable: a weighted spacer is what pins the trailing group
-    // to the right edge, and inside a scrolling Row the weight would be measured against an
-    // infinite width. a narrow window clips the middle of the toolbar, which is what the Swing app
-    // does too
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(Dimens.toolbarHeight + Dimens.gap)
-            .background(Colors.toolbarBg)
-            .padding(horizontal = Dimens.gap),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ToolbarButton(
-            res = Res.drawable.add,
-            label = stringResource(Res.string.action_connect),
-            onClick = { WindowManager.openConnect() },
-            tint = iconTint,
-        )
-        ToolbarSeparator()
-
-        ToolbarButton(
-            res = Res.drawable.browse,
-            label = stringResource(Res.string.action_browse),
-            onClick = { device?.let { WindowManager.openFiles(it.serial) } },
-            enabled = hasDevice,
-            tint = iconTint,
-        )
-        ToolbarButton(
-            res = Res.drawable.logs,
-            label = stringResource(Res.string.action_view_logs),
-            onClick = { device?.let { WindowManager.openLogs(it.serial) } },
-            enabled = hasDevice,
-            tint = iconTint,
-        )
-        ToolbarButton(
-            res = Res.drawable.keyboard,
-            label = stringResource(Res.string.action_input),
-            onClick = onInput,
-            enabled = hasDevice,
-            tint = iconTint,
-        )
-        ToolbarSeparator()
-
-        ToolbarButton(
-            res = Res.drawable.mirror,
-            label = stringResource(Res.string.action_mirror),
-            onClick = { onMirror(device) },
-            enabled = hasDevice,
-            tint = iconTint,
-        )
-        ToolbarButton(
-            res = Res.drawable.screenshot,
-            label = stringResource(Res.string.action_screenshot),
-            onClick = { device?.let(onScreenshot) },
-            enabled = hasDevice,
-            tint = iconTint,
-        )
-        ToolbarButton(
-            res = Res.drawable.download,
-            label = stringResource(Res.string.action_install),
-            onClick = onInstall,
-            enabled = hasDevice,
-            tint = iconTint,
-        )
-        ToolbarSeparator()
-
-        ToolbarButton(Res.drawable.chart, stringResource(Res.string.action_stats), onClick = {}, enabled = false, tint = iconTint)
-        ToolbarButton(
-            res = Res.drawable.adb,
-            label = stringResource(Res.string.action_adb),
-            onClick = onCommands,
-            tint = iconTint,
-        )
-
-        Spacer(Modifier.weight(1f))
-
-        FilterField(
-            value = filter,
-            onValueChange = onFilterChange,
-            hint = stringResource(Res.string.filter_devices),
-            focusRequester = filterFocus,
-            modifier = Modifier
-                .widthIn(min = 110.dp, max = 180.dp)
-                .clip(RoundedCornerShape(Dimens.corner))
-                .background(Colors.listBg)
-                .padding(horizontal = Dimens.gap, vertical = 5.dp),
-        )
-        Spacer(Modifier.width(Dimens.gap))
-
-        ToolbarButton(Res.drawable.refresh, stringResource(Res.string.action_refresh), onClick = onRefresh, tint = iconTint)
-        ToolbarButton(Res.drawable.share_off, stringResource(Res.string.action_share), onClick = {}, enabled = false, tint = iconTint)
-        ToolbarButton(
-            res = Res.drawable.settings,
-            label = stringResource(Res.string.action_settings),
-            onClick = onSettings,
-            tint = iconTint,
-        )
-    }
 }
 
 /**

@@ -81,8 +81,6 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
     val title = when (val content = appWindow.content) {
         is WindowContent.DeviceList -> Branding.appName
         is WindowContent.Mirror -> DeviceManager.nameOf(content.deviceId)
-        is WindowContent.Logs -> "Logs — ${DeviceManager.nameOf(content.deviceId)}"
-        is WindowContent.Files -> "Files — ${DeviceManager.nameOf(content.deviceId)}"
         is WindowContent.Info -> DeviceManager.nameOf(content.deviceId)
         is WindowContent.Connect -> "Connect"
         is WindowContent.Message -> "Message Viewer"
@@ -134,8 +132,6 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
         when (val content = appWindow.content) {
             is WindowContent.DeviceList -> App(compact = false)
             is WindowContent.Mirror -> AppTheme { MirrorScreen(content.deviceId) }
-            is WindowContent.Logs -> AppTheme { LogsScreen(content.deviceId) }
-            is WindowContent.Files -> AppTheme { ExploreScreen(content.deviceId) }
             is WindowContent.Info -> AppTheme { DeviceInfoScreen(content.deviceId) }
             is WindowContent.Connect -> AppTheme {
                 ConnectScreen(onClose = { WindowManager.close(appWindow.id) })

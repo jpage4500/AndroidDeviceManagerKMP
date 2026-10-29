@@ -30,8 +30,6 @@ data class WindowSize(val width: Int, val height: Int)
 enum class WindowKind(val defaultWidth: Dp, val defaultHeight: Dp) {
     DEVICE_LIST(Dimens.windowWidth, Dimens.windowHeight),
     MIRROR(Dimens.mirrorWindowWidth, Dimens.mirrorWindowHeight),
-    LOGS(Dimens.logsWindowWidth, Dimens.logsWindowHeight),
-    FILES(Dimens.filesWindowWidth, Dimens.filesWindowHeight),
     INFO(Dimens.formWindowWidth, Dimens.formWindowHeight),
     CONNECT(Dimens.formWindowWidth, Dimens.formWindowHeight),
     MESSAGE(Dimens.messageWindowWidth, Dimens.messageWindowHeight),
@@ -51,12 +49,6 @@ sealed interface WindowContent {
     /** one device on its own — a mirror torn off into a window of its own. */
     data class Mirror(val deviceId: String) : WindowContent
 
-    /** one device's logcat. */
-    data class Logs(val deviceId: String) : WindowContent
-
-    /** one device's filesystem. */
-    data class Files(val deviceId: String) : WindowContent
-
     /** everything known about one device. */
     data class Info(val deviceId: String) : WindowContent
 
@@ -72,8 +64,6 @@ val WindowContent.kind: WindowKind
     get() = when (this) {
         is WindowContent.DeviceList -> WindowKind.DEVICE_LIST
         is WindowContent.Mirror -> WindowKind.MIRROR
-        is WindowContent.Logs -> WindowKind.LOGS
-        is WindowContent.Files -> WindowKind.FILES
         is WindowContent.Info -> WindowKind.INFO
         is WindowContent.Connect -> WindowKind.CONNECT
         is WindowContent.Message -> WindowKind.MESSAGE
@@ -144,11 +134,14 @@ object WindowManager {
     fun openMirror(deviceId: String, from: Long? = activeWindowId): Long =
         openOnce(WindowContent.Mirror(deviceId), from)
 
-    fun openLogs(deviceId: String, from: Long? = activeWindowId): Long =
-        openOnce(WindowContent.Logs(deviceId), from)
+    /**
+     * a device's logcat, as a tab in the Logs page of the window last in front — not a window of
+     * its own any more. See [PageManager] and docs/REDESIGN.md.
+     */
+    fun openLogs(deviceId: String) = PageManager.openLogs(listOf(deviceId))
 
-    fun openFiles(deviceId: String, from: Long? = activeWindowId): Long =
-        openOnce(WindowContent.Files(deviceId), from)
+    /** a device's filesystem, as a tab in the Files page — see [openLogs]. */
+    fun openFiles(deviceId: String) = PageManager.openFiles(deviceId)
 
     fun openInfo(deviceId: String, from: Long? = activeWindowId): Long =
         openOnce(WindowContent.Info(deviceId), from)
@@ -162,8 +155,7 @@ object WindowManager {
     /**
      * open [content], or raise the window already showing it.
      *
-     * a second logcat on the same device would double the load on it for nothing, and a second
-     * mirror would halve both their frame rates.
+     * a second mirror would halve both their frame rates.
      */
     private fun openOnce(content: WindowContent, from: Long?): Long {
         val existing = _windows.value.firstOrNull { it.content == content }

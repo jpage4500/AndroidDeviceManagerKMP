@@ -5,6 +5,77 @@
   from. names are grouped by where they appear, then alphabetical within the group.
 -->
 <resources>
+    <!-- the desktop shell: sidebar, pages and their tabs -->
+    <string name="files_page_empty">No device open</string>
+    <string name="files_page_empty_msg">Press + to browse a device here, or choose Browse on a device.</string>
+    <string name="logs_page_empty">Not capturing any device</string>
+    <string name="logs_page_empty_msg">Press + to show a device\'s log here, or choose View Logs on a device.</string>
+    <string name="page_files">Files</string>
+    <string name="page_logs">Logs</string>
+    <string name="sidebar_collapse">Collapse sidebar</string>
+    <string name="sidebar_expand">Expand sidebar</string>
+    <string name="sidebar_title">Device Manager</string>
+    <string name="tab_add">Open another device</string>
+    <string name="tab_add_none">Every device is already open</string>
+    <string name="tab_close">Close %1$s</string>
+
+    <!-- devices page: header chips, the selection bar, and what shows with nothing connected -->
+    <string name="chip_all">All %1$d</string>
+    <string name="chip_attention">Needs attention %1$d</string>
+    <string name="chip_low_battery">Low battery %1$d</string>
+    <string name="chip_usb">USB %1$d</string>
+    <string name="chip_wifi">Wi‑Fi %1$d</string>
+    <string name="devices_search">Search</string>
+    <string name="selection_clear">Clear</string>
+    <string name="selection_count">%1$d selected</string>
+    <string name="selection_hint">Select devices to mirror, screenshot, read their logs or install on them together.</string>
+    <string name="sel_commands">Commands</string>
+    <string name="sel_details">Details</string>
+    <string name="sel_files">Files</string>
+    <string name="sel_logs">Logs</string>
+    <string name="sel_type_text">Type text</string>
+    <string name="state_offline">Offline</string>
+    <string name="state_unauthorized">Unauthorized — accept the prompt on the device</string>
+    <string name="details_all">All details…</string>
+    <string name="details_android">Android %1$s</string>
+    <string name="details_battery">Battery</string>
+    <string name="details_battery_charging">%1$d% · charging</string>
+    <string name="details_carrier">Carrier</string>
+    <string name="details_connection">Connection</string>
+    <string name="details_custom_1">Custom 1</string>
+    <string name="details_disconnect">Disconnect</string>
+    <string name="details_phone">Phone</string>
+    <string name="details_restart">Restart</string>
+    <string name="details_restart_msg">Restart %1$s? It goes offline until it has booted again.</string>
+    <string name="details_restart_title">Restart device</string>
+    <string name="details_sdk">SDK</string>
+    <string name="details_serial">Serial</string>
+    <string name="details_storage">Storage</string>
+    <string name="details_storage_free">%1$s free of %2$s</string>
+    <string name="details_usb">USB</string>
+    <string name="details_wifi">Wi‑Fi</string>
+    <string name="row_select">Select %1$s</string>
+    <string name="onboard_title">No devices connected</string>
+    <string name="onboard_msg">Connect one any of these ways. It appears here by itself as soon as adb can see it.</string>
+    <string name="onboard_usb">USB cable</string>
+    <string name="onboard_usb_sub">Any Android device</string>
+    <string name="onboard_usb_1">On the device, open Settings › About phone and tap Build number seven times.</string>
+    <string name="onboard_usb_2">Open Developer options and turn on USB debugging.</string>
+    <string name="onboard_usb_3">Plug it in, then tap Allow when it asks to trust this computer.</string>
+    <string name="onboard_usb_note">It\'s listed as Unauthorized until you tap Allow.</string>
+    <string name="onboard_wifi">Wi‑Fi</string>
+    <string name="onboard_wifi_sub">Android 11 and newer, same network</string>
+    <string name="onboard_wifi_1">Open Developer options › Wireless debugging.</string>
+    <string name="onboard_wifi_2">Tap Pair device with QR code, or Pair with pairing code.</string>
+    <string name="onboard_wifi_3">Scan or type it in the Connect window.</string>
+    <string name="onboard_wifi_button">Pair a device…</string>
+    <string name="onboard_remote">Another computer</string>
+    <string name="onboard_remote_sub">Devices plugged in somewhere else</string>
+    <string name="onboard_remote_msg">Use the devices on another computer running Device Manager with Share devices turned on.</string>
+    <string name="onboard_remote_button">Connect to a computer…</string>
+    <string name="onboard_adb">adb server: %1$s</string>
+    <string name="onboard_settings">Connection settings</string>
+
     <!-- device list -->
     <string name="devices">Devices</string>
     <string name="devices_attached">%1$d attached</string>
@@ -145,6 +216,11 @@
     <string name="settings_send">SEND</string>
     <string name="settings_transport">Reading devices from</string>
     <string name="settings_tooltips">Show Tooltips</string>
+    <string name="settings_compact_rows">Compact device rows</string>
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_system">Same as the system</string>
     <string name="settings_tray">Stay in the menu bar when closed</string>
     <string name="settings_max_mirrors">Mirror windows at once</string>
     <string name="settings_about">About</string>
@@ -203,7 +279,22 @@
     <string name="info_timezone">Timezone</string>
 
     <!-- logs -->
-    <string name="logs_add_filter">Add Filter</string>
+    <string name="logs_add_filter">Add filter</string>
+    <string name="logs_and">AND</string>
+    <string name="logs_clear_filters">Clear filters</string>
+    <string name="logs_filter_this">Filter this tab — text, tag:, app:</string>
+    <string name="logs_hide_value">Hide %1$s</string>
+    <string name="logs_level">Level ≥</string>
+    <string name="logs_level_debug">Debug and above</string>
+    <string name="logs_level_error">Errors only</string>
+    <string name="logs_level_info">Info and above</string>
+    <string name="logs_level_verbose">Everything</string>
+    <string name="logs_level_warn">Warnings and above</string>
+    <string name="logs_new_filter">New filter…</string>
+    <string name="logs_new_filter_from">New filter from this…</string>
+    <string name="logs_quick_hint">%1$s — on this tab only; click to save it as a filter</string>
+    <string name="logs_remove_filter">Remove %1$s</string>
+    <string name="logs_show_only">Show only %1$s</string>
     <string name="logs_clear">Clear</string>
     <string name="logs_copy_message">Copy Message</string>
     <string name="logs_duplicate_filter">Duplicate Filter</string>
@@ -213,7 +304,6 @@
     <string name="logs_filter_edit">Edit Filter</string>
     <string name="logs_filter_expression">Filter Expression:</string>
     <string name="logs_auto_scroll">Auto Scroll</string>
-    <string name="logs_filter_hint">Filter…</string>
     <string name="logs_hide">Hide</string>
     <string name="logs_hold">holding %1$d older lines</string>
     <string name="logs_hold_full">hold full — oldest lines dropping</string>
@@ -227,7 +317,6 @@
     <string name="logs_filter_name">Filter Name:</string>
     <string name="logs_filter_new">New Filter</string>
     <string name="logs_filter_remove_term">Remove this term</string>
-    <string name="logs_filter_tag">Filter tag %1$s</string>
     <string name="logs_filter_value">Value</string>
     <string name="logs_save">Save</string>
     <string name="logs_start">Start</string>

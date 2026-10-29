@@ -295,6 +295,12 @@ mask_squircle "$MASTER" "icon.png"
 mkdir -p jdeploy-bundle
 cp "icon.png" "jdeploy-bundle/icon.png"
 
+# The mark at the top of the desktop sidebar (ui/shell/Sidebar.kt). The source as it is — its own
+# squircle and transparent corners — at 256px, which keeps the rail's 34dp logo sharp at 3x without
+# shipping the 1MB master inside the app.
+echo "▶ Sidebar logo (composeResources/drawable/app_logo.png)"
+resize "$SRC" 256 "composeApp/src/commonMain/composeResources/drawable/app_logo.png"
+
 # ─── done ───────────────────────────────────────────────────────────────────
 echo ""
 echo "Done. Review with:  git status && git diff --stat"

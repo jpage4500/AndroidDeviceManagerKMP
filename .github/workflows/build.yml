@@ -60,7 +60,7 @@ jobs:
           name: adm-debug-apk
           path: androidApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1
 
   # a separate macOS runner: the iOS targets need Xcode's toolchain and cannot be built on Linux
   ios:

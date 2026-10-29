@@ -10,6 +10,7 @@ import com.jpage4500.devicemanager.ui.dialog.common.*
 import com.jpage4500.devicemanager.ui.setting.SettingItem
 import com.jpage4500.devicemanager.ui.setting.SettingSwitchItem
 import com.jpage4500.devicemanager.ui.theme.Colors
+import com.jpage4500.devicemanager.ui.theme.ThemeMode
 import com.jpage4500.devicemanager.util.SettingsManager
 import com.jpage4500.devicemanager.util.obfuscate
 import org.jetbrains.compose.resources.DrawableResource
@@ -136,6 +137,7 @@ private fun DeviceListSettingsDialog(onDismiss: () -> Unit) {
             minValue = 1,
             maxValue = 16,
         )
+        SwitchSetting(Res.drawable.menu, Res.string.settings_compact_rows, AppPref.DEVICES_COMPACT)
         SwitchSetting(Res.drawable.about, Res.string.settings_tooltips, AppPref.SHOW_TOOLTIPS, showDivider = false)
     }
 }
@@ -162,6 +164,7 @@ private fun AppSettingsDialog(onDismiss: () -> Unit) {
     var confirmReset by remember { mutableStateOf(false) }
 
     CategoryDialog(Res.string.settings_app, Res.drawable.settings, onDismiss) {
+        ThemeSetting()
         SwitchSetting(Res.drawable.tray_icon, Res.string.settings_tray, AppPref.MINIMIZE_TO_TRAY)
         SwitchSetting(Res.drawable.star, Res.string.settings_on_top, AppPref.ALWAYS_ON_TOP)
         SwitchSetting(Res.drawable.error, Res.string.settings_confirm, AppPref.CONFIRM_DESTRUCTIVE)
@@ -219,6 +222,36 @@ private fun applyTransport() = DeviceManager.applySettings()
 // ---------------------------------------------------------------------------------------------
 
 /** which route devices are read over. */
+/** light, dark, or whatever the OS is — light by default, see [com.jpage4500.devicemanager.ui.theme.isDarkTheme]. */
+@Composable
+private fun ThemeSetting() {
+    SettingsManager.observePref(AppPref.THEME)
+    var picking by remember { mutableStateOf(false) }
+    val current = SettingsManager.getEnum<ThemeMode>(AppPref.THEME)
+    val labels = mapOf(
+        ThemeMode.LIGHT to Res.string.settings_theme_light,
+        ThemeMode.DARK to Res.string.settings_theme_dark,
+        ThemeMode.SYSTEM to Res.string.settings_theme_system,
+    )
+
+    SettingItem(
+        icon = Res.drawable.eye_open,
+        labelRes = Res.string.settings_theme,
+        valueRes = labels.getValue(current),
+        onClick = { picking = true },
+    )
+
+    if (picking) {
+        OptionsDialog(
+            title = stringResource(Res.string.settings_theme),
+            options = ThemeMode.entries.map { mode -> DialogOption(data = mode, textRes = labels.getValue(mode)) },
+            selectedValue = current,
+            onDismiss = { picking = false },
+            onConfirm = { SettingsManager.setEnum(AppPref.THEME, it) },
+        )
+    }
+}
+
 @Composable
 private fun TransportSetting() {
     SettingsManager.observePref(AppPref.TRANSPORT)

@@ -1,0 +1,187 @@
+package com.jpage4500.devicemanager.manager
+
+import androidx.compose.foundation.lazy.*
+import androidx.compose.runtime.*
+import com.jpage4500.devicemanager.util.*
+import kotlinx.coroutines.*
+
+/** a page of the desktop shell — what the sidebar switches between. See docs/REDESIGN.md. */
+enum class Page { DEVICES, FILES, LOGS }
+
+/** one device's log in the Logs page, kept whether or not its tab is the one showing. */
+class LogsTab(val deviceId: String, val source: LogsSource) {
+    val view = LogsView()
+    /** [LogsSource.errors] when this tab was last the one showing; the badge is what's arrived since. */
+    var errorsSeen by mutableStateOf(0)
+}
+
+/** the lowest level a log tab shows — the V D I W E buttons, in logcat's order of seriousness. */
+enum class LogLevelFloor(val code: Char, val expression: String?) {
+    VERBOSE('V', null),
+    DEBUG('D', "level:D+"),
+    INFO('I', "level:I+"),
+    WARN('W', "level:W+"),
+    // error and worse: E and A/F both, which is what the Swing app's "Log Level Error+" meant
+    ERROR('E', "level:E+");
+
+    companion object {
+        fun of(level: String?): LogLevelFloor? =
+            entries.firstOrNull { it.code == level?.firstOrNull()?.uppercaseChar() }
+                ?: if (level?.firstOrNull()?.uppercaseChar() in setOf('A', 'F')) ERROR else null
+    }
+}
+
+/**
+ * how one log tab is being read: what it's filtered to, what's being searched for, and where it is.
+ *
+ * kept by the tab rather than by `LogsScreen`, which is created again each time its tab is opened —
+ * so switching to another device's log and back leaves this one as it was, down to the scroll.
+ * Saved filters are shared by every tab ([LogFilterStore]); which of them are *on* is this tab's.
+ */
+@Stable
+class LogsView {
+    /** highlights matches rather than filtering to them — ⌘G walks them. */
+    var search by mutableStateOf("")
+    /** an extra expression typed into the filter bar, ANDed with everything else. */
+    var filterText by mutableStateOf("")
+    /** the saved filters switched on here, by name. */
+    var selectedFilters by mutableStateOf(emptySet<String>())
+    /**
+     * filters made by a right-click — Show only, Hide — as expressions. This tab's alone and not
+     * saved; clicking one's pill saves it as a filter.
+     */
+    var quick by mutableStateOf(emptyList<String>())
+    var floor by mutableStateOf(LogLevelFloor.VERBOSE)
+    var autoScroll by mutableStateOf(true)
+    val listState = LazyListState()
+}
+
+/** one device's filesystem in the Files page; [browser] holds the folder it was left in. */
+class FilesTab(val deviceId: String, val browser: FileBrowser)
+
+/**
+ * what one desktop window is showing: its page, and the devices open in Logs and Files.
+ *
+ * Owned by the window rather than the app — two windows can be on different pages — and it **owns
+ * the log streams** of its tabs. They run on [scope], the window's, not on the tab's composable: a
+ * stream started by a tab's composable dies when another tab is opened, and a log that stops
+ * whenever you look away is only half a log. Closing a tab or the window is what stops one.
+ */
+@Stable
+class ShellState(private val scope: CoroutineScope) {
+    private val log = LoggerConfig.createLogger("ShellState")
+
+    var page by mutableStateOf(Page.DEVICES)
+
+    val logTabs = mutableStateListOf<LogsTab>()
+    var activeLogs by mutableStateOf<String?>(null)
+        private set
+
+    val fileTabs = mutableStateListOf<FilesTab>()
+    var activeFiles by mutableStateOf<String?>(null)
+        private set
+
+    /** open (or focus) a log tab for each device, in order, and show the first. */
+    fun openLogs(deviceIds: List<String>) {
+        if (deviceIds.isEmpty()) return
+        deviceIds.forEach { id ->
+            if (logTabs.none { it.deviceId == id }) {
+                log.d("openLogs: $id")
+                val tab = LogsTab(id, LogsSource(id))
+                logTabs.add(tab)
+                tab.source.start(scope)
+            }
+        }
+        activeLogs = deviceIds.first()
+        page = Page.LOGS
+    }
+
+    fun showLogs(deviceId: String) {
+        if (logTabs.any { it.deviceId == deviceId }) activeLogs = deviceId
+    }
+
+    fun closeLogs(deviceId: String) {
+        val index = logTabs.indexOfFirst { it.deviceId == deviceId }
+        if (index < 0) return
+        log.d("closeLogs: $deviceId")
+        logTabs.removeAt(index).source.stop()
+        if (activeLogs == deviceId) activeLogs = neighbour(logTabs.map { it.deviceId }, index)
+    }
+
+    /** open (or focus) a files tab for the device, and show it. */
+    fun openFiles(deviceId: String) {
+        if (fileTabs.none { it.deviceId == deviceId }) {
+            log.d("openFiles: $deviceId")
+            fileTabs.add(FilesTab(deviceId, FileBrowser(deviceId)))
+        }
+        activeFiles = deviceId
+        page = Page.FILES
+    }
+
+    fun showFiles(deviceId: String) {
+        if (fileTabs.any { it.deviceId == deviceId }) activeFiles = deviceId
+    }
+
+    fun closeFiles(deviceId: String) {
+        val index = fileTabs.indexOfFirst { it.deviceId == deviceId }
+        if (index < 0) return
+        fileTabs.removeAt(index)
+        if (activeFiles == deviceId) activeFiles = neighbour(fileTabs.map { it.deviceId }, index)
+    }
+
+    /** the window is going: every stream it started goes with it. */
+    fun dispose() {
+        logTabs.forEach { it.source.stop() }
+        logTabs.clear()
+        fileTabs.clear()
+    }
+
+    // closing a tab opens the one that slid into its place, or the one before it at the end — what a
+    // browser does, so the next tab is under the pointer that just pressed ×
+    private fun neighbour(ids: List<String>, removedAt: Int): String? =
+        ids.getOrNull(removedAt) ?: ids.lastOrNull()
+}
+
+/**
+ * routes "show this device's logs" to the window that should show them.
+ *
+ * the callers — a toolbar button, a row's menu, the tray — don't know which window they belong to,
+ * and the tray belongs to none. So the window last in front gets it, and with no window open, one is
+ * opened and handed the request once it exists.
+ */
+object PageManager {
+    // most recently in front last
+    private val shells = mutableListOf<ShellState>()
+    private val pending = mutableListOf<(ShellState) -> Unit>()
+
+    fun register(shell: ShellState) {
+        activate(shell)
+        val queued = pending.toList()
+        pending.clear()
+        queued.forEach { it(shell) }
+    }
+
+    fun unregister(shell: ShellState) {
+        shells.remove(shell)
+    }
+
+    /** this window came to the front. */
+    fun activate(shell: ShellState) {
+        shells.remove(shell)
+        shells.add(shell)
+    }
+
+    fun openLogs(deviceIds: List<String>) = withShell { it.openLogs(deviceIds) }
+
+    fun openFiles(deviceId: String) = withShell { it.openFiles(deviceId) }
+
+    private fun withShell(action: (ShellState) -> Unit) {
+        val shell = shells.lastOrNull()
+        if (shell != null) {
+            action(shell)
+        } else {
+            pending.add(action)
+            WindowManager.openWindow(WindowContent.DeviceList)
+        }
+    }
+}

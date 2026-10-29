@@ -37,6 +37,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     DEVICE_SORT("device_sort"),                             // "<DeviceColumn name>,<asc|desc>"
     INSTALL_ID("install_id"),                               // random UUID identifying this install to log uploads
     INFO_COLLAPSED("info_collapsed"),                       // comma-separated InfoSection names the device details keeps shut
+    THEME("theme", "LIGHT"),                                // ThemeMode name: light, dark, or follow the OS
 
     // -------------------------------------------------------------
     // -- boolean settings --
@@ -46,6 +47,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     ALWAYS_ON_TOP("always_on_top"),                         // desktop: keep windows above other apps
     CONFIRM_DESTRUCTIVE("confirm_destructive", true),       // ask before a command that wipes or reboots
     SHOW_TOOLTIPS("show_tooltips", true),                   // tables: show a value that doesn't fit on hover
+    DEVICES_COMPACT("devices_compact", false),              // device table: one line a row instead of name over model
     MESSAGE_WRAP("message_wrap", false),                    // message viewer: line wrapping
     MESSAGE_AUTO_FORMAT("message_auto_format", true),       // message viewer: pretty-print JSON on open
 
@@ -60,7 +62,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     LOGS_MAX_LINES("logs_max_lines", 50000),                // ring buffer per log window
     LOGS_HOLD_LINES("logs_hold_lines", 25000),              // ...and how far past it the buffer may grow while a window reads history
     LOGS_FONT_SIZE("logs_font_size", 13),                   // log table text size, ⌘+/⌘- adjusts it
-    LOGS_FILTER_WIDTH("logs_filter_width", 155),            // width of the log window's filter pane
+    SIDEBAR_WIDTH("sidebar_width", 216),                    // desktop sidebar, in dp; under 150 it is the icon rail
 
     // -------------------------------------------------------------
     // -- long settings --

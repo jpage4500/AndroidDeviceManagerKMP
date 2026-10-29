@@ -77,6 +77,14 @@ class LogsSource(private val deviceId: String) {
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
+    /**
+     * every error-or-worse line seen since the stream started, filtered or not — a background log tab
+     * badges how many arrived since it was last looked at. A count rather than the lines, so it costs
+     * nothing to keep for a tab nobody is reading.
+     */
+    private val _errors = MutableStateFlow(0)
+    val errors: StateFlow<Int> = _errors.asStateFlow()
+
     private val _hold = MutableStateFlow(LogHold())
 
     /** how many of the oldest lines the hold is keeping, and whether it has run out. */
@@ -187,6 +195,7 @@ class LogsSource(private val deviceId: String) {
                 var changed = false
                 batch.lines.forEach { line ->
                     val entry = LogEntry.parse(line, nextId++)
+                    if (entry.level?.firstOrNull()?.uppercaseChar() in ERROR_LEVELS) _errors.value++
                     buffer.addLast(entry)
                     if (filter?.invoke(entry) != false) {
                         matched.addLast(entry)
@@ -404,3 +413,6 @@ object LogFilterStore {
     private fun load(): List<LogFilter> =
         JsonUtils.stringToList(SettingsManager.getString(AppPref.LOGS_FILTERS))
 }
+
+// logcat's error and worse: error, assert, fatal
+private val ERROR_LEVELS = setOf('E', 'A', 'F')

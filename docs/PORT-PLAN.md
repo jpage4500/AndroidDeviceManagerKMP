@@ -50,7 +50,7 @@ Corrections carried over from jadb, each one already paid for:
 | Saved servers | `data/SavedServer.kt`, `manager/ServerManager.kt` | The Device Manager instances the app knows, and the `adm://` connection string that fills one in |
 | Device list + refresh | `manager/DeviceManager.kt` | `host:track-devices-l` instead of the Swing app's timer |
 | Mirroring | `manager/MirrorSource.kt` | Tier II — `screencap` poll plus `input` events |
-| Multiple windows | `manager/WindowManager.kt` + `desktopMain/main.kt` | Ported from FileExplorerKMP |
+| Multiple windows | `manager/WindowManager.kt` + `desktopMain/main.kt` | Ported from FileExplorerKMP; Logs and Files are pages of the shell now, not windows — see [UI-PORT.md](UI-PORT.md#the-shell) |
 | UI | `ui/` | One device list and one mirror view; `compact` picks phone or desktop layout |
 | Settings, files, logs, http | `util/`, `manager/` | Ported from DashboardWeatherKMP — see [APP-SERVICES.md](APP-SERVICES.md) |
 | Device screen | `ui/screen/DeviceScreen.kt`, `ui/components/DataTable.kt` | The desktop's toolbar/table/status bar — see [UI-PORT.md](UI-PORT.md) |

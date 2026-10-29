@@ -19,6 +19,7 @@ import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.zIndex
+import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
 import kotlin.math.abs
@@ -135,13 +136,6 @@ fun <T, C> DataTable(
      * banding at random.
      */
     stripeOffset: Long = 0L,
-    /**
-     * the tiled background behind the rows.
-     *
-     * off for the log table: at 30,000 dense lines the wash is one more thing between the eye and
-     * the text, and the pattern shows through every un-banded row.
-     */
-    showBackground: Boolean = true,
     onSelectionChange: (TableSelection<Any?>) -> Unit = {},
     onSort: (C) -> Unit = {},
     onResize: (C, Dp) -> Unit = { _, _ -> },
@@ -302,7 +296,7 @@ fun <T, C> DataTable(
                 menu = headerMenu,
             )
         }
-        HorizontalDivider(color = Colors.headerDivider)
+        HorizontalDivider(color = Colors.tableRule)
 
         Box(
             Modifier
@@ -312,10 +306,6 @@ fun <T, C> DataTable(
                 // the stripes would otherwise paint over the header when a row is half-scrolled
                 .clipToBounds()
                 .stripes(listState, rowHeight, stripeOffset)
-                // **after** the bands, not before. Drawn under them the tile only showed through the
-                // un-banded rows, which read as the background flashing on alternate lines. Over
-                // both, every row gets the same wash and the banding still reads through it
-                .then(if (showBackground) Modifier.watermark() else Modifier)
                 // onKeyEvent MUST come before focusable(): key events dispatch to the focused node
                 // and bubble up through its parents, so a handler after focusable() never sees them
                 .onKeyEvent { handleKey(it) }
@@ -432,7 +422,8 @@ private fun menuDismiss(close: () -> Unit): () -> Unit {
 /**
  * alternating stripes painted by the container rather than per row, so they carry on past the last
  * row to the bottom of the viewport — which is what a native table does, and what stops a short list
- * ending in a hard edge.
+ * ending in a hard edge. Each real row also gets a hairline under it; past the last row there are
+ * stripes but no rules, so the empty space doesn't read as rows waiting to be filled.
  *
  * [dropped] is the caller's [DataTable] `stripeOffset`: what a row's index has already lost off the
  * front of the list, added back so a band belongs to its row rather than to a position.
@@ -444,17 +435,16 @@ private fun Modifier.stripes(
     dropped: Long,
 ): Modifier {
     val stripe = Colors.rowStripe
+    val rule = Colors.tableRule
     val density = LocalDensity.current
     val rowPx = with(density) { rowHeight.toPx() }
-    val insetPx = with(density) { Dimens.rowStripeInset.toPx() }
-    val cornerPx = with(density) { Dimens.rowStripeCorner.toPx() }
+    val rulePx = with(density) { Dimens.hairline.toPx() }
 
     return drawBehind {
-        fun band(y: Float, height: Float) = drawRoundRect(
+        fun band(y: Float, height: Float) = drawRect(
             color = stripe,
-            topLeft = Offset(insetPx, y),
-            size = Size(size.width - insetPx * 2, height),
-            cornerRadius = CornerRadius(cornerPx, cornerPx),
+            topLeft = Offset(0f, y),
+            size = Size(size.width, height),
         )
 
         // drawn from the laid-out rows rather than from `firstVisibleItemIndex` and a row height,
@@ -464,6 +454,8 @@ private fun Modifier.stripes(
         val visible = listState.layoutInfo.visibleItemsInfo
         visible.forEach { item ->
             if ((dropped + item.index) % 2L != 0L) band(item.offset.toFloat(), item.size.toFloat())
+            val bottom = (item.offset + item.size).toFloat() - rulePx / 2
+            drawLine(rule, Offset(0f, bottom), Offset(size.width, bottom), strokeWidth = rulePx)
         }
 
         // carry on past the last row to the bottom of the viewport, so a short list doesn't end in
@@ -507,7 +499,7 @@ private fun <C> TableHeader(
         Row(
             Modifier
                 .height(Dimens.headerHeight)
-                .background(Colors.headerBackground)
+                .background(Colors.tableHeaderBg)
                 // ONE gesture for the whole header, on a node that never moves.
                 //
                 // the first version put it on each header cell, which `Modifier.offset` then moved
@@ -651,25 +643,24 @@ private fun <C> TableHeader(
                         .then(if (isDragging) Modifier.columnEdges(Colors.accent) else Modifier)
                         .padding(horizontal = Dimens.cellPadding),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
+                    // titles sit over the start of their cells, as the cells' text does
+                    horizontalArrangement = Arrangement.Start,
                 ) {
                     Text(
                         text = header(column),
                         style = tableTextStyle(MaterialTheme.typography.labelMedium, Dimens.headerTextSize),
-                        // the Swing header is the same weight as its rows — labelMedium's own
-                        // Medium is a Material choice, not this table's
-                        fontWeight = FontWeight.Normal,
-                        color = Colors.primaryText,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Colors.tableHeaderText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     if (column == sortedBy) {
-                        Spacer(Modifier.width(3.dp))
-                        Text(
-                            text = if (sortAscending) "▲" else "▼",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Colors.primaryText,
+                        Spacer(Modifier.width(Dimens.tabGap))
+                        AppIcon(
+                            res = if (sortAscending) Res.drawable.arrow_up else Res.drawable.arrow_down,
+                            size = Dimens.sortArrow,
+                            tint = Colors.tableHeaderText,
                         )
                     }
                 }
@@ -713,7 +704,7 @@ private fun ColumnResizeHandle(width: Dp, onResize: (Dp) -> Unit) {
             ),
         contentAlignment = Alignment.Center,
     ) {
-        VerticalDivider(color = Colors.headerDivider)
+        VerticalDivider(Modifier.height(Dimens.headerSeparator), color = Colors.headerDivider)
     }
 }
 
@@ -805,12 +796,14 @@ private fun <C> TableRow(
     var pendingCollapse by remember { mutableStateOf(false) }
 
     val active = selected && windowFocused
+    // a green tint under the row's own text rather than a blue band with white text over it — the
+    // redesign's selection, and it keeps a log line's level colour readable while it's selected
     val background = when {
-        active -> Colors.rowSelected
+        active -> Colors.rowSelectedBg
         selected -> Colors.rowSelectedInactive
         else -> Color.Transparent
     }
-    val textColor = if (active) Colors.rowSelectedText else contentColor
+    val textColor = contentColor
 
     Box {
         Row(

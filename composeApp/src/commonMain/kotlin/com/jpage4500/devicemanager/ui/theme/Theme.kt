@@ -6,6 +6,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.unit.*
+import com.jpage4500.devicemanager.data.*
+import com.jpage4500.devicemanager.util.*
 
 /**
  * every size in the app, grouped by region with a reason for the number.
@@ -28,31 +30,29 @@ object Dimens {
     val accentStripe = 3.dp
 
     // device table (desktop)
-    // 28.dp holds a battery bar and a 16.dp icon with a hairline to spare; 45 rows is the case
-    // this is sized for, and a taller row means fewer of them on screen
-    val tableRowHeight = 28.dp
+    // one line of 13sp text and a battery bar with room to breathe; 45 rows is the case this is
+    // sized for, and a taller row means fewer of them on screen
+    val tableRowHeight = 32.dp
     // a log row is tighter than a device row: there are 30,000 of them and none holds a battery bar
     val logRowHeight = 19.dp
-    val filterPaneWidth = 155.dp
 
     // splitter
     val splitterHandle = 6.dp
     val splitterMin = 90.dp
     val splitterMax = 420.dp
-    val headerHeight = 26.dp
-    val cellPadding = 6.dp
-    // the Swing table's size: FlatLaf is handed `Arial PLAIN 16` as the app's default font
-    // (MainApplication.initializeUI) and the table inherits it, header included
-    val tableTextSize = 16.sp
-    val headerTextSize = 16.sp
+    // EngageAdminKMP's table: a 38dp header of small semibold titles over 13sp rows, so the two apps'
+    // tables read the same. The Swing table's 16sp Arial is what this used to copy
+    val headerHeight = 38.dp
+    val cellPadding = 8.dp
+    val tableTextSize = 13.sp
+    val headerTextSize = 12.sp
+    val sortArrow = 12.dp
+    // the column separators in the header stop short of its edges — a mark to grab, not a grid line
+    val headerSeparator = 16.dp
     val columnDefault = 100.dp
     val columnMin = 40.dp
     // the divider is a hairline; the drag target around it is not, because a 1px target is missed
     val resizeHandle = 8.dp
-    // the stripe is inset from the window edge and rounded, the way a modern list draws it — a
-    // full-bleed band reads as a table rule instead
-    val rowStripeInset = 6.dp
-    val rowStripeCorner = 4.dp
 
     val gap = 8.dp
     val gapLarge = 16.dp
@@ -108,13 +108,10 @@ object Dimens {
 
     // the size each kind of window opens at the *first* time, before anyone has sized it — after
     // that it is whatever they left it at, remembered per kind. See WindowKind
-    val windowWidth = 1000.dp
-    val windowHeight = 640.dp
-    // a log line is long and the message column is the one that matters
-    val logsWindowWidth = 1200.dp
-    val logsWindowHeight = 700.dp
-    val filesWindowWidth = 900.dp
-    val filesWindowHeight = 600.dp
+    // the one window now holds the sidebar and the log and file pages as well as the device table — a
+    // log line is long, and this is the size the redesign was drawn at
+    val windowWidth = 1280.dp
+    val windowHeight = 800.dp
     // a phone's aspect, so a mirrored screen fills the window rather than sitting in a letterbox:
     // as narrow as a window is allowed to be, and tall
     val mirrorWindowWidth = minWindowWidth
@@ -132,6 +129,83 @@ object Dimens {
     val messageWindowHeight = 520.dp
     val toolbarHeight = 44.dp
     val statusBarHeight = 28.dp
+
+    // --- the desktop shell — see docs/REDESIGN.md ---
+
+    // the design's resting width, and the range a drag may take it through: 140 still fits "Devices"
+    // and its count pill, past 320 the page loses more than the sidebar gains
+    val sidebarWidth = 216.dp
+    val sidebarMin = 140.dp
+    val sidebarMax = 320.dp
+
+    // the rail: EngageAdminKMP's, wide enough for a 60dp item holding an icon over a 10sp label
+    val sidebarRail = 72.dp
+
+    // narrower than this is the rail (106dp): halfway between the rail and the minimum,
+    // EngageAdminKMP's number — far enough under the minimum that a drag towards narrow doesn't flip
+    // to icons the moment it passes it
+    val sidebarSnap = (sidebarRail + sidebarMin) / 2
+    val railItemWidth = 60.dp
+    val railIcon = 20.dp
+    val railLabelSize = 10.sp
+    val railLogo = 34.dp
+    val sidebarPadding = 12.dp
+    val navItemHeight = 38.dp
+    val navIcon = 18.dp
+    val navCorner = 8.dp
+    // icon to label, and the label's inset from the item's edge
+    val navGap = 10.dp
+    val liveDot = 6.dp
+    val brandMark = 28.dp
+    val pageTitleSize = 20.sp
+    val brandTextSize = 15.sp
+    val navTextSize = 13.sp
+    val countTextSize = 11.sp
+
+    // --- pages: the design's 24px gutter, its header and the controls in it ---
+    val pageGutter = 24.dp
+    val pageHeaderHeight = 64.dp
+    val controlHeight = 34.dp
+    val chipHeight = 28.dp
+    val searchWidth = 200.dp
+    val selectionBarHeight = 48.dp
+    val cardCorner = 10.dp
+    // two lines a row — name over model — unless the compact density is on
+    val deviceRowHeight = 44.dp
+    val stateDot = 8.dp
+    // the onboarding cards when nothing is connected
+    val onboardingWidth = 980.dp
+    val onboardingCardIcon = 34.dp
+    // the details panel beside the device table
+    val detailsPanelWidth = 300.dp
+    val detailsTitleSize = 16.sp
+    val quickActionHeight = 56.dp
+    val factLabelWidth = 84.dp
+    val checkbox = 16.dp
+    val checkboxCorner = 4.dp
+    val checkboxTick = 10.dp
+    // the log tab's filter bar
+    val filterBarHeight = 44.dp
+    val filterFieldWidth = 260.dp
+    val pillMaxWidth = 220.dp
+    val pillClose = 10.dp
+    val levelButton = 24.dp
+
+    // tabs: the open one stands taller than the rest, which is half of how it reads as open
+    val tabStripHeight = 42.dp
+    val tabHeight = 34.dp
+    val tabHeightOpen = 40.dp
+    val tabMaxWidth = 230.dp
+    val tabAccent = 3.dp
+    val tabDot = 8.dp
+    val tabBadge = 18.dp
+    val tabCorner = 8.dp
+    val tabGap = 4.dp
+    val tabClose = 24.dp
+    val tabCloseIcon = 12.dp
+    val tabAdd = 32.dp
+    // the open tab's ground covers this much of the strip's rule, and edges are this thick
+    val hairline = 1.dp
 
     /**
      * clearance for the macOS traffic lights, which the toolbar draws *behind* once the title bar is
@@ -318,6 +392,37 @@ data class Palette(
      * red on near-black is the pair that vibrates.
      */
     val settingValue: Color,
+    /** the desktop sidebar's ground, a step off the page so the two read as separate panes. */
+    val sidebarBg: Color,
+    /** the rule between the sidebar and the page, and around a tab and the panel it opens onto. */
+    val sidebarBorder: Color,
+    /** the sidebar item for the page that's showing. */
+    val navSelected: Color,
+    /** a tab that isn't open — grey, so the white open one is the one that reads. */
+    val tabIdle: Color,
+    /**
+     * the green cap on the open tab, and the switches and checks of the redesign.
+     *
+     * darker than the Android green the primary button uses: `#3DDC84` is 1.6:1 on white and can't
+     * carry a 3dp line, this is 3.4:1 — enough for a mark that isn't text.
+     */
+    val tabAccent: Color,
+    /** the table's header: a pale band of muted titles, EngageAdminKMP's. */
+    val tableHeaderBg: Color,
+    val tableHeaderText: Color,
+    /** the hairline under every table row, and the short separators between header titles. */
+    val tableRule: Color,
+    /** a saved log filter that's on, as a pill in the filter bar. */
+    val pillBg: Color,
+    val pillBorder: Color,
+    /** a selected table row — a green tint with dark text, not the blue band with white text. */
+    val rowSelectedBg: Color,
+    /** the bar over the device table while something is selected, and its edge. */
+    val selectionBar: Color,
+    val selectionBarBorder: Color,
+    /** a filter chip that's on: the inverse of the page. */
+    val chipOn: Color,
+    val chipOnText: Color,
 )
 
 val LightPalette = Palette(
@@ -325,16 +430,15 @@ val LightPalette = Palette(
     toolbarBg = Color(0xFFF2F2F3),
     toolbarIcon = Color(0xFF4B4B4F),
     listBg = Color(0xFFFFFFFF),
-    // the Swing table's alternate row and header greys — the header is deliberately much darker
-    // than a Material one, which is what makes the column titles read as a bar rather than a row
-    rowStripe = Color(0xFFF6F6F6),
+    // the alternate row is barely there — the hairline under each row does the separating
+    rowStripe = Color(0xFFFAFBFC),
     // a shade further than rowStripe: an alternate row is meant to be barely there, a heading is not
     groupBg = Color(0xFFEFEFEF),
     rowSelectedInactive = Color(0xFFDCDCDC),
     rowSelectedText = Color(0xFFFFFFFF),
     headerBg = Color(0xFFC5C5C5),
-    headerDragged = Color(0xFFACACAC),
-    headerDivider = Color(0xFFA8A8A8),
+    headerDragged = Color(0xFFE6E9EE),
+    headerDivider = Color(0xFFE3E6EA),
     statusBarBg = Color(0xFFF1F1F3),
     primaryText = Color(0xFF1D1D1F),
     secondaryText = Color(0xFF6E6E73),
@@ -349,6 +453,24 @@ val LightPalette = Palette(
     menuSeparator = Color(0x1A000000),
     dialogTitleBg = Color(0xFFEFEFEF),
     settingValue = Color(0xFFD32F2F),
+    sidebarBg = Color(0xFFF4F5F7),
+    sidebarBorder = Color(0xFFE3E6EA),
+    navSelected = Color(0xFFE4E7EB),
+    // a step darker than the design's #EDEFF2: the open tab takes the toolbar grey under it, and
+    // the design's value sat too close to that to tell the two apart
+    tabIdle = Color(0xFFE2E5E9),
+    tabAccent = Color(0xFF1F9D55),
+    pillBg = Color(0xFFE8F1FD),
+    pillBorder = Color(0xFFB8D0F5),
+    tableHeaderBg = Color(0xFFF7F8FA),
+    tableHeaderText = Color(0xFF4A505C),
+    tableRule = Color(0xFFEEF0F3),
+    // a step stronger than the design's #EAF6EE, which vanished against the striped rows
+    rowSelectedBg = Color(0xFFD6EFDF),
+    selectionBar = Color(0xFFEEF7F1),
+    selectionBarBorder = Color(0xFFBFE3CB),
+    chipOn = Color(0xFF16181D),
+    chipOnText = Color(0xFFFFFFFF),
 )
 
 /**
@@ -389,6 +511,22 @@ val DarkPalette = Palette(
     menuSeparator = Color(0x1AFFFFFF),
     dialogTitleBg = Color(0xFF3A3A3C),
     settingValue = Color(0xFFFF7B72),
+    // the redesign is light-first; these keep the dark theme whole until it gets its own pass
+    sidebarBg = Color(0xFF161618),
+    sidebarBorder = Color(0xFF2C2C2E),
+    navSelected = Color(0xFF2C2C30),
+    tabIdle = Color(0xFF242426),
+    tabAccent = Color(0xFF3DDC84),
+    pillBg = Color(0xFF16233A),
+    pillBorder = Color(0xFF2D4A78),
+    tableHeaderBg = Color(0xFF232325),
+    tableHeaderText = Color(0xFFA9AEB8),
+    tableRule = Color(0xFF2A2A2D),
+    rowSelectedBg = Color(0xFF1F3A2A),
+    selectionBar = Color(0xFF16241C),
+    selectionBarBorder = Color(0xFF2B5A3E),
+    chipOn = Color(0xFFE7EAEE),
+    chipOnText = Color(0xFF111318),
 )
 
 /**
@@ -433,6 +571,22 @@ object Colors {
     val mirrorHoldGlow = Color(0x46FFA000)
     val mirrorHoldFill = Color(0xFFFFB919)
 
+    // a mark or a count drawn on a coloured ground — the sidebar's brand square, a live badge
+    val onAccent = Color(0xFFFFFFFF)
+
+    // the collapsed sidebar is a dark rail in either theme — EngageAdminKMP's, so the two apps read
+    // as one family. dark on purpose: a light 72dp strip next to a light page reads as a margin
+    val railBg = Color(0xFF1C2033)
+    val railSelected = Color(0xFF2F3552)
+    val railHover = Color(0xFF2A2F47)
+    val railText = Color(0xFFAEB4C8)
+    val railTextOn = Color(0xFFFFFFFF)
+
+    // the one filled button a page has (Connect): Android's green, which carries dark text — white
+    // on #3DDC84 is 1.9:1
+    val primaryButton = Color(0xFF3DDC84)
+    val onPrimaryButton = Color(0xFF0B0D11)
+
     // --- chrome, from the palette in force ---
     val accent: Color @Composable get() = LocalPalette.current.accent
     val toolbarBg: Color @Composable get() = LocalPalette.current.toolbarBg
@@ -464,6 +618,22 @@ object Colors {
 
     val dialogTitleBg: Color @Composable get() = LocalPalette.current.dialogTitleBg
     val settingValue: Color @Composable get() = LocalPalette.current.settingValue
+
+    val sidebarBg: Color @Composable get() = LocalPalette.current.sidebarBg
+    val sidebarBorder: Color @Composable get() = LocalPalette.current.sidebarBorder
+    val navSelected: Color @Composable get() = LocalPalette.current.navSelected
+    val tabIdle: Color @Composable get() = LocalPalette.current.tabIdle
+    val tabAccent: Color @Composable get() = LocalPalette.current.tabAccent
+    val pillBg: Color @Composable get() = LocalPalette.current.pillBg
+    val pillBorder: Color @Composable get() = LocalPalette.current.pillBorder
+    val tableHeaderBg: Color @Composable get() = LocalPalette.current.tableHeaderBg
+    val tableHeaderText: Color @Composable get() = LocalPalette.current.tableHeaderText
+    val tableRule: Color @Composable get() = LocalPalette.current.tableRule
+    val rowSelectedBg: Color @Composable get() = LocalPalette.current.rowSelectedBg
+    val selectionBar: Color @Composable get() = LocalPalette.current.selectionBar
+    val selectionBarBorder: Color @Composable get() = LocalPalette.current.selectionBarBorder
+    val chipOn: Color @Composable get() = LocalPalette.current.chipOn
+    val chipOnText: Color @Composable get() = LocalPalette.current.chipOnText
 }
 
 /**
@@ -486,9 +656,28 @@ private fun Palette.toColorScheme(dark: Boolean): ColorScheme {
     )
 }
 
+/** which palette the app wears — [AppPref.THEME]. */
+enum class ThemeMode { LIGHT, DARK, SYSTEM }
+
+/**
+ * whether the dark palette is in force.
+ *
+ * light unless asked otherwise: the redesign was drawn light-first, and following the OS put half
+ * its users on a dark theme that hasn't had its pass yet — see docs/REDESIGN.md.
+ */
+@Composable
+fun isDarkTheme(): Boolean {
+    SettingsManager.observePref(AppPref.THEME)
+    return when (SettingsManager.getEnum<ThemeMode>(AppPref.THEME)) {
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+}
+
 @Composable
 fun AppTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = isDarkTheme(),
     content: @Composable () -> Unit,
 ) {
     val palette = if (darkTheme) DarkPalette else LightPalette

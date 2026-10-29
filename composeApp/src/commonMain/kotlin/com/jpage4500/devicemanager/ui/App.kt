@@ -10,6 +10,7 @@ import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.dialog.*
 import com.jpage4500.devicemanager.ui.screen.*
+import com.jpage4500.devicemanager.ui.shell.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
 import org.jetbrains.compose.resources.stringResource
@@ -18,9 +19,10 @@ import org.jetbrains.compose.resources.stringResource
  * the root of every platform.
  *
  * One layout decision, and the two sides of it are genuinely different screens rather than one
- * screen at two widths — see docs/MOBILE-UI.md. The desktop gets [DeviceScreen]: a toolbar, a table of
- * every device, a status bar, and mirroring in a window of its own. The phone gets a list it taps
- * into, because it has one column of width and no fleet.
+ * screen at two widths — see docs/MOBILE-UI.md. The desktop gets [AppShell]: a sidebar over pages for
+ * the devices, their logs and their files, and mirroring in a window of its own — see
+ * docs/REDESIGN.md. The phone gets a list it taps into, because it has one column of width and no
+ * fleet.
  */
 @Composable
 fun App(compact: Boolean = false) {
@@ -40,7 +42,7 @@ private fun AppContent(compact: Boolean) {
             // the same faint tile the Swing app draws behind its window; the table paints it again
             // behind its own rows, since a row's background would otherwise cover it
             Box(Modifier.fillMaxSize().watermark()) {
-                if (compact) CompactLayout() else DeviceScreen()
+                if (compact) CompactLayout() else AppShell()
             }
         }
         // one host for the whole app: a toast is raised from managers that have no composable of

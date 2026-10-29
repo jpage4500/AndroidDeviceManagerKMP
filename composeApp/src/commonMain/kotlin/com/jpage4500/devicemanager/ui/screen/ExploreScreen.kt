@@ -29,8 +29,13 @@ import org.jetbrains.compose.resources.stringResource
  * look at anyway. The status bar links to the folder.
  */
 @Composable
-fun ExploreScreen(deviceId: String, modifier: Modifier = Modifier) {
-    val browser = remember(deviceId) { FileBrowser(deviceId) }
+fun ExploreScreen(
+    deviceId: String,
+    modifier: Modifier = Modifier,
+    /** a browser someone else keeps — a Files tab, so its folder survives another tab being opened. */
+    owned: FileBrowser? = null,
+) {
+    val browser = owned ?: remember(deviceId) { FileBrowser(deviceId) }
     val scope = rememberCoroutineScope()
     val path by browser.path.collectAsState()
     val files by browser.files.collectAsState()
