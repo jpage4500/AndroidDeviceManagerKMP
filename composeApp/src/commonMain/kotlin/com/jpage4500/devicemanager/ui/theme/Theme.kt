@@ -50,7 +50,9 @@ object Dimens {
     // the column separators in the header stop short of its edges — a mark to grab, not a grid line
     val headerSeparator = 16.dp
     val columnDefault = 100.dp
-    val columnMin = 40.dp
+    // one character and the cell's padding either side — the log's Level column, which only ever
+    // holds a letter. Narrower and a column can't be found again to widen
+    val columnMin = 24.dp
     // the divider is a hairline; the drag target around it is not, because a 1px target is missed
     val resizeHandle = 8.dp
 
@@ -120,6 +122,15 @@ object Dimens {
     // width is a column of labels with a screen of nothing after it
     val formWindowWidth = 560.dp
     val formWindowHeight = 620.dp
+    // Connect is the Swing ConnectDialog's table (680px of columns) over a row of fields, so it opens
+    // at that table's width rather than a form's
+    val connectWindowWidth = 720.dp
+    val connectWindowHeight = 420.dp
+    // the Swing dialogs' own measurements: a 200px QR in a 450px panel, a 600x300 server table
+    val qrDialogWidth = 450.dp
+    val qrSize = 200.dp
+    val serversDialogWidth = 600.dp
+    val serversTableHeight = 300.dp
     // a dialog that is its own window is a form too, so it opens at the same width. the height caps
     // rather than fills: the window packs to whatever its form needs, and only a long one (the app
     // log) reaches the ceiling and scrolls inside it
@@ -178,15 +189,39 @@ object Dimens {
     val onboardingCardIcon = 34.dp
     // the details panel beside the device table
     val detailsPanelWidth = 300.dp
+    // tall enough to read a phone's screen at a glance, short enough to leave the facts on screen
+    val previewHeight = 220.dp
     val detailsTitleSize = 16.sp
     val quickActionHeight = 56.dp
     val factLabelWidth = 84.dp
     val checkbox = 16.dp
     val checkboxCorner = 4.dp
     val checkboxTick = 10.dp
-    // the log tab's filter bar
+    // the log tab's two rows of controls: search and the buttons, then the filters
     val filterBarHeight = 44.dp
-    val filterFieldWidth = 260.dp
+    // search takes what the row has left, but never less than room for "tag:OkHttp" and its count
+    val logSearchMinWidth = 220.dp
+    val searchArrow = 22.dp
+    // the design's switch: a 28×16 track and a 12dp thumb
+    val switchWidth = 28.dp
+    val switchHeight = 16.dp
+    val switchThumb = 12.dp
+    // Files: the places list down the left, and the folder filter beside the path
+    val placesWidth = 190.dp
+    val placeRowHeight = 30.dp
+    val folderFilterWidth = 180.dp
+    // Scripts: the list down the left, and the results table's fixed columns
+    val scriptListWidth = 260.dp
+    val resultDeviceWidth = 180.dp
+    val resultStateWidth = 90.dp
+    val resultExitWidth = 56.dp
+    val resultTimeWidth = 72.dp
+    val lineNumberWidth = 36.dp
+    // + Add filter's panel: the design's 360, and tall enough for six filters before it scrolls
+    val savedFiltersWidth = 360.dp
+    val savedFiltersMaxHeight = 300.dp
+    // the filter editor's rules and summary: about eight rules before they scroll
+    val filterRulesMaxHeight = 360.dp
     val pillMaxWidth = 220.dp
     val pillClose = 10.dp
     val levelButton = 24.dp
@@ -196,6 +231,12 @@ object Dimens {
     val tabHeight = 34.dp
     val tabHeightOpen = 40.dp
     val tabMaxWidth = 230.dp
+    // a tab narrower than this can't show a name and its ×; past it the rest go into "N more",
+    // which is sized for "12 more"
+    val tabMinWidth = 120.dp
+    val tabMoreWidth = 96.dp
+    // + on the Logs page: the design's "Capture logs from" checklist
+    val tabPickerWidth = 280.dp
     val tabAccent = 3.dp
     val tabDot = 8.dp
     val tabBadge = 18.dp
@@ -203,6 +244,9 @@ object Dimens {
     val tabGap = 4.dp
     val tabClose = 24.dp
     val tabCloseIcon = 12.dp
+    // the × drawn rather than the circled icon: a cross this wide in a stroke this thick
+    val tabCloseCross = 8.dp
+    val tabCloseStroke = 1.5.dp
     val tabAdd = 32.dp
     // the open tab's ground covers this much of the strip's rule, and edges are this thick
     val hairline = 1.dp

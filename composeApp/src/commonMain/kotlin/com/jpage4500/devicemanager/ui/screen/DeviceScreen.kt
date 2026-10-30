@@ -8,6 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.focus.*
+import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.*
@@ -23,6 +24,7 @@ import com.jpage4500.devicemanager.ui.dialog.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -49,7 +51,6 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     var filter by remember { mutableStateOf("") }
     var input by remember { mutableStateOf<InputRequest?>(null) }
     var historyOpen by remember { mutableStateOf(false) }
-    var inputFor by remember { mutableStateOf<List<String>>(emptyList()) }
     var commandsOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var dropping by remember { mutableStateOf(false) }
@@ -87,6 +88,16 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     val device = devices.firstOrNull { it.id == selection.lead }
     val selected = remember(devices, selection) { devices.filter { it.id in selection.keys } }
 
+    // a file dragged in from another app: where it is, and the row under it
+    var dropAt by remember { mutableStateOf<Offset?>(null) }
+    var dropRow by remember { mutableStateOf<Device?>(null) }
+    // a selection of several is what a drop goes to wherever it lands. With one or none, it goes to
+    // the row under the pointer — or, over no row, to the one that's selected
+    val hovered = dropRow
+    val dropIds = when {
+        selection.size > 1 || hovered == null -> selected.map { it.id }
+        else -> listOf(hovered.id)
+    }
 
     Column(
         modifier
@@ -115,7 +126,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
             SelectionBar(
                 selected = selected,
                 onMirror = { list -> list.forEach { WindowManager.openMirror(it.id) } },
-                onScreenshot = { list -> scope.launch { list.forEach { saveScreenshot(it) } } },
+                onScreenshot = { list -> scope.launch { list.forEach { DeviceManager.saveScreenshot(it) } } },
                 onLogs = { list -> PageManager.openLogs(list.map { it.id }) },
                 onFiles = { d -> WindowManager.openFiles(d.id) },
                 onInstall = {
@@ -124,14 +135,14 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                         if (files.isNotEmpty()) InstallManager.send(DeviceManager.selectedIds.value, files)
                     }
                 },
-                onInput = { inputFor = DeviceManager.selectedIds.value },
+                onInput = { PageManager.openInput(DeviceManager.selectedIds.value) },
                 onCommands = { commandsOpen = true },
+                onRunScript = { list -> PageManager.openScripts(list.map { it.id }) },
                 onDetails = { detailsOpen = true },
                 onClear = { DeviceManager.setSelection(TableSelection()) },
             )
 
             val cardShape = RoundedCornerShape(Dimens.cardCorner)
-            val sortedKeys = remember(sorted) { sorted.map<Device, Any?> { it.id } }
             Row(Modifier.weight(1f).padding(horizontal = Dimens.pageGutter)) {
                 Box(
                     Modifier
@@ -141,10 +152,15 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                         .border(Dimens.hairline, if (dropping) Colors.tabAccent else Colors.sidebarBorder, cardShape)
                         // an APK installs, anything else is copied — see InstallManager
                         .fileDropTarget(
-                            enabled = selection.size > 0,
-                            onDragChanged = { dropping = it },
+                            enabled = sorted.isNotEmpty(),
+                            onDragChanged = {
+                                dropping = it
+                                if (!it) dropAt = null
+                            },
+                            onMove = { dropAt = it },
                             onDrop = { files ->
-                                scope.launch { InstallManager.send(DeviceManager.selectedIds.value, files) }
+                                val ids = dropIds
+                                if (ids.isNotEmpty()) scope.launch { InstallManager.send(ids, files) }
                             },
                         )
                 ) {
@@ -167,6 +183,9 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                             // typing "gal" jumps to the Galaxy, the way it does in any file manager
                             typeAheadText = { it.displayName },
                             onSelectionChange = { DeviceManager.setSelection(it) },
+                            dropAt = dropAt,
+                            onDropRow = { dropRow = it },
+                            dropKeys = if (dropping) dropIds.toSet() else emptySet(),
                             onSort = { DeviceTableState.sortBy(it) },
                             onResize = { column, width -> DeviceTableState.resize(column, width) },
                             onReorder = { from, to -> DeviceTableState.moveColumn(from, to) },
@@ -201,10 +220,6 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                                 column = column,
                                 busy = row.id in busy,
                                 compact = compact,
-                                checked = row.id in selection.keys,
-                                onCheck = {
-                                    DeviceManager.setSelection(selection.onPress(row.id, sortedKeys, toggle = true, range = false))
-                                },
                             )
                         }
                     }
@@ -216,14 +231,14 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                         device = shown,
                         busy = shown.id in busy,
                         onClose = { detailsOpen = false },
-                        onScreenshot = { d -> scope.launch { saveScreenshot(d) } },
+                        onScreenshot = { d -> scope.launch { DeviceManager.saveScreenshot(d) } },
                         onInstall = {
                             scope.launch {
                                 val files = pickLocalFiles(installTitle, extensions = listOf("apk"))
                                 if (files.isNotEmpty()) InstallManager.send(listOf(shown.id), files)
                             }
                         },
-                        onInput = { inputFor = listOf(shown.id) },
+                        onInput = { PageManager.openInput(listOf(shown.id)) },
                     )
                 }
             }
@@ -232,7 +247,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
 
         HorizontalDivider(color = Colors.divider)
         DeviceStatusBar(
-            total = devices.size,
+            devices = devices,
             shown = sorted.size,
             selected = selection.size,
             onHistory = { historyOpen = true },
@@ -240,7 +255,6 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     }
 
     InputDialog(input) { input = null }
-    InputDialog(deviceIds = inputFor, onDismiss = { inputFor = emptyList() })
     StatusHistoryDialog(open = historyOpen, onDismiss = { historyOpen = false })
     CommandDialog(open = commandsOpen, onDismiss = { commandsOpen = false })
     if (settingsOpen) SettingsDialog(onDismiss = { settingsOpen = false })
@@ -269,16 +283,11 @@ private fun DeviceCell(
     column: DeviceColumn,
     busy: Boolean,
     compact: Boolean,
-    checked: Boolean,
-    onCheck: () -> Unit,
 ) {
     when (column) {
-        // a tick box, a dot for the state, and — unless the rows are compact — what the device is
-        // under its name, or what it's waiting for when it can't be used yet. The box adds a row to
-        // the selection or takes it out, the way ⌘-click does, without having to know the key
+        // a dot for the state, and — unless the rows are compact — what the device is under its
+        // name, or what it's waiting for when it can't be used yet
         DeviceColumn.NAME -> Row(verticalAlignment = Alignment.CenterVertically) {
-            RowCheckbox(checked, onCheck, stringResource(Res.string.row_select, device.displayName))
-            Spacer(Modifier.width(Dimens.navGap))
             Box(Modifier.size(Dimens.stateDot).clip(CircleShape).background(device.stateColor(busy)))
             Spacer(Modifier.width(Dimens.gap))
             if (compact) {
@@ -402,7 +411,7 @@ private fun AppMenuScope.DeviceMenu(
     Item(stringResource(Res.string.action_browse)) { WindowManager.openFiles(deviceId) }
     Item(stringResource(Res.string.action_view_logs)) { WindowManager.openLogs(deviceId) }
     Item(stringResource(Res.string.action_mirror)) { WindowManager.openMirror(deviceId) }
-    Item(stringResource(Res.string.action_screenshot)) { onAction { saveScreenshot(device) } }
+    Item(stringResource(Res.string.action_screenshot)) { onAction { DeviceManager.saveScreenshot(device) } }
     Item(stringResource(Res.string.action_install)) {
         onAction {
             val files = pickLocalFiles(installMenuTitle, extensions = listOf("apk"))
@@ -514,26 +523,36 @@ private fun AppMenuScope.ColumnMenu(
     )
 }
 
-/** version and memory on the left, the device count on the right — the Swing app's status bar. */
+/**
+ * the version and the heap on the left, what the app is doing in the middle, and how fresh the rows
+ * are and how many there are on the right.
+ */
 @Composable
-private fun DeviceStatusBar(total: Int, shown: Int, selected: Int, onHistory: () -> Unit) {
+private fun DeviceStatusBar(devices: List<Device>, shown: Int, selected: Int, onHistory: () -> Unit) {
     val status by StatusManager.current.collectAsState()
+    val total = devices.size
+    // ticks so "12s ago" counts up between refreshes; the heap figure rides along with it
+    var now by remember { mutableStateOf(DateUtils.nowMs()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(STATUS_TICK_MS)
+            now = DateUtils.nowMs()
+        }
+    }
     Row(
         Modifier
             .fillMaxWidth()
             .height(Dimens.statusBarHeight)
             .background(Colors.statusBarBg)
-            .padding(horizontal = Dimens.gap),
+            .padding(horizontal = Dimens.pageGutter),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // the version is the handle for "where are this app's own logs?" — same corner the Swing
         // status bar puts them behind
         Row(
-            Modifier
-                .plainClickable {
-                    StorageManager.getAbsolutePath(PATH_LOGS, FILE_LOG)?.let(PlatformUtils::openUrl)
-                }
-                .padding(end = Dimens.gap),
+            Modifier.plainClickable {
+                StorageManager.getAbsolutePath(PATH_LOGS, FILE_LOG)?.let(PlatformUtils::openUrl)
+            },
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AppIcon(Res.drawable.file_logs, size = 12.dp, tint = Colors.secondaryText)
@@ -543,8 +562,10 @@ private fun DeviceStatusBar(total: Int, shown: Int, selected: Int, onHistory: ()
         Spacer(Modifier.width(Dimens.gapLarge))
         AppIcon(Res.drawable.memory, size = 12.dp, tint = Colors.secondaryText)
         Spacer(Modifier.width(4.dp))
-        // the app's own heap, not the machine's — 45 screencap buffers is what runs it out
-        StatusText(PlatformUtils.getMemoryInfo().let { Utils.bytesToDisplayString(it.totalBytes - it.freeBytes) })
+        // the app's own heap, not the machine's — 45 screencap buffers is what runs it out. read
+        // against [now] so it moves with the tick rather than only when the table changes
+        val heap = remember(now) { PlatformUtils.getMemoryInfo().let { it.totalBytes - it.freeBytes } }
+        StatusText(Utils.bytesToDisplayString(heap))
 
         Spacer(Modifier.weight(1f))
         // whatever the app is doing right now, or "History" when it is idle — the Swing status bar
@@ -564,17 +585,33 @@ private fun DeviceStatusBar(total: Int, shown: Int, selected: Int, onHistory: ()
             )
         }
         Spacer(Modifier.weight(1f))
-        // "2 of 7" while a selection is live, so a bulk action says what it will run on; while a
-        // filter is on, what is being hidden
+
+        // the newest details read across every device — each is re-read on its own timer
+        val newest = devices.maxOfOrNull { it.lastUpdateMs ?: 0L } ?: 0L
+        if (newest > 0L) {
+            val secs = ((now - newest) / 1000).coerceAtLeast(0)
+            StatusText(
+                when {
+                    secs < 5 -> stringResource(Res.string.device_refreshed_now)
+                    secs < 60 -> stringResource(Res.string.device_refreshed_secs, secs.toInt())
+                    else -> stringResource(Res.string.device_refreshed_mins, (secs / 60).toInt())
+                }
+            )
+            Spacer(Modifier.width(Dimens.gapLarge))
+        }
+        // what a bulk action will run on while a selection is live; while a filter is on, what it hides
         StatusText(
             when {
-                selected > 1 -> stringResource(Res.string.device_selected_of, selected, total)
-                shown != total -> stringResource(Res.string.device_selected_of, shown, total)
-                else -> stringResource(Res.string.device_total, total)
+                selected > 1 -> stringResource(Res.string.device_selected_count, selected, total)
+                shown != total -> stringResource(Res.string.device_shown_of, shown, total)
+                else -> pluralStringResource(Res.plurals.device_count, total, total)
             }
         )
     }
 }
+
+// how often the status bar's clock moves; "refreshed 12s ago" doesn't need finer than this
+private const val STATUS_TICK_MS = 5_000L
 
 @Composable
 private fun StatusText(text: String) {
@@ -584,24 +621,6 @@ private fun StatusText(text: String) {
         color = Colors.secondaryText,
     )
 }
-
-/** a screenshot, straight to the desktop's home dir. */
-private suspend fun saveScreenshot(device: Device) {
-    val log = LoggerConfig.createLogger("DeviceScreen")
-    DeviceManager.screenshot(device.id)
-        .onSuccess { bytes ->
-            val name = "${device.displayName}-${DateUtils.formatDate("yyyyMMdd-HHmmss")}.png"
-            val ok = StorageManager.writeBytes(PATH_SCREENSHOTS, name, bytes)
-            log.d("saveScreenshot: $name, ${bytes.size} bytes, ok:$ok")
-            ToastManager.showToast(if (ok) name else "Couldn't save the screenshot", success = ok)
-        }
-        .onFailure {
-            log.e("saveScreenshot: ${it.message}")
-            ToastManager.showToast(it.message ?: "Screenshot failed", success = false)
-        }
-}
-
-const val PATH_SCREENSHOTS = "screenshots"
 
 /**
  * what the app has been doing, newest first.

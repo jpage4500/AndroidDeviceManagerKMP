@@ -21,9 +21,12 @@ actual fun DialogContainer(
     onEnter: (() -> Unit)?,
     content: @Composable () -> Unit,
 ) {
+    val state = rememberDialogState(size = DpSize.Unspecified)
+    // an unspecified height has the window measure the form again; the width the user gave it stays
+    val fit = remember(state) { { state.size = DpSize(state.size.width, Dp.Unspecified) } }
     DialogWindow(
         onCloseRequest = onDismiss,
-        state = rememberDialogState(size = DpSize.Unspecified),
+        state = state,
         title = title,
         // resizable, because one of these is now the app log viewer and a form the user can't
         // widen is a form with a scrollbar it didn't need
@@ -38,6 +41,6 @@ actual fun DialogContainer(
             }
         },
     ) {
-        CompositionLocalProvider(LocalDialogTitled provides true) { content() }
+        CompositionLocalProvider(LocalDialogTitled provides true, LocalDialogFit provides fit) { content() }
     }
 }

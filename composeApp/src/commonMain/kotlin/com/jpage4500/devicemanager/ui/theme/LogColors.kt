@@ -21,9 +21,24 @@ fun logLevelColor(level: String?, default: Color): Color = when (level?.firstOrN
     else -> default
 }
 
+/**
+ * the ground under an error or a warning line, or null for the rest — the design's tinted rows.
+ *
+ * translucent, so one value reads on the light and the dark palette and the stripe still shows
+ * through. The text keeps [logLevelColor]; this is what makes a run of errors a block you can see
+ * while scrolling fast.
+ */
+fun logRowTint(level: String?): Color? = when (level?.firstOrNull()?.uppercaseChar()) {
+    'W' -> LogLevelColors.warnRow
+    'E', 'A', 'F' -> LogLevelColors.errorRow
+    else -> null
+}
+
 private object LogLevelColors {
     val verbose = Color(0xFF0026FF)
     val info = Color(0xFF188600)
     val warn = Color(0xFFFB6D08)
     val error = Color(0xFFFF0000)
+    val warnRow = Color(0x14FB6D08)
+    val errorRow = Color(0x14FF0000)
 }

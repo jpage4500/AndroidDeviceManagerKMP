@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.*
 import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.theme.*
+import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -93,6 +94,7 @@ fun DialogButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     primary: Boolean = false,
+    icon: DrawableResource? = null,
     onClick: () -> Unit,
 ) {
     val shape = RoundedCornerShape(5.dp)
@@ -114,7 +116,13 @@ fun DialogButton(
             .plainClickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = Dimens.gapLarge, vertical = 5.dp),
     ) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = text)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                AppIcon(icon, size = Dimens.icon, tint = text)
+                Spacer(Modifier.width(Dimens.gap))
+            }
+            Text(label, style = MaterialTheme.typography.bodySmall, color = text)
+        }
     }
 }
 
@@ -226,6 +234,36 @@ fun FieldLabel(text: String) {
     )
 }
 
+/**
+ * a small switch and its label — the design's 28×16 track, green when on.
+ *
+ * for a mode that stays on, like Auto-scroll; a tick box is for picking things out of a list.
+ */
+@Composable
+fun AppSwitch(checked: Boolean, label: String, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(Dimens.corner))
+            .plainClickable { onCheckedChange(!checked) }
+            .padding(horizontal = Dimens.gap, vertical = Dimens.tabGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val inset = (Dimens.switchHeight - Dimens.switchThumb) / 2
+        Box(
+            Modifier
+                .size(Dimens.switchWidth, Dimens.switchHeight)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(if (checked) Colors.tabAccent else Colors.offline)
+                .padding(inset),
+            contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+        ) {
+            Box(Modifier.size(Dimens.switchThumb).clip(CircleShape).background(Colors.onAccent))
+        }
+        Spacer(Modifier.width(Dimens.gap))
+        Text(label, style = MaterialTheme.typography.labelMedium, color = Colors.primaryText, maxLines = 1)
+    }
+}
+
 /** a checkbox and its label, at the size a desktop draws one. */
 @Composable
 fun AppCheckbox(checked: Boolean, label: String, onCheckedChange: (Boolean) -> Unit) {
@@ -233,20 +271,26 @@ fun AppCheckbox(checked: Boolean, label: String, onCheckedChange: (Boolean) -> U
         Modifier.plainClickable { onCheckedChange(!checked) }.padding(horizontal = Dimens.gap / 2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            Modifier
-                .size(13.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(if (checked) Colors.accent else Colors.listBg)
-                .border(Dp.Hairline, if (checked) Colors.accent else Colors.divider, RoundedCornerShape(3.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (checked) {
-                AppIcon(Res.drawable.success, size = 9.dp, tint = Colors.rowSelectedText)
-            }
-        }
+        CheckMark(checked)
         Spacer(Modifier.width(5.dp))
         Text(label, style = MaterialTheme.typography.labelSmall, color = Colors.primaryText)
+    }
+}
+
+/** the box of [AppCheckbox] on its own, for a row that lays out its own label. */
+@Composable
+fun CheckMark(checked: Boolean, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(13.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(if (checked) Colors.accent else Colors.listBg)
+            .border(Dp.Hairline, if (checked) Colors.accent else Colors.divider, RoundedCornerShape(3.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (checked) {
+            AppIcon(Res.drawable.success, size = 9.dp, tint = Colors.rowSelectedText)
+        }
     }
 }
 

@@ -13,8 +13,10 @@ import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.screen.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.jetbrains.compose.resources.stringResource
+import java.awt.Desktop
 
 private val log = LoggerConfig.createLogger("MainKt")
 
@@ -35,6 +37,10 @@ fun main() {
         // rather than by us, and this is the only supported way to make them follow the system
         // appearance. it follows the *OS*, not our theme
         runCatching { System.setProperty("apple.awt.application.appearance", "system") }
+        // Settings… in the app menu, with the ⌘, every mac app answers to; the File menu carries it
+        // everywhere else
+        runCatching { Desktop.getDesktop().setPreferencesHandler { PageManager.openSettings() } }
+            .onFailure { log.e("main: preferences handler: ${it.message}") }
     }
 
     // the device list is app-wide: every window is a reader of it, so it starts before any of them
@@ -82,7 +88,7 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
         is WindowContent.DeviceList -> Branding.appName
         is WindowContent.Mirror -> DeviceManager.nameOf(content.deviceId)
         is WindowContent.Info -> DeviceManager.nameOf(content.deviceId)
-        is WindowContent.Connect -> "Connect"
+        is WindowContent.Connect -> stringResource(Res.string.connect_window_title)
         is WindowContent.Message -> "Message Viewer"
     }
 
@@ -144,6 +150,19 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
 /** the menu bar. a mirror window gets the same one, so a shortcut works wherever focus is. */
 @Composable
 private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
+    val scope = rememberCoroutineScope()
+    val devices by DeviceManager.devices.collectAsState()
+    val selection by DeviceManager.selection.collectAsState()
+    val lead by DeviceManager.selectedId.collectAsState()
+    // what the Device menu acts on: a mirror window's own device, else the device list's selection —
+    // the ready ones, as the selection bar does
+    val mirrored = (appWindow.content as? WindowContent.Mirror)?.deviceId
+    val targets = devices.filter { it.isReady && if (mirrored != null) it.id == mirrored else it.id in selection.keys }
+    val ids = targets.map { it.id }
+    // Files opens one tab: the keyboard cursor's device when it's one of them
+    val filesFor = ids.firstOrNull { it == lead } ?: ids.firstOrNull()
+    fun shortcut(key: Key) = KeyShortcut(key, meta = isMac(), ctrl = !isMac())
+
     MenuBar {
         Menu(stringResource(Res.string.menu_file), mnemonic = 'F') {
             Item(stringResource(Res.string.menu_new_window), shortcut = KeyShortcut(Key.N, meta = isMac(), ctrl = !isMac())) {
@@ -154,9 +173,28 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
             Item(stringResource(Res.string.menu_mirror_device), shortcut = KeyShortcut(Key.M, meta = isMac(), ctrl = !isMac())) {
                 DeviceManager.selectedId.value?.let { WindowManager.openMirror(it, appWindow.id) }
             }
+            if (!isMac()) {
+                Item(stringResource(Res.string.menu_settings), shortcut = KeyShortcut(Key.Comma, ctrl = true)) {
+                    PageManager.openSettings()
+                }
+            }
             Separator()
             Item(stringResource(Res.string.menu_close_window), shortcut = KeyShortcut(Key.W, meta = isMac(), ctrl = !isMac())) {
                 WindowManager.close(appWindow.id)
+            }
+        }
+        Menu(stringResource(Res.string.menu_device), mnemonic = 'D') {
+            Item(stringResource(Res.string.menu_logs), enabled = ids.isNotEmpty(), shortcut = shortcut(Key.L)) {
+                PageManager.openLogs(ids)
+            }
+            Item(stringResource(Res.string.menu_files), enabled = filesFor != null, shortcut = shortcut(Key.E)) {
+                filesFor?.let(PageManager::openFiles)
+            }
+            Item(stringResource(Res.string.menu_screenshot), enabled = ids.isNotEmpty(), shortcut = shortcut(Key.S)) {
+                scope.launch { targets.forEach { DeviceManager.saveScreenshot(it) } }
+            }
+            Item(stringResource(Res.string.menu_type_text), enabled = ids.isNotEmpty(), shortcut = shortcut(Key.I)) {
+                PageManager.openInput(ids)
             }
         }
     }

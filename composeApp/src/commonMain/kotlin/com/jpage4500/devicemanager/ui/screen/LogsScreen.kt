@@ -25,19 +25,19 @@ import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.*
+import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
 
 /**
  * one device's logcat.
  *
- * A toolbar with the level buttons, a filter bar under it — the filters that are on, as pills
- * joined by AND — then the log table, and the two switches that matter, Tooltip and Auto Scroll, in
- * the bottom-right corner. See docs/REDESIGN.md.
+ * Two rows of controls — search, the level buttons, Auto-scroll, Pause and Save, then the filters
+ * that are on as pills joined by AND — over the log table. See docs/REDESIGN.md.
  *
- * Everything that narrows the log is ANDed: the level floor, each saved filter that's on, each
- * quick filter a right-click made, and the expression typed into the filter bar. That is the AND
- * the Swing app applies to a multi-selection in its filter list, and it is what makes "everything
- * at warn and above, mentioning gralloc" one step. "Search…" in the toolbar highlights instead.
+ * Everything that narrows the log is ANDed: the level floor, each saved filter that's on and each
+ * quick filter a right-click made. That is the AND the Swing app applies to a multi-selection in
+ * its filter list. **Search never narrows it** — it highlights, and steps through the hits — and
+ * Save as filter is how a search becomes one of the pills.
  *
  * [view] is what the screen is showing — filters, search, scroll — kept by the Logs page's tab so
  * it survives the tab being left and come back to.
@@ -73,7 +73,8 @@ fun LogsScreen(
     val total by source.total.collectAsState()
     val apps by source.apps.collectAsState()
     val running by source.running.collectAsState()
-    val holding by source.hold.collectAsState()
+    val paused by source.paused.collectAsState()
+    val scrollsSideways by SettingsManager.getBoolAsState(AppPref.LOGS_SCROLL_SIDEWAYS)
     val savedFilters by LogFilterStore.filters.collectAsState()
     val columns by LogsTableState.visible.collectAsState()
     val widths by LogsTableState.widths.collectAsState()
@@ -82,12 +83,12 @@ fun LogsScreen(
     val focusManager = LocalFocusManager.current
 
     var search by state::search
-    var filterText by state::filterText
     var selectedFilters by state::selectedFilters
     var quick by state::quick
     var floor by state::floor
     var selection by remember { mutableStateOf(TableSelection<Any?>()) }
     var editing by remember { mutableStateOf<LogFilter?>(null) }
+    var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
     // the quick filter being saved through the editor, so saving it can take its dashed pill away
     var savingQuick by remember { mutableStateOf<String?>(null) }
     var autoScroll by state::autoScroll
@@ -116,17 +117,61 @@ fun LogsScreen(
             savedFilters.filter { it.name in selectedFilters && it.expression.isNotBlank() } +
             quick.map { LogFilter(it, it) }
     }
-    // only the sidebar box filters; "Search…" highlights instead — a hit is only useful with the
-    // lines around it, and filtering to the hits throws those away
-    val typed = remember(filterText) {
-        listOfNotNull(filterText.takeIf { it.isNotBlank() }?.let { LogFilter("typed", it) })
-    }
-
     // handed to the source rather than applied here: it keeps the filtered list incrementally, so a
     // batch only tests its own new lines instead of re-walking 50,000 of them ten times a second
-    LaunchedEffect(active, typed) {
-        val terms = active + typed
-        source.setFilter(if (terms.isEmpty()) null else { entry -> terms.all { it.accepts(entry) } })
+    LaunchedEffect(active) {
+        source.setFilter(if (active.isEmpty()) null else { entry -> active.all { it.accepts(entry) } })
+    }
+
+    val query = remember(search) { LogSearch.parse(search) }
+    /**
+     * the ids of the shown lines the search hits, oldest first — what the count and the arrows walk.
+     *
+     * counted off the UI thread, and again on every batch: a busy device sends ten a second, and a
+     * walk of 50,000 lines is a few milliseconds that a frame shouldn't be paying. null while the
+     * first count for a new search is still running, so the box doesn't flash "No matches".
+     */
+    val hits by produceState<List<Long>?>(null, shown, query, apps) {
+        if (query == null) {
+            value = emptyList()
+            return@produceState
+        }
+        value = withContext(Dispatchers.Default) { shown.filter { query.accepts(it, apps) }.map { it.id } }
+    }
+    // where the cursor sits among the hits, from 1
+    val hitNumber = currentMatch?.let { id -> hits?.binarySearch(id)?.takeIf { it >= 0 }?.plus(1) }
+
+    /** put the cursor on the line [id] and bring it on screen. */
+    fun jumpTo(id: Long) {
+        val index = shown.indexOfIdFrom(id)
+        if (index < 0 || shown[index].id != id) return
+        currentMatch = id
+        autoScroll = false
+        selection = TableSelection<Any?>().selectOnly(id)
+        // `requestScrollToItem` for the same reason the table's own reveal uses it: a jump is not a
+        // scroll of the user's own, and one that sets `isScrollInProgress` would have Auto Scroll
+        // read it as one
+        listState.requestScrollToItem(index)
+    }
+
+    // the next hit after the cursor, or after the top of the screen before there is one — ids only
+    // ascend, so a cursor whose line has been trimmed away still says where "after" is. Wraps, the
+    // way a find does
+    fun nextMatch() {
+        val ids = hits?.takeIf { it.isNotEmpty() } ?: return
+        val from = currentMatch ?: ((listState.layoutInfo.visibleItemsInfo.firstOrNull()?.key as? Long)?.minus(1)) ?: -1L
+        jumpTo(ids.firstOrNull { it > from } ?: ids.first())
+    }
+
+    fun previousMatch() {
+        val ids = hits?.takeIf { it.isNotEmpty() } ?: return
+        val from = currentMatch ?: ((listState.layoutInfo.visibleItemsInfo.lastOrNull()?.key as? Long)?.plus(1)) ?: Long.MAX_VALUE
+        jumpTo(ids.lastOrNull { it < from } ?: ids.last())
+    }
+
+    fun changeFont(size: Int) {
+        fontSize = size.coerceIn(MIN_FONT, MAX_FONT)
+        SettingsManager.setInt(AppPref.LOGS_FONT_SIZE, fontSize)
     }
 
     if (owned == null) {
@@ -258,140 +303,159 @@ fun LogsScreen(
                 }
                 // "⌘+" is ⌘⇧= on most layouts, so Equals counts as an increase too
                 when (event.key) {
-                    Key.Plus, Key.Equals, Key.NumPadAdd -> fontSize = (fontSize + 1).coerceAtMost(MAX_FONT)
-                    Key.Minus, Key.NumPadSubtract -> fontSize = (fontSize - 1).coerceAtLeast(MIN_FONT)
-                    Key.Zero, Key.NumPad0 -> fontSize = DEFAULT_FONT
+                    Key.Plus, Key.Equals, Key.NumPadAdd -> changeFont(fontSize + 1)
+                    Key.Minus, Key.NumPadSubtract -> changeFont(fontSize - 1)
+                    Key.Zero, Key.NumPad0 -> changeFont(DEFAULT_FONT)
                     Key.Enter, Key.NumPadEnter -> {
                         autoScroll = !autoScroll
                         return@onPreviewKeyEvent true
                     }
-                    // ⌘↑ / ⌘↓ are deliberately **not** claimed here: they belong to the table, which
-                    // selects the first or last row with them the same way it does in the device
-                    // list and the file explorer. Selecting a line turns Auto Scroll off, so ⌘↓
-                    // lands on the newest line and stays on it rather than resuming the chase —
-                    // ⌘Enter is what re-arms following, and so does scrolling back to the bottom.
-                    //
-                    // ⌘G: the next line containing the search text, from wherever the last one was.
-                    // an index walk, not `drop().indexOfFirst {}` — that copies the buffer, and the
-                    // buffer is up to 50,000 lines
-                    Key.G -> {
-                        if (search.isBlank()) return@onPreviewKeyEvent true
-                        val from = shown.indexOfFirst { it.id == currentMatch } + 1
-                        var found = -1
-                        for (i in from until shown.size) {
-                            if (matches(shown[i].message, search)) {
-                                found = i
-                                break
-                            }
-                        }
-                        // nothing after the cursor: wrap to the top, the way a find does
-                        if (found < 0 && from > 0) {
-                            for (i in 0 until from) {
-                                if (matches(shown[i].message, search)) {
-                                    found = i
-                                    break
-                                }
-                            }
-                        }
-                        if (found >= 0) {
-                            currentMatch = shown[found].id
-                            autoScroll = false
-                            selection = TableSelection<Any?>().selectOnly(shown[found].id)
-                            // `requestScrollToItem` for the same reason the table's own reveal uses
-                            // it: a jump is not a scroll of the user's own, and one that sets
-                            // `isScrollInProgress` would have Auto Scroll read it as one
-                            listState.requestScrollToItem(found)
-                        }
-                        return@onPreviewKeyEvent true
+                    // ⌘↓: the newest line, selected as the table would select it — and following
+                    // again, since going to the end of a log is asking to watch it. Claimed here
+                    // rather than left to the table, whose selection change turns following off.
+                    // ⌘↑ and ⇧⌘↓ stay the table's: the oldest line, and extending to the newest
+                    Key.DirectionDown -> {
+                        if (event.isShiftPressed) return@onPreviewKeyEvent false
+                        shown.lastOrNull()?.let { selection = TableSelection<Any?>().selectOnly(it.id) }
+                        // the follow-the-tail effect lands on the last row as soon as this flips
+                        autoScroll = true
                     }
+                    // ⌘G / ⇧⌘G: the next or previous hit, from wherever the cursor last was
+                    Key.G -> if (event.isShiftPressed) previousMatch() else nextMatch()
                     else -> return@onPreviewKeyEvent false
                 }
-                SettingsManager.setInt(AppPref.LOGS_FONT_SIZE, fontSize)
                 true
             }
     ) {
-        LogsToolbar(
-            running = running,
-            search = search,
-            onSearch = {
-                search = it
-                currentMatch = null
-            },
-            searchFocus = searchFocus,
-            onFieldFocus = { fieldFocused = it },
-            onToggle = { if (running) source.stop() else source.start(streamScope) },
-            onHide = { LogsTableState.toggleCompact() },
-            onSave = {
-                scope.launch {
-                    source.save(shown, DeviceManager.nameOf(deviceId).replace(Regex("[^A-Za-z0-9_-]"), "_"))
-                        ?.let { saved ->
-                            StorageManager.getAbsolutePath(PATH_LOGS, saved)?.let(PlatformUtils::openUrl)
-                        }
-                }
-            },
-            onClear = { source.clear() },
-            floor = floor,
-            onFloor = { floor = it },
-        )
-
-        val editLabel = stringResource(Res.string.logs_edit_filter)
-        val duplicateLabel = stringResource(Res.string.logs_duplicate_filter)
-        val removeLabel = stringResource(Res.string.remove)
-        val pills = savedFilters.filter { it.name in selectedFilters }.map { filter ->
-            ActiveFilter(
-                label = filter.name,
-                expression = filter.expression,
-                quick = false,
-                onClick = { editing = filter },
-                onRemove = { selectedFilters = selectedFilters - filter.name },
-                menu = {
-                    Item(editLabel) { editing = filter }
-                    Item(duplicateLabel) { LogFilterStore.save(filter.copy(name = LogFilterStore.uniqueName(filter.name))) }
-                    Separator()
-                    Item(removeLabel) {
-                        selectedFilters = selectedFilters - filter.name
-                        LogFilterStore.delete(filter.name)
+        // the two rows of controls are one card, hanging off the open tab — the Files page's shape
+        Column(
+            Modifier
+                .padding(horizontal = Dimens.pageGutter)
+                .fillMaxWidth()
+                .joinedCard(Colors.toolbarBg, Colors.sidebarBorder, Dimens.cardCorner, Dimens.hairline)
+                .padding(top = Dimens.tabGap),
+        ) {
+            LogsToolbar(
+                search = {
+                    LogSearchField(
+                        value = search,
+                        onValueChange = {
+                            search = it
+                            currentMatch = null
+                        },
+                        focusRequester = searchFocus,
+                        onFieldFocus = { fieldFocused = it },
+                        hits = hits?.size,
+                        current = hitNumber,
+                        onNext = ::nextMatch,
+                        onPrevious = ::previousMatch,
+                        onSaveAsFilter = { query?.let { editing = LogFilter("", it.asExpression(apps)) } },
+                        modifier = Modifier.weight(1f).widthIn(min = Dimens.logSearchMinWidth),
+                    )
+                },
+                floor = floor,
+                onFloor = { floor = it },
+                // a stream that has ended — the device went away — is started again by Resume
+                showing = running && !paused,
+                onPause = {
+                    if (!running) source.start(streamScope) else source.setPaused(!paused)
+                },
+                onSave = {
+                    scope.launch {
+                        source.save(shown, DeviceManager.nameOf(deviceId).replace(Regex("[^A-Za-z0-9_-]"), "_"))
+                            ?.let { saved ->
+                                StorageManager.getAbsolutePath(PATH_LOGS, saved)?.let(PlatformUtils::openUrl)
+                            }
                     }
                 },
-            )
-        } + quick.map { expression ->
-            ActiveFilter(
-                label = expression,
-                expression = stringResource(Res.string.logs_quick_hint, expression),
-                quick = true,
-                onClick = {
-                    savingQuick = expression
-                    editing = LogFilter("", expression)
+                menu = {
+                    Item(stringResource(Res.string.logs_clear_log)) { source.clear() }
+                    Separator()
+                    Item(
+                        stringResource(Res.string.logs_scroll_sideways),
+                        leading = { color -> MenuTick(scrollsSideways, color) },
+                    ) { SettingsManager.setBoolean(AppPref.LOGS_SCROLL_SIDEWAYS, !scrollsSideways) }
+                    Separator()
+                    Item(stringResource(Res.string.logs_text_bigger), shortcut = "⌘+") { changeFont(fontSize + 1) }
+                    Item(stringResource(Res.string.logs_text_smaller), shortcut = "⌘−") { changeFont(fontSize - 1) }
+                    Item(stringResource(Res.string.logs_text_reset), shortcut = "⌘0") { changeFont(DEFAULT_FONT) }
                 },
-                onRemove = { quick = quick - expression },
             )
-        }
-        Box(Modifier.fillMaxWidth().background(Colors.toolbarBg)) {
+            val editLabel = stringResource(Res.string.logs_edit_filter)
+            val duplicateLabel = stringResource(Res.string.logs_duplicate_filter)
+            val removeLabel = stringResource(Res.string.remove)
+            val pills = savedFilters.filter { it.name in selectedFilters }.map { filter ->
+                val rules = filter.ruleCount
+                ActiveFilter(
+                    label = filter.name,
+                    expression = filter.describe(apps),
+                    quick = false,
+                    detail = if (rules > 1) stringResource(Res.string.logs_rule_count, rules) else null,
+                    onClick = { editing = filter },
+                    onRemove = { selectedFilters = selectedFilters - filter.name },
+                    menu = {
+                        Item(editLabel) { editing = filter }
+                        Item(duplicateLabel) { LogFilterStore.save(filter.copy(name = LogFilterStore.uniqueName(filter.name))) }
+                        Separator()
+                        Item(removeLabel) {
+                            selectedFilters = selectedFilters - filter.name
+                            LogFilterStore.delete(filter.name)
+                        }
+                    },
+                )
+            } + quick.map { expression ->
+                val words = LogFilter("", expression).describe(apps)
+                ActiveFilter(
+                    label = words,
+                    expression = stringResource(Res.string.logs_quick_hint, words),
+                    quick = true,
+                    onClick = {
+                        savingQuick = expression
+                        editing = LogFilter("", expression)
+                    },
+                    onRemove = { quick = quick - expression },
+                )
+            }
             LogFilterBar(
-                filterText = filterText,
-                onFilterText = { filterText = it },
-                onFieldFocus = { fieldFocused = it },
                 active = pills,
                 saved = savedFilters,
                 selected = selectedFilters,
+                names = apps,
                 onToggleSaved = { filter ->
                     selectedFilters = if (filter.name in selectedFilters) selectedFilters - filter.name else selectedFilters + filter.name
                 },
+                onEditSaved = { editing = it },
+                onDeleteSaved = { filter ->
+                    scope.launch {
+                        confirm = ConfirmRequest(
+                            title = getString(Res.string.logs_delete_filter_title),
+                            message = getString(Res.string.logs_delete_filter_msg, filter.name),
+                            onConfirm = {
+                                selectedFilters = selectedFilters - filter.name
+                                LogFilterStore.delete(filter.name)
+                            },
+                        )
+                    }
+                },
                 onNewFilter = { editing = LogFilter("", "") },
+                // the level is a control of its own, and stays where it was
                 onClear = {
                     selectedFilters = emptySet()
                     quick = emptyList()
-                    floor = LogLevelFloor.VERBOSE
                 },
             )
         }
-        HorizontalDivider(color = Colors.divider)
 
-        Row(Modifier.weight(1f)) {
+        // the table in a card of its own, under the controls rather than joined to them
+        val tableShape = RoundedCornerShape(Dimens.cardCorner)
+        Row(Modifier.weight(1f).padding(start = Dimens.pageGutter, end = Dimens.pageGutter, top = Dimens.rowPadding)) {
             Box(
                 Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .clip(tableShape)
+                    .background(Colors.listBg)
+                    .border(Dimens.hairline, Colors.sidebarBorder, tableShape)
                     .pointerInput(Unit) {
                         awaitPointerEventScope {
                             while (true) {
@@ -421,6 +485,8 @@ fun LogsScreen(
                 // row: the offset rises by exactly what every index fell by
                 stripeOffset = page.dropped,
                 rowContentColor = { logLevelColor(it.level, defaultTextColor) },
+                rowTint = { logRowTint(it.level) },
+                scrollsSideways = scrollsSideways,
                 onSelectionChange = {
                     selection = it
                     // picking a line means you are reading it, not watching the tail
@@ -430,42 +496,47 @@ fun LogsScreen(
                 onReorder = { from, to -> LogsTableState.moveColumn(from, to) },
                 onActivate = { WindowManager.openMessage(it.message) },
                 rowMenu = { entry, column ->
-                    Item(stringResource(Res.string.copy_line)) { copyToClipboard(entry.asLine()) }
-                    Item(stringResource(Res.string.logs_copy_message)) { copyToClipboard(entry.message) }
-                    Item(stringResource(Res.string.logs_view_message)) {
-                        WindowManager.openMessage(entry.message)
+                    // the App column holds a pid; the menu names the process when it's known
+                    // null when the click wasn't on a cell: the line's own items, and nothing else
+                    val raw = column?.text(entry).orEmpty()
+                    val shown = if (column == LogColumn.APP) apps[raw] ?: raw else raw
+                    if (column != null && shown.isNotEmpty()) {
+                        Header("${column.label.uppercase()} · ${shown.clip(MENU_VALUE_CHARS)}")
                     }
-                    // filters about the cell that was clicked, and only in a column whose value is
-                    // worth filtering on — the tag and the app, as the Swing menu offers, and the
-                    // level as a floor. Show only and Hide are quick filters: this tab's, unsaved,
-                    // and a click on their pill saves them
-                    val field = when (column) {
-                        LogColumn.TAG -> entry.tag?.let { LogTerm.Field.TAG to it }
-                        LogColumn.APP -> entry.pid?.let { LogTerm.Field.APP to it }
-                        else -> null
-                    }
-                    if (field != null) {
-                        val (on, value) = field
-                        // the App column holds a pid; the menu names the process when it's known
-                        val named = if (on == LogTerm.Field.APP) apps[value] ?: value else value
-                        val only = LogTermSpec(on, LogOperator.EQUALS, value).asExpression()
-                        val hide = LogTermSpec(on, LogOperator.NOT_EQUALS, value).asExpression()
-                        Separator()
-                        Item(stringResource(Res.string.logs_show_only, named)) {
-                            if (only !in quick) quick = quick + only
-                        }
-                        Item(stringResource(Res.string.logs_hide_value, named)) {
-                            if (hide !in quick) quick = quick + hide
-                        }
+
+                    // filters about the cell that was clicked, first, since they're what the menu is
+                    // for. Show only and Hide are quick filters: this tab's, unsaved, and a click on
+                    // their pill saves them. A date offers none — no two lines share one
+                    val filters = cellFilter(column, raw)
+                    if (filters != null) {
+                        val (only, hide) = filters
+                        val message = column == LogColumn.MSG
+                        Item(
+                            if (message) stringResource(Res.string.logs_show_only_containing)
+                            else stringResource(Res.string.logs_show_only, shown.clip(MENU_VALUE_CHARS)),
+                        ) { if (only !in quick) quick = quick + only }
+                        Item(
+                            if (message) stringResource(Res.string.logs_hide_containing)
+                            else stringResource(Res.string.logs_hide_value, shown.clip(MENU_VALUE_CHARS)),
+                        ) { if (hide !in quick) quick = quick + hide }
                         Item(stringResource(Res.string.logs_new_filter_from)) {
                             editing = LogFilter("", only)
                         }
+                        Separator()
                     }
                     if (column == LogColumn.LEVEL) {
                         LogLevelFloor.of(entry.level)?.takeIf { it != LogLevelFloor.VERBOSE }?.let { level ->
-                            Separator()
                             Item(stringResource(Res.string.logs_filter_level, entry.level.orEmpty())) { floor = level }
+                            Separator()
                         }
+                    }
+
+                    if (column != null && shown.isNotEmpty()) {
+                        Item(stringResource(Res.string.logs_copy_value, column.label.lowercase())) { copyToClipboard(shown) }
+                    }
+                    Item(stringResource(Res.string.logs_copy_line)) { copyToClipboard(entry.asLine()) }
+                    Item(stringResource(Res.string.logs_view_message)) {
+                        WindowManager.openMessage(entry.message)
                     }
                 },
                 headerMenu = { column ->
@@ -499,15 +570,27 @@ fun LogsScreen(
                         contentAlignment = Alignment.CenterStart,
                     ) {
                         TableText(
-                            text = highlighted(entry.message, search, entry.id == currentMatch),
+                            text = highlighted(entry.message, query?.needleFor(LogColumn.MSG), entry.id == currentMatch),
                             onLayout = { clipped = it },
+                            overflow = TextOverflow.Clip,
                         )
                     }
                 } else {
-                    // the App column carries a pid; show the process it belongs to when we know it
-                    val value = if (column == LogColumn.APP) apps[entry.pid] ?: entry.pid
-                    else column.text(entry)
-                    TableText(highlighted(value.orEmpty(), search, entry.id == currentMatch))
+                    val value = when (column) {
+                        // the App column carries a pid; show the process it belongs to when we know it
+                        LogColumn.APP -> apps[entry.pid] ?: entry.pid
+                        // a process's main thread has the pid for its tid — the UI thread, on an app.
+                        // a dash says "main" without a second copy of a number already on the row
+                        LogColumn.TID -> if (entry.tid != null && entry.tid == entry.pid) MAIN_THREAD else entry.tid
+                        else -> column.text(entry)
+                    }
+                    TableText(
+                        highlighted(value.orEmpty(), query?.needleFor(column), entry.id == currentMatch),
+                        // a date's time and a package's last segment are the parts worth keeping
+                        // when the column is too narrow
+                        modifier = if (column == LogColumn.APP || column == LogColumn.DATE) Modifier.keepEnd() else Modifier,
+                        overflow = TextOverflow.Clip,
+                    )
                 }
             }
 
@@ -519,13 +602,13 @@ fun LogsScreen(
             }
         }
 
-        HorizontalDivider(color = Colors.divider)
         LogsStatusBar(
             shown = shown.size,
             total = total,
-            hold = holding,
             selected = selection.size,
-            expression = describe(active, typed),
+            filtersOn = selectedFilters.size + quick.size,
+            running = running,
+            paused = paused,
             showTooltip = showTooltip,
             onTooltip = { showTooltip = it },
             autoScroll = autoScroll,
@@ -535,6 +618,9 @@ fun LogsScreen(
         )
     }
 
+    ConfirmDialog(confirm, onDismiss = { confirm = null })
+
+    val floorLabel = stringResource(floor.label())
     FilterDialog(
         filter = editing,
         onDismiss = {
@@ -543,147 +629,256 @@ fun LogsScreen(
         },
         onSave = { original, saved ->
             LogFilterStore.save(saved, replacing = original.name.ifBlank { null })
-            // a renamed filter keeps its place among the ones that are on
-            selectedFilters = selectedFilters - original.name + saved.name
+            // a new filter is turned on here — that's what it was made for. An edited one keeps
+            // whether it was on, under its new name if it has one
+            val wasOn = original.name.isBlank() || original.name in selectedFilters
+            selectedFilters = (selectedFilters - original.name).let { if (wasOn) it + saved.name else it }
             savingQuick?.let { quick = quick - it }
             savingQuick = null
+        },
+        onDelete = { filter ->
+            selectedFilters = selectedFilters - filter.name
+            LogFilterStore.delete(filter.name)
+        },
+        names = apps,
+        count = { candidate ->
+            // the others on in this tab — not the one being edited, nor the quick filter it replaces
+            val others = active.filter { it.name != editing?.name && it.expression != savingQuick }
+            FilterCount(
+                alone = source.count { candidate.accepts(it) },
+                combined = if (others.isEmpty()) null else source.count { e -> candidate.accepts(e) && others.all { it.accepts(e) } },
+                total = source.total.value,
+                device = DeviceManager.nameOf(deviceId),
+                // as their pills name them: the level by what it shows, a quick filter in words
+                others = others.map { other ->
+                    when {
+                        other.name == floor.name && other.expression == floor.expression -> floorLabel
+                        other.name == other.expression -> other.describe(apps)
+                        else -> other.name
+                    }
+                },
+            )
         },
     )
 }
 
+/**
+ * the first row of a log tab's controls: search, the level buttons, Pause and Save…, and ⋯ for
+ * what's used less — clearing the log, sideways scrolling and the text size.
+ *
+ * [showing] is whether lines are arriving on screen; Pause stops that and nothing else.
+ */
 @Composable
 private fun LogsToolbar(
-    running: Boolean,
-    search: String,
-    onSearch: (String) -> Unit,
-    searchFocus: FocusRequester,
-    onFieldFocus: (Boolean) -> Unit,
-    onToggle: () -> Unit,
-    onHide: () -> Unit,
-    onSave: () -> Unit,
-    onClear: () -> Unit,
+    search: @Composable RowScope.() -> Unit,
     floor: LogLevelFloor,
     onFloor: (LogLevelFloor) -> Unit,
+    showing: Boolean,
+    onPause: () -> Unit,
+    onSave: () -> Unit,
+    menu: @Composable AppMenuScope.() -> Unit,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .height(Dimens.toolbarHeight)
-            .background(Colors.toolbarBg)
             .padding(horizontal = Dimens.gap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ToolbarButton(
-            res = if (running) Res.drawable.pause else Res.drawable.play,
-            label = stringResource(if (running) Res.string.logs_stop else Res.string.logs_start),
-            onClick = onToggle,
-            tint = Colors.toolbarIcon,
-        )
-        ToolbarButton(Res.drawable.eye_closed, stringResource(Res.string.logs_hide), onClick = onHide, tint = Colors.toolbarIcon)
-        ToolbarButton(Res.drawable.file_save, stringResource(Res.string.logs_save), onClick = onSave, tint = Colors.toolbarIcon)
+        search()
         Spacer(Modifier.width(Dimens.gapLarge))
         LevelFloorButtons(floor, onFloor)
-
-        Spacer(Modifier.weight(1f))
-
-        FilterField(
-            value = search,
-            onValueChange = onSearch,
-            hint = stringResource(Res.string.logs_search),
-            focusRequester = searchFocus,
-            modifier = Modifier
-                .onFocusChanged { onFieldFocus(it.isFocused) }
-                .widthIn(min = 180.dp, max = 340.dp)
-                .clip(RoundedCornerShape(Dimens.corner))
-                .background(Colors.listBg)
-                .border(Dp.Hairline, Colors.divider, RoundedCornerShape(Dimens.corner))
-                .padding(horizontal = Dimens.gap, vertical = 5.dp),
+        ToolbarRule()
+        OutlinedAction(
+            label = stringResource(if (showing) Res.string.logs_pause else Res.string.logs_resume),
+            icon = if (showing) Res.drawable.pause else Res.drawable.play,
+            onClick = onPause,
         )
         Spacer(Modifier.width(Dimens.gap))
-        ToolbarButton(Res.drawable.trash, stringResource(Res.string.logs_clear), onClick = onClear, tint = Colors.toolbarIcon)
+        OutlinedAction(stringResource(Res.string.logs_save), icon = Res.drawable.file_save, onClick = onSave)
+        Spacer(Modifier.width(Dimens.tabGap))
+        MoreButton(menu)
+    }
+}
+
+/** the hairline between groups of controls in the toolbar. */
+@Composable
+private fun ToolbarRule() {
+    Box(
+        Modifier
+            .padding(horizontal = Dimens.gap)
+            .size(Dimens.hairline, Dimens.chipHeight - Dimens.tabGap)
+            .background(Colors.divider)
+    )
+}
+
+/** ⋯ at the end of the toolbar, opening [menu]. */
+@Composable
+private fun MoreButton(menu: @Composable AppMenuScope.() -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val label = stringResource(Res.string.logs_more)
+    Box {
+        CellTooltip(text = { label }) {
+            Box(
+                Modifier
+                    .size(Dimens.controlHeight)
+                    .clip(RoundedCornerShape(Dimens.navCorner))
+                    .clickable { open = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                AppIcon(Res.drawable.more, size = Dimens.icon, tint = Colors.toolbarIcon, contentDescription = label)
+            }
+        }
+        AppPopupMenu(expanded = open, onDismissRequest = { open = false }, offset = DpOffset(0.dp, Dimens.controlHeight)) {
+            menu()
+        }
+    }
+}
+
+/** a menu item's tick, in the space a tick takes whether or not it's on. */
+@Composable
+private fun MenuTick(on: Boolean, color: Color) {
+    Box(Modifier.size(Dimens.icon), contentAlignment = Alignment.Center) {
+        if (on) AppIcon(Res.drawable.success, size = Dimens.pillClose, tint = color)
     }
 }
 
 /**
- * what the filter is, in words — the Swing status bar's centre label.
+ * what's typed into search: text anywhere on the line, or `tag:` / `app:` to look in one column.
  *
- * every selected filter's expression joined the way the syntax joins them, with the search box
- * quoted on the end, so what is on screen can be read back and retyped.
+ * `app:` looks for the process name, not the pid the column holds underneath — nobody searches for
+ * 2063.
  */
-private fun describe(active: List<LogFilter>, typed: List<LogFilter>): String =
-    (active.map { it.expression } + typed.map { "\"${it.expression}\"" })
-        .joinToString(" ${LogFilter.AND} ")
+private class LogSearch(val column: LogColumn?, val needle: String) {
+    fun accepts(entry: LogEntry, apps: Map<String, String>): Boolean = when (column) {
+        LogColumn.TAG -> matches(entry.tag, needle)
+        LogColumn.APP -> matches(apps[entry.pid], needle) || matches(entry.pid, needle)
+        else -> matches(entry.message, needle) || matches(entry.tag, needle) || matches(apps[entry.pid], needle)
+    }
 
+    /** what to highlight in [cell]: the needle, if this search looks in that column. */
+    fun needleFor(cell: LogColumn): String? = needle.takeIf { column == null || column == cell }
+
+    /**
+     * the search as a filter expression, for Save as filter.
+     *
+     * a filter on App tests the pid, so `app:` becomes the pids whose process names match now —
+     * joined by `||` — and falls back to the text anywhere when none do.
+     */
+    fun asExpression(apps: Map<String, String>): String = when (column) {
+        LogColumn.TAG -> LogTermSpec(LogTerm.Field.TAG, LogOperator.CONTAINS, needle).asExpression()
+        LogColumn.APP -> apps.filterValues { matches(it, needle) }.keys
+            .map { LogTermSpec(LogTerm.Field.APP, LogOperator.EQUALS, it).asExpression() }
+            .ifEmpty { listOf(LogTermSpec(LogTerm.Field.ANY, LogOperator.CONTAINS, needle).asExpression()) }
+            .joinToString(" ${LogFilter.OR} ")
+        else -> LogTermSpec(LogTerm.Field.ANY, LogOperator.CONTAINS, needle).asExpression()
+    }
+
+    companion object {
+        fun parse(text: String): LogSearch? {
+            val trimmed = text.trim()
+            if (trimmed.isEmpty()) return null
+            val colon = trimmed.indexOf(':')
+            val column = when (trimmed.substring(0, colon.coerceAtLeast(0)).lowercase()) {
+                "tag" -> LogColumn.TAG
+                "app" -> LogColumn.APP
+                else -> null
+            }
+            if (column == null) return LogSearch(null, trimmed)
+            return trimmed.substring(colon + 1).trim().takeIf { it.isNotEmpty() }?.let { LogSearch(column, it) }
+        }
+    }
+}
+
+/**
+ * the plain line under the table: how many of the tab's lines are showing and how many filters are
+ * doing that — then, on the right, whether lines are being kept while paused or not arriving at all,
+ * and the two switches that are flipped while reading: the message panel and Auto-scroll. The device
+ * is the open tab's name already, so it isn't said again here.
+ */
 @Composable
 private fun LogsStatusBar(
     shown: Int,
     total: Int,
-    /** what the ring buffer's hold is doing, which is why [total] can read above the buffer size. */
-    hold: LogHold,
     selected: Int,
-    expression: String,
+    filtersOn: Int,
+    running: Boolean,
+    paused: Boolean,
     showTooltip: Boolean,
     onTooltip: (Boolean) -> Unit,
     autoScroll: Boolean,
     onAutoScroll: (Boolean) -> Unit,
 ) {
+    val parts = buildList {
+        add(
+            when {
+                selected > 1 -> stringResource(Res.string.logs_status_selected, selected, shown)
+                shown < total -> stringResource(Res.string.logs_status_shown_of, shown, total)
+                else -> stringResource(Res.string.logs_status_shown, shown)
+            }
+        )
+        if (filtersOn == 1) add(stringResource(Res.string.logs_status_filter))
+        if (filtersOn > 1) add(stringResource(Res.string.logs_status_filters, filtersOn))
+    }
     Row(
         Modifier
             .fillMaxWidth()
-            .height(Dimens.statusBarHeight)
-            .background(Colors.statusBarBg)
-            .padding(horizontal = Dimens.gap),
+            .height(Dimens.statusBarHeight + Dimens.gap)
+            .padding(horizontal = Dimens.pageGutter),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.gapLarge),
     ) {
-        // "selected N of M" while a selection is live, else "viewing N", with "/ total" when a
-        // filter is hiding some — the Swing left label exactly
         Text(
-            text = when {
-                selected > 1 -> stringResource(Res.string.logs_selected, selected, shown)
-                shown < total -> stringResource(Res.string.logs_viewing_of, shown, total)
-                else -> stringResource(Res.string.logs_viewing, shown)
-            },
+            text = parts.joinToString(" · "),
             style = MaterialTheme.typography.labelSmall,
             color = Colors.secondaryText,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
         )
-
-        // both halves of the hold, said out loud: what it keeps is why the count can read above the
-        // configured buffer size, and running out is why the oldest lines start moving again under
-        // someone who is still reading them
-        if (hold.lines > 0) {
-            Spacer(Modifier.width(Dimens.gap))
-            Text(
-                text = when {
-                    hold.full -> stringResource(Res.string.logs_hold_full)
-                    else -> stringResource(Res.string.logs_hold, hold.lines)
-                },
-                style = MaterialTheme.typography.labelSmall,
-                // the same split the expression label uses: primary for the thing worth reading,
-                // secondary for the ambient counts either side of it
-                color = if (hold.full) Colors.primaryText else Colors.secondaryText,
-            )
+        val state = when {
+            !running -> stringResource(Res.string.tab_stopped)
+            paused -> stringResource(Res.string.logs_status_paused)
+            else -> null
         }
-
-        // two even spacers put the expression in the middle and the switches hard right; a weighted
-        // Text between them would reserve its share and leave a gap before the switches
-        Spacer(Modifier.weight(1f))
-        if (expression.isNotEmpty()) {
-            Text(
-                text = expression,
-                style = MaterialTheme.typography.labelSmall,
-                color = Colors.primaryText,
-                maxLines = 1,
-                overflow = TextOverflow.MiddleEllipsis,
-                modifier = Modifier.widthIn(max = 420.dp),
-            )
+        if (state != null) {
+            Text(state, style = MaterialTheme.typography.labelSmall, color = Colors.secondaryText, maxLines = 1)
         }
-        Spacer(Modifier.weight(1f))
-
-        AppCheckbox(showTooltip, stringResource(Res.string.logs_tooltip), onTooltip)
-        Spacer(Modifier.width(Dimens.gapLarge))
-        AppCheckbox(autoScroll, stringResource(Res.string.logs_auto_scroll), onAutoScroll)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AppSwitch(showTooltip, stringResource(Res.string.logs_tooltip), onTooltip)
+            AppSwitch(autoScroll, stringResource(Res.string.logs_auto_scroll), onAutoScroll)
+        }
     }
 }
+
+/**
+ * a right-click's Show only and Hide for the cell [value] is in, as expressions, or null where the
+ * column isn't worth filtering on.
+ *
+ * the message is matched by **contains**, the rest by equality. A message is cut at the first `&&`,
+ * `||` or quote: the expression syntax would read those as its own, and a filter on the text before
+ * them still finds the line.
+ */
+private fun cellFilter(column: LogColumn?, value: String): Pair<String, String>? {
+    val field = when (column) {
+        LogColumn.TAG -> LogTerm.Field.TAG
+        LogColumn.APP -> LogTerm.Field.APP
+        LogColumn.TID -> LogTerm.Field.TID
+        LogColumn.MSG -> LogTerm.Field.MSG
+        else -> return null
+    }
+    val message = column == LogColumn.MSG
+    val usable = if (!message) value else {
+        val cut = listOf(LogFilter.AND, LogFilter.OR, "\"").map { value.indexOf(it) }.filter { it >= 0 }.minOrNull()
+        (if (cut == null) value else value.substring(0, cut)).trim()
+    }
+    if (usable.isEmpty()) return null
+    val (show, hide) = if (message) LogOperator.CONTAINS to LogOperator.NOT_CONTAINS else LogOperator.EQUALS to LogOperator.NOT_EQUALS
+    return LogTermSpec(field, show, usable).asExpression() to LogTermSpec(field, hide, usable).asExpression()
+}
+
+/** [this] cut to [max] characters with an ellipsis, for a menu that has to stay a menu's width. */
+private fun String.clip(max: Int): String = if (length <= max) this else take(max).trimEnd() + "…"
 
 /**
  * where [id] sits in [this], or the oldest line still held if it has already been trimmed away.
@@ -721,6 +916,12 @@ private fun LazyListState.isAtEnd(): Boolean {
 
 /** the message panel's height, for deciding which edge it sits on. */
 private val MESSAGE_PANEL_HEIGHT = 110.dp
+
+// what the Thread column shows for a process's main thread
+private const val MAIN_THREAD = "-"
+
+// the design's own cut-off for a value quoted in the right-click menu
+private const val MENU_VALUE_CHARS = 26
 
 private const val MIN_FONT = 8
 private const val MAX_FONT = 28

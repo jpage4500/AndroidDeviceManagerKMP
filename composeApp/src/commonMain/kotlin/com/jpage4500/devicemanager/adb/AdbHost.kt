@@ -46,7 +46,21 @@ suspend fun adbPair(server: AdbServer, host: String, port: Int, code: String): A
             }
     }
 
-private suspend fun hostCommand(server: AdbServer, command: String): AdbOutcome<String> {
+/**
+ * `adb mdns services` — every adb service the server's own mDNS browse has seen.
+ *
+ * One line per service, `<name>\t<type>\t<host>:<port>`. This is how the desktop browses at all: the
+ * JVM has no mDNS, and the adb server it already runs has one — see `Mdns.desktop.kt`. Not logged,
+ * because the pairing dialog asks once a second for as long as it is open.
+ */
+suspend fun adbMdnsServices(server: AdbServer): AdbOutcome<String> =
+    hostCommand(server, "host:mdns:services", logReply = false)
+
+private suspend fun hostCommand(
+    server: AdbServer,
+    command: String,
+    logReply: Boolean = true,
+): AdbOutcome<String> {
     val connection = AdbConnection.openOrNull(server)
         ?: return AdbOutcome.Err(AdbError.NO_SERVER, "no adb server on ${server.host}")
     return connection.use {
@@ -54,7 +68,7 @@ private suspend fun hostCommand(server: AdbServer, command: String): AdbOutcome<
             is AdbOutcome.Err -> outcome
             is AdbOutcome.Ok -> {
                 val reply = runCatching { it.readFrame() }.getOrDefault("").trim()
-                log.d("hostCommand: $command -> $reply")
+                if (logReply) log.d("hostCommand: $command -> $reply")
                 // the server says OKAY either way; the sentence is the real answer
                 if (reply.startsWith("failed", ignoreCase = true) ||
                     reply.startsWith("unable", ignoreCase = true)

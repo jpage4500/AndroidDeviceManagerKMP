@@ -13,6 +13,7 @@ import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.*
+import androidx.compose.ui.layout.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
@@ -119,6 +120,17 @@ fun <T, C> DataTable(
      * selection's own foreground, or it would be unreadable on the accent.
      */
     rowContentColor: ((T) -> Color)? = null,
+    /**
+     * a tint under a row, over its stripe — an error line, say — or null for none. Selection draws
+     * over it. Called per visible row per frame, so it should be a lookup, not a computation.
+     */
+    rowTint: ((T) -> Color?)? = null,
+    /**
+     * whether the table scrolls sideways when its columns are wider than it is. Off, it never does:
+     * the last column stretches or shrinks to end at the table's edge, and anything past that is cut
+     * off — a log whose message column should always run to the edge and never further.
+     */
+    scrollsSideways: Boolean = true,
     /** hoisted so a caller can drive the scroll — the log viewer follows the tail. */
     listState: LazyListState = rememberLazyListState(),
     /** row text size; the log viewer scales it with ⌘+/⌘-. */
@@ -162,6 +174,15 @@ fun <T, C> DataTable(
     rowMenu: (@Composable AppMenuScope.(row: T, column: C?) -> Unit)? = null,
     /** the right-click menu for a column header, composed inside that header. */
     headerMenu: (@Composable AppMenuScope.(column: C) -> Unit)? = null,
+    /**
+     * where a file being dragged in from another app is, in root coordinates, or null when nothing
+     * is — see `fileDropTarget`'s `onMove`. The table answers with the row under it, via [onDropRow].
+     */
+    dropAt: Offset? = null,
+    /** the row under [dropAt], or null when it is over the header or past the last row. */
+    onDropRow: (T?) -> Unit = {},
+    /** rows a drop would land on, ringed while the drag is over the table. */
+    dropKeys: Set<Any?> = emptySet(),
     cell: @Composable (row: T, column: C) -> Unit,
 ) {
     val horizontalScroll = rememberScrollState()
@@ -177,7 +198,29 @@ fun <T, C> DataTable(
 
     // keys are what selection is expressed in, and index lookups need them in row order
     val keys = remember(rows) { rows.map(rowKey) }
-    val totalWidth = columns.fold(0.dp) { sum, column -> sum + (widths[column] ?: Dimens.columnDefault) }
+    // every column's resize gap included, so a row is exactly as wide as the header. They share one
+    // horizontal ScrollState, and each scroller clamps it to its **own** extent — a row short of the
+    // header by the gaps stopped scrolling first, and the header slid on past the cells under it
+    // how wide the table itself is, for a last column that has to end at its edge — 0 until the
+    // first layout, which leaves the widths as given for that one frame
+    var viewport by remember { mutableStateOf(0.dp) }
+    val density = LocalDensity.current
+    val shownWidths = if (scrollsSideways || viewport == 0.dp || columns.isEmpty()) widths else {
+        val last = columns.last()
+        val others = columns.dropLast(1).fold(0.dp) { sum, column ->
+            sum + (widths[column] ?: Dimens.columnDefault)
+        } + Dimens.resizeHandle * columns.size
+        widths + (last to (viewport - others).coerceAtLeast(Dimens.columnMin))
+    }
+    // turned off while scrolled across: back to the start, or the scroll it can no longer change
+    // would hold the columns where they were
+    LaunchedEffect(scrollsSideways) {
+        if (!scrollsSideways) horizontalScroll.scrollTo(0)
+    }
+
+    val totalWidth = columns.fold(0.dp) { sum, column ->
+        sum + (shownWidths[column] ?: Dimens.columnDefault) + Dimens.resizeHandle
+    }
 
     // read inside gestures and key handlers without keying them on it — a press changes the
     // selection, and re-keying `pointerInput` would cancel the very gesture that changed it
@@ -200,6 +243,22 @@ fun <T, C> DataTable(
     // the rubber-band rectangle, in list-container coordinates; null when one isn't being dragged
     var marqueeStart by remember { mutableStateOf<Offset?>(null) }
     var marqueeEnd by remember { mutableStateOf(Offset.Zero) }
+
+    // the list's place in the window, for turning a drag's root position into a row
+    var listCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val rowsNow by rememberUpdatedState(rows)
+    val onDropRowNow by rememberUpdatedState(onDropRow)
+    LaunchedEffect(dropAt) {
+        val at = dropAt
+        val coords = listCoords?.takeIf { it.isAttached }
+        if (at == null || coords == null) {
+            onDropRowNow(null)
+            return@LaunchedEffect
+        }
+        val y = at.y - coords.positionInRoot().y
+        val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }
+        onDropRowNow(item?.let { rowsNow.getOrNull(it.index) })
+    }
 
     fun apply(next: TableSelection<Any?>, revealAt: Int = -1) {
         onSelectionChange(next)
@@ -281,11 +340,11 @@ fun <T, C> DataTable(
         LocalTableFocus provides focusRequester,
         LocalTableTextSize provides textSize,
     ) {
-    Column(modifier.fillMaxSize()) {
-        Row(Modifier.horizontalScroll(horizontalScroll)) {
+    Column(modifier.fillMaxSize().onSizeChanged { viewport = with(density) { it.width.toDp() } }) {
+        Row(Modifier.horizontalScroll(horizontalScroll, enabled = scrollsSideways)) {
             TableHeader(
                 columns = columns,
-                widths = widths,
+                widths = shownWidths,
                 sortedBy = sortedBy,
                 sortAscending = sortAscending,
                 header = header,
@@ -302,6 +361,7 @@ fun <T, C> DataTable(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
+                .onGloballyPositioned { listCoords = it }
                 .background(Colors.listBg)
                 // the stripes would otherwise paint over the header when a row is half-scrolled
                 .clipToBounds()
@@ -361,18 +421,22 @@ fun <T, C> DataTable(
                     }
                 },
         ) {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().horizontalScroll(horizontalScroll)) {
+            // sized to the columns rather than to its rows, so it scrolls as far as the header does
+            // even with no rows to measure
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().horizontalScroll(horizontalScroll, enabled = scrollsSideways).width(totalWidth)) {
                 itemsIndexed(rows, key = { _, row -> rowKey(row) }) { index, row ->
                     val key = rowKey(row)
                     val band = stripeOffset + index
                     TableRow(
                         columns = columns,
-                        widths = widths,
+                        widths = shownWidths,
                         height = rowHeight,
                         width = totalWidth,
                         selected = key in selection,
+                        dropTarget = key in dropKeys,
                         windowFocused = windowFocused,
                         contentColor = rowContentColor?.invoke(row) ?: Colors.primaryText,
+                        tint = rowTint?.invoke(row),
                         // the band this row is painted in, which a dragged cell has to repaint for
                         // itself — it is travelling over cells it would otherwise show through
                         bandColor = if (band % 2L != 0L) stripeColor else listBackground,
@@ -397,7 +461,7 @@ fun <T, C> DataTable(
             AppVerticalScrollbar(listState, Modifier.align(Alignment.CenterEnd))
             // maxValue is 0 when every column already fits, which is the only reliable way to ask —
             // the window's width isn't the table's
-            if (horizontalScroll.maxValue > 0) {
+            if (scrollsSideways && horizontalScroll.maxValue > 0) {
                 AppHorizontalScrollbar(horizontalScroll, Modifier.align(Alignment.BottomCenter))
             }
         }
@@ -764,8 +828,11 @@ private fun <C> TableRow(
     height: Dp,
     width: Dp,
     selected: Boolean,
+    /** a file dragged in from another app would land here. */
+    dropTarget: Boolean,
     windowFocused: Boolean,
     contentColor: Color,
+    tint: Color?,
     /** the stripe this row sits in, for a dragged cell to repaint under itself. */
     bandColor: Color,
     drag: ColumnDrag<C>,
@@ -799,9 +866,9 @@ private fun <C> TableRow(
     // a green tint under the row's own text rather than a blue band with white text over it — the
     // redesign's selection, and it keeps a log line's level colour readable while it's selected
     val background = when {
-        active -> Colors.rowSelectedBg
+        dropTarget || active -> Colors.rowSelectedBg
         selected -> Colors.rowSelectedInactive
-        else -> Color.Transparent
+        else -> tint ?: Color.Transparent
     }
     val textColor = contentColor
 
@@ -811,6 +878,7 @@ private fun <C> TableRow(
                 .width(width)
                 .height(height)
                 .background(background)
+                .then(if (dropTarget) Modifier.border(Dimens.hairline * 2, Colors.tabAccent) else Modifier)
                 .pointerInput(Unit) {
                     val doubleClickMs = viewConfiguration.doubleTapTimeoutMillis
                     var lastPress = 0L
@@ -970,7 +1038,8 @@ fun TableText(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
     onLayout: ((clipped: Boolean) -> Unit)? = null,
-) = TableText(AnnotatedString(text.orEmpty()), modifier, color, onLayout)
+    overflow: TextOverflow = TextOverflow.Ellipsis,
+) = TableText(AnnotatedString(text.orEmpty()), modifier, color, onLayout, overflow)
 
 /** the same cell, with parts of the text already styled — a search hit, say. */
 @Composable
@@ -979,16 +1048,33 @@ fun TableText(
     modifier: Modifier = Modifier,
     color: Color = Color.Unspecified,
     onLayout: ((clipped: Boolean) -> Unit)? = null,
+    /** Clip for a table where a cut-off value should look cut off, not shortened — the log. */
+    overflow: TextOverflow = TextOverflow.Ellipsis,
 ) {
     val clipped = LocalCellClipped.current
+    val textSize = LocalTableTextSize.current
+    // an ellipsis needs room for a character and itself. In a cell narrower than that, Compose's
+    // ellipsis draws the whole value spilling past the cell for one row and nothing at all for the
+    // next — a 24dp OS column showed "13" and "15" and left every "17" blank. So a cell that narrow
+    // cuts its text at the edge instead, the same way on every row
+    val minEllipsisPx = with(LocalDensity.current) { textSize.toPx() } * 2
+    var tooNarrow by remember { mutableStateOf(false) }
+    val cut = overflow == TextOverflow.Clip || tooNarrow
     Text(
         text = text,
         modifier = modifier,
-        style = tableTextStyle(MaterialTheme.typography.bodySmall, LocalTableTextSize.current),
+        style = tableTextStyle(MaterialTheme.typography.bodySmall, textSize),
         color = if (color == Color.Unspecified) LocalContentColor.current else color,
         maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+        // a cut text is laid out on one unbroken line, so it stops at the cell's edge rather than
+        // at the last word that fits
+        softWrap = !cut,
+        overflow = if (cut) TextOverflow.Clip else overflow,
         onTextLayout = { result ->
+            // the width on offer doesn't depend on how the text overflows, so this settles in one pass
+            val narrow = result.layoutInput.constraints.hasBoundedWidth &&
+                result.layoutInput.constraints.maxWidth < minEllipsisPx
+            if (narrow != tooNarrow) tooNarrow = narrow
             onLayout?.invoke(result.hasVisualOverflow)
             // written during layout, and only when it changed: the one reader is a coroutine
             // waiting out the hover pause, so nothing recomposes on the back of it
@@ -997,6 +1083,21 @@ fun TableText(
             }
         },
     )
+}
+
+/**
+ * a cell whose text, when it doesn't fit, loses its **start** rather than its end — a date whose time
+ * is the part worth reading, a package name whose last segment is.
+ *
+ * the content is measured at its full width and slid left by however much it overflows, then cut at
+ * the cell's edge; one that fits sits where it would anyway. No ellipsis: the cut is the clue.
+ */
+fun Modifier.keepEnd(): Modifier = clipToBounds().layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints.copy(minWidth = 0, maxWidth = Constraints.Infinity))
+    val width = if (constraints.hasBoundedWidth) constraints.maxWidth else placeable.width
+    layout(width, constraints.constrainHeight(placeable.height)) {
+        placeable.place(if (placeable.width > width) width - placeable.width else 0, 0)
+    }
 }
 
 /**

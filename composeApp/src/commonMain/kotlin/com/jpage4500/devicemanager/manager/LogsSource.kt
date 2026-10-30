@@ -77,13 +77,23 @@ class LogsSource(private val deviceId: String) {
     private val _running = MutableStateFlow(false)
     val running: StateFlow<Boolean> = _running.asStateFlow()
 
+    private val _paused = MutableStateFlow(false)
+
     /**
-     * every error-or-worse line seen since the stream started, filtered or not — a background log tab
-     * badges how many arrived since it was last looked at. A count rather than the lines, so it costs
-     * nothing to keep for a tab nobody is reading.
+     * reading on, showing off — Pause.
+     *
+     * the stream and the buffer carry on, so nothing logged while paused is lost and Resume shows it
+     * all; only [entries] stands still. Stopping the stream instead is what Pause used to do, and it
+     * left a gap in the log exactly where someone had stopped to look at it.
      */
-    private val _errors = MutableStateFlow(0)
-    val errors: StateFlow<Int> = _errors.asStateFlow()
+    val paused: StateFlow<Boolean> = _paused.asStateFlow()
+
+    fun setPaused(on: Boolean) {
+        if (_paused.value == on) return
+        _paused.value = on
+        // whatever arrived meanwhile goes out in one snapshot
+        if (!on) publish()
+    }
 
     private val _hold = MutableStateFlow(LogHold())
 
@@ -116,6 +126,14 @@ class LogsSource(private val deviceId: String) {
     }
 
     /**
+     * how many held lines [predicate] passes, filtered or not — the filter editor's live count.
+     *
+     * walks the whole buffer, so it is for a person typing, not for every batch. On the thread that
+     * fills the buffer, like [setFilter].
+     */
+    fun count(predicate: (LogEntry) -> Boolean): Int = buffer.count(predicate)
+
+    /**
      * keep the oldest lines rather than trimming them, because the window is reading them.
      *
      * on while the log window isn't following the tail. Turning it **off** gives back everything the
@@ -129,7 +147,7 @@ class LogsSource(private val deviceId: String) {
         // the count moves even when nothing the table can see does — the lines given back may all
         // be ones a filter was hiding
         _total.value = buffer.size
-        if (changed) publish()
+        if (changed && !_paused.value) publish()
         _hold.value = heldNow()
     }
 
@@ -185,6 +203,7 @@ class LogsSource(private val deviceId: String) {
             return
         }
         _running.value = true
+        _paused.value = false
         startAppNames(scope)
         job = scope.launch {
             DeviceManager.logcat(deviceId).collect { batch ->
@@ -195,7 +214,6 @@ class LogsSource(private val deviceId: String) {
                 var changed = false
                 batch.lines.forEach { line ->
                     val entry = LogEntry.parse(line, nextId++)
-                    if (entry.level?.firstOrNull()?.uppercaseChar() in ERROR_LEVELS) _errors.value++
                     buffer.addLast(entry)
                     if (filter?.invoke(entry) != false) {
                         matched.addLast(entry)
@@ -206,7 +224,7 @@ class LogsSource(private val deviceId: String) {
                 _hold.value = heldNow()
                 _total.value = buffer.size
                 // one snapshot per batch, not per line — see the note on adbLogcat
-                if (changed) publish()
+                if (changed && !_paused.value) publish()
             }
             _running.value = false
         }
@@ -345,18 +363,6 @@ object LogsTableState {
 
     fun isHidden(column: LogColumn): Boolean = column in _hidden.value
 
-    /**
-     * the Swing app's one Hide button: App and TID together, since they are the two nobody reads
-     * until they need both.
-     */
-    fun toggleCompact() {
-        val compact = LogColumn.APP in _hidden.value && LogColumn.TID in _hidden.value
-        val next = if (compact) _hidden.value - LogColumn.APP - LogColumn.TID
-        else _hidden.value + LogColumn.APP + LogColumn.TID
-        _hidden.value = next
-        SettingsManager.setEnumSet(AppPref.LOGS_HIDDEN_COLUMNS, next)
-    }
-
     fun moveColumn(from: Int, to: Int) {
         val shown = visible.value
         val moved = shown.getOrNull(from) ?: return
@@ -413,6 +419,3 @@ object LogFilterStore {
     private fun load(): List<LogFilter> =
         JsonUtils.stringToList(SettingsManager.getString(AppPref.LOGS_FILTERS))
 }
-
-// logcat's error and worse: error, assert, fatal
-private val ERROR_LEVELS = setOf('E', 'A', 'F')

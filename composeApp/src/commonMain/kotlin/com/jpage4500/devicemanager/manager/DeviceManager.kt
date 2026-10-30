@@ -221,7 +221,7 @@ object DeviceManager {
                     setDevices(transport, stamped)
                     // remember any wireless device we can see, so the connect dialog opens with a
                     // list rather than an empty field
-                    stamped.filter { it.isWireless && it.isOnline }.forEach(WirelessManager::remember)
+                    WirelessManager.remember(transport.id, stamped)
                     fetchDetails(transport, stamped)
                 }
             }
@@ -273,6 +273,27 @@ object DeviceManager {
 
     suspend fun screenshot(deviceId: String): Result<ByteArray> =
         on(deviceId) { transport, serial -> transport.screenshot(serial) }
+
+    /**
+     * a screenshot saved to the app's `screenshots` folder, with a toast naming the file — the
+     * selection bar's Screenshot, a row's menu and ⌘S all come here.
+     */
+    suspend fun saveScreenshot(device: Device) {
+        screenshot(device.id)
+            .onSuccess { bytes ->
+                val name = "${device.displayName}-${DateUtils.formatDate("yyyyMMdd-HHmmss")}.png"
+                val ok = StorageManager.writeBytes(PATH_SCREENSHOTS, name, bytes)
+                log.d("saveScreenshot: $name, ${bytes.size} bytes, ok:$ok")
+                ToastManager.showToast(if (ok) name else "Couldn't save the screenshot", success = ok)
+            }
+            .onFailure {
+                log.e("saveScreenshot: ${it.message}")
+                ToastManager.showToast(it.message ?: "Screenshot failed", success = false)
+            }
+    }
+
+    /** the selected devices an action can run on now — the selection bar's rule, for the menu bar too. */
+    fun readySelection(): List<Device> = selectedDevices().filter { it.isReady }
 
     suspend fun listFiles(deviceId: String, path: String): Result<List<DeviceFile>> =
         on(deviceId) { transport, serial -> transport.listFiles(serial, path) }
@@ -658,3 +679,5 @@ object DeviceManager {
         }
     }
 }
+
+const val PATH_SCREENSHOTS = "screenshots"

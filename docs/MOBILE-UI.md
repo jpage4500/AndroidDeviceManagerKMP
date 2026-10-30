@@ -934,9 +934,10 @@ returns null rather than guessing.
 
 **mDNS is platform code on all three targets** and there is no way around it — ktor-network has no
 mDNS, and multicast DNS by hand is a protocol rather than a helper. `NsdManager` on Android,
-`NSNetServiceBrowser` on iOS, and **nothing on the desktop**: the JVM has no mDNS without JmDNS,
-which is a dependency for one screen a desktop doesn't need, since a desktop running this app is
-already running the adb server that `adb pair` talks to. Two details cost time and are worth keeping:
+`NSNetServiceBrowser` on iOS, and **the adb server's own browse on the desktop**: the JVM has no
+mDNS without JmDNS, a dependency for one dialog, but the adb server a desktop already runs answers
+`host:mdns:services` with everything it has seen. `Mdns.desktop.kt` asks it once a second and reports
+each service once. Two details cost time and are worth keeping:
 Android's `resolveService` handles one lookup at a time and fails rather than queues, so the actual
 queues; and iOS hands back raw `sockaddr` bytes rather than a string, read octet by octet so no host
 byte order is assumed.

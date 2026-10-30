@@ -17,6 +17,7 @@ import com.jpage4500.devicemanager.manager.*
 import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.theme.*
+import com.jpage4500.devicemanager.util.*
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -126,8 +127,7 @@ private fun SearchBox(value: String, onValueChange: (String) -> Unit, focus: Foc
             .padding(horizontal = Dimens.navGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(Res.drawable.filter, size = Dimens.icon, tint = Colors.secondaryText)
-        Spacer(Modifier.width(Dimens.gap))
+        // FilterField draws its own funnel
         FilterField(
             value = value,
             onValueChange = onValueChange,
@@ -140,7 +140,7 @@ private fun SearchBox(value: String, onValueChange: (String) -> Unit, focus: Foc
 
 /** a bordered square holding one icon — refresh. */
 @Composable
-private fun IconBox(icon: DrawableResource, label: String, onClick: () -> Unit) {
+fun IconBox(icon: DrawableResource, label: String, onClick: () -> Unit) {
     val shape = RoundedCornerShape(Dimens.navCorner)
     CellTooltip(text = { label }) {
         Box(
@@ -177,11 +177,16 @@ fun PrimaryButton(icon: DrawableResource?, label: String, onClick: () -> Unit) {
     }
 }
 
-/** a bordered button with a label — the secondary actions on a page. */
+/** a bordered button with a label, and an icon before it if given — the secondary actions on a page. */
 @Composable
-fun OutlinedAction(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun OutlinedAction(
+    label: String,
+    modifier: Modifier = Modifier,
+    icon: DrawableResource? = null,
+    onClick: () -> Unit,
+) {
     val shape = RoundedCornerShape(Dimens.navCorner)
-    Box(
+    Row(
         modifier
             .height(Dimens.controlHeight)
             .clip(shape)
@@ -189,8 +194,13 @@ fun OutlinedAction(label: String, modifier: Modifier = Modifier, onClick: () -> 
             .border(Dimens.hairline, Colors.divider, shape)
             .clickable(onClick = onClick)
             .padding(horizontal = Dimens.rowPadding),
-        contentAlignment = Alignment.Center,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
+        if (icon != null) {
+            AppIcon(icon, size = Dimens.pillClose + Dimens.tabGap, tint = Colors.toolbarIcon)
+            Spacer(Modifier.width(Dimens.liveDot))
+        }
         Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium, color = Colors.primaryText)
     }
 }
@@ -213,28 +223,70 @@ fun SelectionBar(
     onInstall: () -> Unit,
     onInput: () -> Unit,
     onCommands: () -> Unit,
+    onRunScript: (List<Device>) -> Unit,
     onDetails: (Device) -> Unit,
     onClear: () -> Unit,
 ) {
     val ready = selected.filter { it.isReady }
     val first = ready.firstOrNull()
     val any = ready.isNotEmpty()
+    SelectionBarFrame(
+        count = selected.size,
+        hint = stringResource(Res.string.selection_hint),
+        onClear = onClear,
+        modifier = Modifier.padding(start = Dimens.pageGutter, end = Dimens.pageGutter, bottom = Dimens.rowPadding),
+    ) {
+        BarAction(Res.drawable.mirror, stringResource(Res.string.action_mirror), any) { onMirror(ready) }
+        BarAction(Res.drawable.screenshot, stringResource(Res.string.action_screenshot), any) { onScreenshot(ready) }
+        BarAction(Res.drawable.logs, stringResource(Res.string.sel_logs), any) { onLogs(ready) }
+        BarAction(Res.drawable.folder, stringResource(Res.string.sel_files), first != null) { first?.let(onFiles) }
+        BarAction(Res.drawable.download, stringResource(Res.string.action_install), any, onClick = onInstall)
+        BarAction(Res.drawable.keyboard, stringResource(Res.string.sel_type_text), any, onClick = onInput)
+        BarAction(Res.drawable.terminal, stringResource(Res.string.sel_commands), true, onClick = onCommands)
+        if (ScriptHost.supported) {
+            BarAction(Res.drawable.script, stringResource(Res.string.sel_run_script), any) { onRunScript(ready) }
+        }
+        BarAction(Res.drawable.about, stringResource(Res.string.sel_details), first != null) { first?.let(onDetails) }
+    }
+}
+
+/**
+ * a selection bar's frame — Devices' and Files' both: [hint] while [count] is 0, and with a
+ * selection, the count, [actions] and Clear.
+ *
+ * @param label what the selection is called, if more than its count — Files adds the total size
+ * @param outlined false where the bar sits inside a card of its own, which is the outline it needs
+ */
+@Composable
+fun SelectionBarFrame(
+    count: Int,
+    hint: String,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    outlined: Boolean = true,
+    actions: @Composable RowScope.() -> Unit,
+) {
     val shape = RoundedCornerShape(Dimens.cardCorner)
-    val hasSelection = selected.isNotEmpty()
+    val hasSelection = count > 0
+    val outline = when {
+        !outlined -> Color.Transparent
+        hasSelection -> Colors.selectionBarBorder
+        else -> Colors.sidebarBorder
+    }
     Row(
-        Modifier
-            .padding(start = Dimens.pageGutter, end = Dimens.pageGutter, bottom = Dimens.rowPadding)
+        modifier
             .fillMaxWidth()
             .height(Dimens.selectionBarHeight)
             .clip(shape)
             .background(if (hasSelection) Colors.selectionBar else Color.Transparent)
-            .border(Dimens.hairline, if (hasSelection) Colors.selectionBarBorder else Colors.sidebarBorder, shape)
+            .border(Dimens.hairline, outline, shape)
             .padding(start = Dimens.rowPadding + Dimens.hairline * 2, end = Dimens.liveDot),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (!hasSelection) {
             Text(
-                stringResource(Res.string.selection_hint),
+                hint,
                 style = MaterialTheme.typography.bodyMedium,
                 color = Colors.secondaryText,
                 maxLines = 1,
@@ -243,7 +295,7 @@ fun SelectionBar(
             return@Row
         }
         Text(
-            stringResource(Res.string.selection_count, selected.size),
+            label ?: stringResource(Res.string.selection_count, count),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = Colors.primaryText,
@@ -252,14 +304,7 @@ fun SelectionBar(
         )
         // scrolls rather than clipping when the window is narrower than the row of actions
         Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-            BarAction(Res.drawable.mirror, stringResource(Res.string.action_mirror), any) { onMirror(ready) }
-            BarAction(Res.drawable.screenshot, stringResource(Res.string.action_screenshot), any) { onScreenshot(ready) }
-            BarAction(Res.drawable.logs, stringResource(Res.string.sel_logs), any) { onLogs(ready) }
-            BarAction(Res.drawable.folder, stringResource(Res.string.sel_files), first != null) { first?.let(onFiles) }
-            BarAction(Res.drawable.download, stringResource(Res.string.action_install), any, onInstall)
-            BarAction(Res.drawable.keyboard, stringResource(Res.string.sel_type_text), any, onInput)
-            BarAction(Res.drawable.terminal, stringResource(Res.string.sel_commands), true, onCommands)
-            BarAction(Res.drawable.about, stringResource(Res.string.sel_details), first != null) { first?.let(onDetails) }
+            actions()
         }
         Box(
             Modifier
@@ -275,7 +320,14 @@ fun SelectionBar(
 }
 
 @Composable
-private fun BarAction(icon: DrawableResource, label: String, enabled: Boolean, onClick: () -> Unit) {
+fun BarAction(
+    icon: DrawableResource,
+    label: String,
+    enabled: Boolean,
+    /** true for the one that can't be undone — Delete — which is drawn in the error colour. */
+    danger: Boolean = false,
+    onClick: () -> Unit,
+) {
     val alpha = if (enabled) 1f else 0.4f
     Row(
         Modifier
@@ -285,12 +337,12 @@ private fun BarAction(icon: DrawableResource, label: String, enabled: Boolean, o
             .padding(horizontal = Dimens.navGap - Dimens.hairline),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(icon, size = Dimens.icon, tint = Colors.toolbarIcon.copy(alpha = alpha))
+        AppIcon(icon, size = Dimens.icon, tint = (if (danger) Colors.error else Colors.toolbarIcon).copy(alpha = alpha))
         Spacer(Modifier.width(Dimens.liveDot))
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
-            color = Colors.primaryText.copy(alpha = alpha),
+            color = (if (danger) Colors.error else Colors.primaryText).copy(alpha = alpha),
             maxLines = 1,
             softWrap = false,
         )

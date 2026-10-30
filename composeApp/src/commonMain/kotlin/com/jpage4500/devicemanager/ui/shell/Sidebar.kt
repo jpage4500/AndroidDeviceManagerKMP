@@ -122,10 +122,19 @@ fun Modifier.sidebarEdge(width: SidebarWidth): Modifier = pointerInput(width) {
 @Composable
 fun Sidebar(shell: ShellState, width: SidebarWidth, onSettings: () -> Unit) {
     val devices by DeviceManager.devices.collectAsState()
+    val runs by ScriptManager.runs.collectAsState()
     val items = listOf(
         NavEntry(Page.DEVICES, Res.drawable.android, stringResource(Res.string.devices), devices.size),
         NavEntry(Page.FILES, Res.drawable.folder, stringResource(Res.string.page_files), shell.fileTabs.size),
         NavEntry(Page.LOGS, Res.drawable.logs, stringResource(Res.string.page_logs), shell.logTabs.size, live = shell.logTabs.isNotEmpty()),
+    ) + listOfNotNull(
+        // desktop only — a phone has no scripts folder to run
+        if (ScriptHost.supported) {
+            val running = runs.values.count { it.running }
+            NavEntry(Page.SCRIPTS, Res.drawable.script, stringResource(Res.string.page_scripts), running, live = running > 0)
+        } else {
+            null
+        },
     )
     val settingsLabel = stringResource(Res.string.action_settings)
 

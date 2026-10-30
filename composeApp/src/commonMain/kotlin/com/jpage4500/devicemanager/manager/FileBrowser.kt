@@ -10,14 +10,20 @@ import kotlinx.coroutines.flow.*
 enum class FileColumn(val label: String, val defaultWidth: Int) {
     NAME("Name", 320),
     SIZE("Size", 90),
-    DATE("Date", 150),
+    DATE("Modified", 150),
     ;
 
     fun text(file: DeviceFile): String? = when (this) {
         NAME -> file.name
-        SIZE -> if (file.isDirectory) null else Utils.bytesToDisplayString(file.size)
-        DATE -> file.modifiedMs.takeIf { it > 0 }
-            ?.let { DateUtils.formatDate(DateUtils.timeToDate(it * MILLIS), "MM/dd/yy h:mm a") }
+        SIZE -> if (file.isDirectory) "—" else Utils.bytesToDisplayString(file.size)
+        DATE -> file.modifiedMs.takeIf { it > 0 }?.let { modified(it * MILLIS) }
+    }
+
+    /** `Oct 27, 10:42 AM` this year; `Jan 1, 2009` for anything older, where the time says nothing. */
+    private fun modified(ms: Long): String {
+        val date = DateUtils.timeToDate(ms)
+        val pattern = if (date.year == DateUtils.getNow().year) "MMM d, h:mm a" else "MMM d, yyyy"
+        return DateUtils.formatDate(date, pattern)
     }
 
     fun sortKey(file: DeviceFile): Comparable<*>? = when (this) {
@@ -57,6 +63,11 @@ class FileBrowser(private val deviceId: String) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _query = MutableStateFlow("")
+
+    /** "Filter this folder" — kept here, with the folder, so a tab switch doesn't lose it. */
+    val query: StateFlow<String> = _query.asStateFlow()
+
     private val _sort = MutableStateFlow(FileColumn.NAME to true)
     val sort: StateFlow<Pair<FileColumn, Boolean>> = _sort.asStateFlow()
 
@@ -70,6 +81,8 @@ class FileBrowser(private val deviceId: String) {
             val target = normalise(to)
             DeviceManager.listFiles(deviceId, target)
                 .onSuccess {
+                    // a filter typed for one folder means nothing in the next
+                    if (target != _path.value) _query.value = ""
                     _path.value = target
                     // "." and ".." come back as ordinary entries; nothing wants to see them
                     _files.value = it.filterNot { file -> file.name == "." || file.name == ".." }
@@ -87,6 +100,17 @@ class FileBrowser(private val deviceId: String) {
         val parent = _path.value.trimEnd('/').substringBeforeLast('/', "")
         open(scope, parent.ifEmpty { "/" })
     }
+
+    fun setQuery(text: String) {
+        _query.value = text
+    }
+
+    /** what the table shows: dot-files only when asked for, and the folder filter applied. */
+    fun visible(files: List<DeviceFile>, showHidden: Boolean, query: String): List<DeviceFile> =
+        files.filter { file ->
+            (showHidden || !file.name.startsWith('.')) &&
+                (query.isBlank() || file.name.containsIgnoreCase(query.trim()))
+        }
 
     fun sortBy(column: FileColumn) {
         val (current, ascending) = _sort.value
@@ -127,6 +151,56 @@ class FileBrowser(private val deviceId: String) {
         return DeviceManager.runCommand(deviceId, "mkdir -p $target", "Creating folder on").map { }
     }
 
+    suspend fun rename(file: DeviceFile, name: String): Result<Unit> {
+        val parent = file.path.substringBeforeLast('/', "").ifEmpty { "" }
+        val target = Utils.shellQuote("$parent/$name")
+        return DeviceManager.runCommand(deviceId, "mv ${Utils.shellQuote(file.path)} $target", "Renaming on").map { }
+    }
+
+    /**
+     * install an APK that's already on the device.
+     *
+     * copied to the scratch folder first, as [InstallManager] pushes there: `pm` runs as the system
+     * and on recent Android can't read shared storage, where a downloaded APK usually sits.
+     */
+    suspend fun install(file: DeviceFile): Result<Unit> {
+        val scratch = Utils.shellQuote("$SCRATCH/${file.name}")
+        val output = DeviceManager.runCommand(
+            deviceId = deviceId,
+            command = "cp ${Utils.shellQuote(file.path)} $scratch && pm install -r -d $scratch; rm -f $scratch",
+            label = "Installing on",
+        ).getOrElse { return Result.failure(it) }
+        // pm prints "Success" or "Failure [REASON]"; exec doesn't carry the exit code
+        return if (output.contains("Success", ignoreCase = true)) {
+            StatusManager.post("Installed ${file.name}", progress = 100)
+            Result.success(Unit)
+        } else {
+            val reason = output.trim().lineSequence().lastOrNull().orEmpty()
+            log.w("install: ${file.path}: $reason")
+            StatusManager.post("${file.name}: $reason", isError = true)
+            Result.failure(IllegalStateException(reason))
+        }
+    }
+
+    /** copy files from this machine into the open folder. @return how many arrived */
+    suspend fun upload(files: List<LocalFile>): Int {
+        val folder = _path.value.trimEnd('/')
+        var sent = 0
+        files.forEachIndexed { index, file ->
+            StatusManager.post("Uploading ${file.name}", progress = index * 100 / files.size)
+            val bytes = readLocalFile(file.path)
+            if (bytes == null) {
+                StatusManager.post("Couldn't read ${file.name}", isError = true)
+                return@forEachIndexed
+            }
+            DeviceManager.pushFile(deviceId, bytes, "$folder/${file.name}")
+                .onSuccess { sent++ }
+                .onFailure { StatusManager.post("${file.name}: ${it.message}", isError = true) }
+        }
+        if (sent > 0) StatusManager.post("Uploaded $sent of ${files.size} to $folder", progress = 100)
+        return sent
+    }
+
     /** what a path is once the slashes are tidy — `/sdcard/` and `//sdcard` are the same folder. */
     private fun normalise(path: String): String {
         val trimmed = path.trim().ifEmpty { "/" }
@@ -138,6 +212,9 @@ class FileBrowser(private val deviceId: String) {
         /** where a browser opens: the one folder anyone actually wants. */
         const val START_PATH = "/sdcard"
         const val PATH_DOWNLOADS = "downloads"
+
+        /** somewhere every Android version lets the shell write and `pm` read. */
+        private const val SCRATCH = "/data/local/tmp"
     }
 }
 

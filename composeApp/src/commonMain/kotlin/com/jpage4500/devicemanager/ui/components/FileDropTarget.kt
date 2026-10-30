@@ -2,6 +2,7 @@ package com.jpage4500.devicemanager.ui.components
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.geometry.*
 import com.jpage4500.devicemanager.util.*
 
 /**
@@ -11,10 +12,13 @@ import com.jpage4500.devicemanager.util.*
  * whatever was let go over this area — an APK to install, anything else to copy.
  *
  * @param enabled false while there is nothing to drop onto, so the ring doesn't appear
+ * @param onMove where the drag is, in root coordinates — for a target that depends on what is under
+ *   the pointer, like a row in a table
  */
 @Composable
 expect fun Modifier.fileDropTarget(
     enabled: Boolean,
     onDragChanged: (Boolean) -> Unit,
     onDrop: (List<LocalFile>) -> Unit,
+    onMove: (Offset) -> Unit = {},
 ): Modifier

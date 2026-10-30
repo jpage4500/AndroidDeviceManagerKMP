@@ -29,7 +29,10 @@ is behind another one reads as a dead shortcut.
   the app icon; that route is `Desktop.setOpenFileHandler`.
 - **No dialogs.** FileExplorerKMP's `DetachedWindow` is the pattern worth copying if they should be
   movable, real top-level windows rather than in-window overlays.
-- **The menu bar is three items.** File ▸ New Window / Mirror / Close.
+- **The menu bar is two menus.** File ▸ New Window ⌘N / Mirror ⌘M / Close ⌘W, and Device ▸ View
+  Logs ⌘L / Browse Files ⌘E / Take Screenshot ⌘S / Type Text… ⌘I. The Device items act on the
+  device list's selection — the ready devices, as the selection bar does — or, in a mirror window,
+  on that window's device; they work from any window and any page.
 
 ## Native look and feel — what's actually available
 

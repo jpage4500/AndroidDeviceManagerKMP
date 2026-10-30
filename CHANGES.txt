@@ -126,3 +126,74 @@
 - Logs: right-click a tag or app to show only it or hide it
 - Logs: a background tab counts the errors that arrived while it wasn't open
 - Logs: each tab keeps its own filters, search and scroll position
+
+10/29
+- Logs and Files: the device tabs sit beside the page title, giving the log more room
+- Logs: fixed the filter field showing two funnel icons
+- Logs: a filter can match any of its rules instead of all of them
+- Logs: the filter editor counts the lines a filter matches as you type
+- Devices: a box in the table header selects every device shown
+- Devices: the status bar says how long ago the devices were last read
+- Devices: the details panel shows the device's screen
+- Files: a path bar of clickable folders
+- Files: filter the open folder by name
+- Files: a Places list down the side jumps to common folders
+- Files: show or hide hidden files
+- Files: rename a file or folder
+- Files: install an APK that is already on the device
+- Files: upload files into the open folder, by Upload… or by dragging them in
+- Scripts: a new page runs a script once on each device
+- Devices: Run script on the selection opens Scripts with those devices chosen
+- Connect: a table of every wireless device, with a tick box that connects or disconnects it
+- Connect: pair a new device with the code from its Wireless debugging screen
+- Connect: Pair with QR Code pairs and connects a device that scans it
+- Connect: Connect Remote Server lists the computers this app reads devices from
+- Devices: ⌘C opens Connect
+
+10/30
+- Devices: the status bar shows the version on the left and the device count on the right
+- Devices: fixed the search box showing two funnel icons
+- Devices: a file dragged in highlights the devices it will go to
+- Devices: dropping a file on a row sends it to that device when one or none are selected
+- Devices: fixed the table header drifting out of line with the rows when scrolled sideways
+- Devices: removed the tick boxes from each row and the table header
+- Logs: the status bar no longer says how many lines are being held
+- Settings: ⌘, opens Settings
+- Logs: search highlights matches and counts them, with arrows to step through them
+- Logs: Save as filter turns a search into a filter
+- Logs: Pause keeps reading the log and shows everything that arrived on Resume
+- Logs: a More menu holds Clear log, the compact columns, the message panel and text size
+- Logs: filter pills read as words and count a saved filter's rules
+- Files: the path and selection bar sit in a card joined to the open tab
+- Files: dropping files covers the table with where they'll go, folder and device
+- Files: install every APK in a selection at once
+- Files: folders are bold, hidden files are grey, and images and videos have their own icons
+- Files: dates read as "Oct 27, 10:42 AM", or with the year when it isn't this one
+- Logs: Add filter stays open while you tick several saved filters
+- Logs: the filter editor shows the filter in words and which filters it combines with
+- Logs: delete a saved filter from its editor
+- Logs: right-click a message to show or hide lines containing it
+- Logs: right-click copies the value of the column that was clicked
+- Logs: a tab's dot shows whether it's live, paused or offline
+- Logs: + picks several devices to capture at once
+- Logs and Files: tabs that don't fit go into a "more" menu that keeps their error counts
+- Logs: the controls sit in a card joined to the open tab, and the log in a card under it
+- Logs: warning and error lines have a tinted background
+- Logs: the status line shows the lines shown, filters on, devices capturing and lines per second
+- Logs: a Horizontal scrolling setting replaces hiding the App and Thread columns
+- Logs: cut-off text in the log is clipped instead of ending in an ellipsis
+- Logs: narrow Date and App columns keep the end of their text visible
+- Logs: the Thread column shows "-" for a process's main thread
+- Logs: the Tooltip and Auto-scroll switches moved to the status line
+- Logs: ⌘↓ jumps to the newest line and turns Auto-scroll back on
+- Tables: columns can be dragged narrower, down to one character
+- Tables: fixed some rows going blank in a very narrow column while others still showed
+- Logs: tabs no longer show a red count of new errors
+- Logs and Files: a tab's × is a plain cross that only shows its circle on hover
+- Desktop: ⌘L opens logs for the selected devices
+- Desktop: ⌘E opens the selected device in Files
+- Desktop: ⌘S takes a screenshot of the selected devices
+- Desktop: ⌘I opens Type text for the selected devices
+- Logs: the status line no longer repeats the device name or shows lines per second and devices capturing
+- Logs: the filter editor grows as rules are added, then scrolls
+- Logs: a saved filter can be deleted from the Add filter panel

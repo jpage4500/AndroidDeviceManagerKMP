@@ -8,7 +8,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
+import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.font.*
@@ -49,60 +51,99 @@ fun AppShell() {
     val focused = LocalWindowInfo.current.isWindowFocused
     LaunchedEffect(focused) { if (focused) PageManager.activate(shell) }
 
-    var settingsOpen by remember { mutableStateOf(false) }
     val width = remember { SidebarWidth() }
 
-    Row(Modifier.fillMaxSize().sidebarEdge(width)) {
-        Sidebar(shell = shell, width = width, onSettings = { settingsOpen = true })
+    Row(
+        Modifier
+            .fillMaxSize()
+            .sidebarEdge(width)
+            // ⌘C on Devices opens Connect — the Swing app's shortcut. Bubbled rather than previewed
+            // so a text field copies first, and only on Devices: on Logs and Files ⌘C means copy
+            .onKeyEvent { event ->
+                val connect = event.type == KeyEventType.KeyDown && event.key == Key.C &&
+                    (event.isMetaPressed || event.isCtrlPressed) && shell.page == Page.DEVICES
+                if (connect) WindowManager.openConnect()
+                connect
+            }
+    ) {
+        Sidebar(shell = shell, width = width, onSettings = { shell.settingsOpen = true })
         Box(Modifier.weight(1f).fillMaxHeight().background(Colors.listBg)) {
             when (shell.page) {
                 Page.DEVICES -> DeviceScreen()
                 Page.LOGS -> LogsPage(shell, scope)
                 Page.FILES -> FilesPage(shell)
+                Page.SCRIPTS -> ScriptsScreen()
             }
         }
     }
 
-    if (settingsOpen) SettingsDialog(onDismiss = { settingsOpen = false })
+    if (shell.settingsOpen) SettingsDialog(onDismiss = { shell.settingsOpen = false })
+    // the shell's rather than the Devices page's, so ⌘I opens it whichever page is showing
+    InputDialog(deviceIds = shell.inputFor, onDismiss = { shell.inputFor = emptyList() })
 }
 
-/** a page's title row. */
+/**
+ * a tabbed page's header: the title, then its tabs on the same line.
+ *
+ * Everything on these pages belongs to one tab, so the title doesn't earn a row of its own — it
+ * sits where the strip starts, centred on the open tab, and the strip's rule runs under both.
+ */
 @Composable
-private fun PageHeader(title: String) {
+private fun TabbedPageHeader(title: String, tabs: @Composable RowScope.() -> Unit) {
+    val border = Colors.sidebarBorder
     Row(
-        Modifier.fillMaxWidth().height(Dimens.pageHeaderHeight).padding(horizontal = Dimens.pageGutter),
-        verticalAlignment = Alignment.CenterVertically,
+        Modifier
+            .fillMaxWidth()
+            .padding(top = Dimens.gap)
+            .height(Dimens.tabStripHeight)
+            .drawBehind {
+                val line = Dimens.hairline.toPx()
+                val y = size.height - line / 2
+                drawLine(border, Offset(0f, y), Offset(size.width, y), strokeWidth = line)
+            }
+            .padding(start = Dimens.pageGutter),
+        verticalAlignment = Alignment.Bottom,
     ) {
-        Text(title, fontSize = Dimens.pageTitleSize, fontWeight = FontWeight.Bold, color = Colors.primaryText)
+        Box(Modifier.height(Dimens.tabHeightOpen), contentAlignment = Alignment.CenterStart) {
+            Text(title, fontSize = Dimens.pageTitleSize, fontWeight = FontWeight.Bold, color = Colors.primaryText)
+        }
+        Spacer(Modifier.width(Dimens.pageGutter))
+        tabs()
     }
 }
 
 /** one tab per device's logcat; each keeps running while another is showing. */
 @Composable
 private fun LogsPage(shell: ShellState, scope: CoroutineScope) {
+    val devices by DeviceManager.devices.collectAsState()
     Column(Modifier.fillMaxSize()) {
-        PageHeader(stringResource(Res.string.page_logs))
-        DeviceTabStrip(
-            deviceIds = shell.logTabs.map { it.deviceId },
-            active = shell.activeLogs,
-            onSelect = shell::showLogs,
-            onClose = shell::closeLogs,
-            onPick = { shell.openLogs(listOf(it)) },
-            openGround = Colors.toolbarBg,
-            // errors that arrived while the tab wasn't the one showing
-            badge = { id ->
-                val tab = shell.logTabs.firstOrNull { it.deviceId == id }
-                val errors = tab?.source?.errors?.collectAsState()?.value ?: 0
-                if (tab == null || id == shell.activeLogs) null else errors - tab.errorsSeen
-            },
-            modifier = Modifier.padding(horizontal = Dimens.pageGutter),
-        )
-        val tab = shell.logTabs.firstOrNull { it.deviceId == shell.activeLogs }
-        // the open tab has seen everything; leaving it keeps that count as where its badge starts
-        if (tab != null) {
-            val errors by tab.source.errors.collectAsState()
-            LaunchedEffect(tab, errors) { tab.errorsSeen = errors }
+        TabbedPageHeader(stringResource(Res.string.page_logs)) {
+            DeviceTabStrip(
+                deviceIds = shell.logTabs.map { it.deviceId },
+                active = shell.activeLogs,
+                onSelect = shell::showLogs,
+                onClose = shell::closeLogs,
+                onPick = { shell.openLogs(listOf(it)) },
+                openGround = Colors.toolbarBg,
+                // live, paused, offline — or not capturing, when the stream ended with the device
+                // still there
+                status = { id ->
+                    val tab = shell.logTabs.firstOrNull { it.deviceId == id }
+                    val running = tab?.source?.running?.collectAsState()?.value ?: false
+                    val paused = tab?.source?.paused?.collectAsState()?.value ?: false
+                    val online = devices.firstOrNull { it.id == id }?.isOnline == true
+                    when {
+                        !online -> TabStatus(Colors.offline, stringResource(Res.string.tab_offline))
+                        !running -> TabStatus(Colors.offline, stringResource(Res.string.tab_stopped))
+                        paused -> TabStatus(Colors.busy, stringResource(Res.string.tab_paused))
+                        else -> TabStatus(Colors.online, stringResource(Res.string.tab_live))
+                    }
+                },
+                pickerTitle = stringResource(Res.string.logs_capture_from),
+                modifier = Modifier.weight(1f).padding(end = Dimens.pageGutter),
+            )
         }
+        val tab = shell.logTabs.firstOrNull { it.deviceId == shell.activeLogs }
         if (tab == null) {
             EmptyState(
                 title = stringResource(Res.string.logs_page_empty),
@@ -122,16 +163,17 @@ private fun LogsPage(shell: ShellState, scope: CoroutineScope) {
 @Composable
 private fun FilesPage(shell: ShellState) {
     Column(Modifier.fillMaxSize()) {
-        PageHeader(stringResource(Res.string.page_files))
-        DeviceTabStrip(
-            deviceIds = shell.fileTabs.map { it.deviceId },
-            active = shell.activeFiles,
-            onSelect = shell::showFiles,
-            onClose = shell::closeFiles,
-            onPick = shell::openFiles,
-            openGround = Colors.toolbarBg,
-            modifier = Modifier.padding(horizontal = Dimens.pageGutter),
-        )
+        TabbedPageHeader(stringResource(Res.string.page_files)) {
+            DeviceTabStrip(
+                deviceIds = shell.fileTabs.map { it.deviceId },
+                active = shell.activeFiles,
+                onSelect = shell::showFiles,
+                onClose = shell::closeFiles,
+                onPick = shell::openFiles,
+                openGround = Colors.toolbarBg,
+                modifier = Modifier.weight(1f).padding(end = Dimens.pageGutter),
+            )
+        }
         val tab = shell.fileTabs.firstOrNull { it.deviceId == shell.activeFiles }
         if (tab == null) {
             EmptyState(

@@ -8,12 +8,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.layout.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.manager.*
 import com.jpage4500.devicemanager.resources.*
+import com.jpage4500.devicemanager.ui.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.dialog.common.*
 import com.jpage4500.devicemanager.ui.theme.*
@@ -97,6 +99,8 @@ fun DeviceDetailsPanel(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(Dimens.gapLarge),
             verticalArrangement = Arrangement.spacedBy(Dimens.gapLarge),
         ) {
+            if (ready) ScreenPreview(device.id)
+
             // the six things done to one device most often
             val actions = listOf(
                 QuickAction(Res.drawable.mirror, stringResource(Res.string.action_mirror)) { WindowManager.openMirror(device.id) },
@@ -131,34 +135,7 @@ fun DeviceDetailsPanel(
                 device.customProperty(Device.CUST_PROP_1)?.let { Fact(stringResource(Res.string.details_custom_1), it) }
             }
 
-            // storage, as a bar — how full it is matters more than the number
-            val free = device.freeSpace
-            val total = device.totalSpace
-            if (free != null && total != null && total > 0) {
-                Column(verticalArrangement = Arrangement.spacedBy(Dimens.liveDot)) {
-                    Row {
-                        Text(
-                            stringResource(Res.string.details_storage),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Colors.secondaryText,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            stringResource(
-                                Res.string.details_storage_free,
-                                Utils.bytesToDisplayString(free),
-                                Utils.bytesToDisplayString(total),
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Colors.secondaryText,
-                        )
-                    }
-                    val used = (1f - free.toFloat() / total).coerceIn(0f, 1f)
-                    Box(Modifier.fillMaxWidth().height(Dimens.liveDot).clip(CircleShape).background(Colors.tableRule)) {
-                        Box(Modifier.fillMaxWidth(used).fillMaxHeight().background(Colors.toolbarIcon))
-                    }
-                }
-            }
+            StorageBar(device.freeSpace, device.totalSpace)
         }
 
         HorizontalDivider(color = Colors.sidebarBorder)
@@ -234,19 +211,93 @@ private fun Fact(label: String, value: String) {
     }
 }
 
-/** a tick box drawn the redesign's way — a green square when checked. Used in the device rows. */
+/**
+ * a still of the device's screen, refreshed on a slow timer while the panel shows it; a click opens
+ * the mirror.
+ *
+ * a one-shot `screencap`, not the mirror's stream: a stream is a poll that would keep running for a
+ * panel someone has only glanced at. Every [PREVIEW_REFRESH_MS] is one PNG for one device, which
+ * the 45-device rig doesn't notice. Nothing shows until the first still arrives, and nothing at all
+ * if the device can't take one.
+ */
 @Composable
-fun RowCheckbox(checked: Boolean, onToggle: () -> Unit, label: String) {
+private fun ScreenPreview(deviceId: String) {
+    var image by remember(deviceId) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(deviceId) {
+        while (true) {
+            val bytes = DeviceManager.screenshot(deviceId).getOrNull()
+            val decoded = bytes?.let { withContext(ioDispatcher) { decodeImage(it) } }
+            if (decoded != null) image = decoded
+            delay(PREVIEW_REFRESH_MS)
+        }
+    }
+    val still = image ?: return
+    val shape = RoundedCornerShape(Dimens.cardCorner)
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Image(
+            bitmap = still,
+            contentDescription = stringResource(Res.string.details_preview),
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .height(Dimens.previewHeight)
+                .aspectRatio(still.width.toFloat() / still.height.coerceAtLeast(1))
+                .clip(shape)
+                .border(Dimens.hairline, Colors.sidebarBorder, shape)
+                .clickable { WindowManager.openMirror(deviceId) },
+        )
+    }
+}
+
+// a glance, not a mirror: often enough to show which app is up, rarely enough to cost nothing
+private const val PREVIEW_REFRESH_MS = 10_000L
+
+/** a tick box drawn the redesign's way — a green square when checked. Used in the device rows. */
+/** storage as a bar, with "N free of M" over it — how full it is matters more than the number. */
+@Composable
+fun StorageBar(free: Long?, total: Long?) {
+    if (free == null || total == null || total <= 0) return
+    Column(verticalArrangement = Arrangement.spacedBy(Dimens.liveDot)) {
+        Row {
+            Text(
+                stringResource(Res.string.details_storage),
+                style = MaterialTheme.typography.bodySmall,
+                color = Colors.secondaryText,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(
+                    Res.string.details_storage_free,
+                    Utils.bytesToDisplayString(free),
+                    Utils.bytesToDisplayString(total),
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = Colors.secondaryText,
+            )
+        }
+        val used = (1f - free.toFloat() / total).coerceIn(0f, 1f)
+        Box(Modifier.fillMaxWidth().height(Dimens.liveDot).clip(CircleShape).background(Colors.tableRule)) {
+            Box(Modifier.fillMaxWidth(used).fillMaxHeight().background(Colors.toolbarIcon))
+        }
+    }
+}
+
+@Composable
+fun RowCheckbox(checked: Boolean, onToggle: () -> Unit, label: String, partial: Boolean = false) {
     val shape = RoundedCornerShape(Dimens.checkboxCorner)
+    val filled = checked || partial
     Box(
         Modifier
             .size(Dimens.checkbox)
             .clip(shape)
-            .background(if (checked) Colors.tabAccent else Colors.listBg)
-            .border(Dimens.hairline, if (checked) Colors.tabAccent else Colors.secondaryText, shape)
+            .background(if (filled) Colors.tabAccent else Colors.listBg)
+            .border(Dimens.hairline, if (filled) Colors.tabAccent else Colors.secondaryText, shape)
             .clickable(onClick = onToggle),
         contentAlignment = Alignment.Center,
     ) {
-        if (checked) AppIcon(Res.drawable.success, size = Dimens.checkboxTick, tint = Colors.onAccent, contentDescription = label)
+        when {
+            checked -> AppIcon(Res.drawable.success, size = Dimens.checkboxTick, tint = Colors.onAccent, contentDescription = label)
+            // some but not all — a dash, the way every select-all box says it
+            partial -> Box(Modifier.size(Dimens.checkboxTick, Dimens.hairline * 2).background(Colors.onAccent))
+        }
     }
 }

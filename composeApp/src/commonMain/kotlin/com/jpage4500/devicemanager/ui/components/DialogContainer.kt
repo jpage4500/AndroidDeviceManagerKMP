@@ -12,6 +12,15 @@ import androidx.compose.ui.window.*
 val LocalDialogTitled = staticCompositionLocalOf { false }
 
 /**
+ * re-fit the dialog's window to the height its form now wants.
+ *
+ * a desktop window sizes itself to the form once, when it opens; a form that grows afterwards — a
+ * rule added to a filter — calls this to grow with it. Nothing on a phone, where an overlay already
+ * follows its content.
+ */
+val LocalDialogFit = staticCompositionLocalOf<() -> Unit> { {} }
+
+/**
  * what a dialog sits in.
  *
  * The desktop gets a separate OS window with a title bar and a close button, which is what the Swing

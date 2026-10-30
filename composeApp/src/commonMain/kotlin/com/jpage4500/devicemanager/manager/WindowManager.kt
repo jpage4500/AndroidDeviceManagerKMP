@@ -31,7 +31,7 @@ enum class WindowKind(val defaultWidth: Dp, val defaultHeight: Dp) {
     DEVICE_LIST(Dimens.windowWidth, Dimens.windowHeight),
     MIRROR(Dimens.mirrorWindowWidth, Dimens.mirrorWindowHeight),
     INFO(Dimens.formWindowWidth, Dimens.formWindowHeight),
-    CONNECT(Dimens.formWindowWidth, Dimens.formWindowHeight),
+    CONNECT(Dimens.connectWindowWidth, Dimens.connectWindowHeight),
     MESSAGE(Dimens.messageWindowWidth, Dimens.messageWindowHeight),
 }
 

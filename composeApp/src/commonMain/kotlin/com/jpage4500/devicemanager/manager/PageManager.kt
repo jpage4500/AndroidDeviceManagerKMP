@@ -6,13 +6,11 @@ import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
 
 /** a page of the desktop shell — what the sidebar switches between. See docs/REDESIGN.md. */
-enum class Page { DEVICES, FILES, LOGS }
+enum class Page { DEVICES, FILES, LOGS, SCRIPTS }
 
 /** one device's log in the Logs page, kept whether or not its tab is the one showing. */
 class LogsTab(val deviceId: String, val source: LogsSource) {
     val view = LogsView()
-    /** [LogsSource.errors] when this tab was last the one showing; the badge is what's arrived since. */
-    var errorsSeen by mutableStateOf(0)
 }
 
 /** the lowest level a log tab shows — the V D I W E buttons, in logcat's order of seriousness. */
@@ -40,10 +38,11 @@ enum class LogLevelFloor(val code: Char, val expression: String?) {
  */
 @Stable
 class LogsView {
-    /** highlights matches rather than filtering to them — ⌘G walks them. */
+    /**
+     * highlights matches rather than filtering to them — ⌘G walks them. Only the level and the
+     * filter pills take lines away.
+     */
     var search by mutableStateOf("")
-    /** an extra expression typed into the filter bar, ANDed with everything else. */
-    var filterText by mutableStateOf("")
     /** the saved filters switched on here, by name. */
     var selectedFilters by mutableStateOf(emptySet<String>())
     /**
@@ -72,6 +71,12 @@ class ShellState(private val scope: CoroutineScope) {
     private val log = LoggerConfig.createLogger("ShellState")
 
     var page by mutableStateOf(Page.DEVICES)
+
+    /** the Settings dialog is open over this window. */
+    var settingsOpen by mutableStateOf(false)
+
+    /** Type text is open over this window, for these devices; empty when it isn't. */
+    var inputFor by mutableStateOf(emptyList<String>())
 
     val logTabs = mutableStateListOf<LogsTab>()
     var activeLogs by mutableStateOf<String?>(null)
@@ -174,6 +179,20 @@ object PageManager {
     fun openLogs(deviceIds: List<String>) = withShell { it.openLogs(deviceIds) }
 
     fun openFiles(deviceId: String) = withShell { it.openFiles(deviceId) }
+
+    /** the Scripts page, with Choose… set to [deviceIds]. */
+    fun openScripts(deviceIds: List<String>) = withShell {
+        ScriptManager.choose(deviceIds)
+        it.page = Page.SCRIPTS
+    }
+
+    /** the Settings dialog, over the window last in front — ⌘, from the menu bar. */
+    fun openSettings() = withShell { it.settingsOpen = true }
+
+    /** Type text for [deviceIds], over the window last in front — the selection bar and ⌘I. */
+    fun openInput(deviceIds: List<String>) {
+        if (deviceIds.isNotEmpty()) withShell { it.inputFor = deviceIds }
+    }
 
     private fun withShell(action: (ShellState) -> Unit) {
         val shell = shells.lastOrNull()

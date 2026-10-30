@@ -22,7 +22,7 @@ data class LogTerm(
     val match: Match,
     val negate: Boolean,
 ) {
-    /** [label] is how the Add Filter dialog names the field; the constant name is its syntax. */
+    /** [label] is how the filter editor names the field; the constant name is its syntax. */
     enum class Field(val label: String) {
         DATE("Date"),
         APP("App"),
@@ -31,6 +31,16 @@ data class LogTerm(
         TAG("Tag"),
         MSG("Message"),
         ANY("Any"),
+        ;
+
+        companion object {
+            /**
+             * the columns the filter editor offers, in the design's order — plus Any, which is what a
+             * text search becomes when it's saved as a filter. Date and Thread only show for a filter
+             * that already uses them.
+             */
+            val OFFERED = listOf(APP, TAG, MSG, LEVEL, ANY)
+        }
     }
 
     enum class Match { EQUALS, STARTS_WITH, ENDS_WITH, CONTAINS }
@@ -111,10 +121,11 @@ data class LogTerm(
 }
 
 /**
- * how a term compares, as the Add Filter dialog offers it.
+ * how a term compares, as the filter editor offers it.
  *
- * The dialog builds terms from dropdowns rather than asking for the syntax; these are the Swing
- * app's own eight options and its own wording (`LogFilterExpression`). Each maps onto a
+ * The editor builds terms from dropdowns rather than asking for the syntax. These are the Swing
+ * app's eight (`LogFilterExpression`), in the redesign's lower-case wording; the editor offers
+ * [OFFERED] and only shows the other two to a filter that already uses them. Each maps onto a
  * [LogTerm.Match] plus a negation.
  */
 enum class LogOperator(val label: String, val match: LogTerm.Match, val negate: Boolean) {
@@ -122,15 +133,18 @@ enum class LogOperator(val label: String, val match: LogTerm.Match, val negate: 
     CONTAINS("contains", LogTerm.Match.CONTAINS, false),
     STARTS_WITH("starts with", LogTerm.Match.STARTS_WITH, false),
     ENDS_WITH("ends with", LogTerm.Match.ENDS_WITH, false),
-    NOT_EQUALS("is NOT", LogTerm.Match.EQUALS, true),
-    NOT_CONTAINS("does NOT contain", LogTerm.Match.CONTAINS, true),
-    NOT_STARTS_WITH("does NOT start with", LogTerm.Match.STARTS_WITH, true),
-    NOT_ENDS_WITH("does NOT end with", LogTerm.Match.ENDS_WITH, true),
+    NOT_EQUALS("is not", LogTerm.Match.EQUALS, true),
+    NOT_CONTAINS("does not contain", LogTerm.Match.CONTAINS, true),
+    NOT_STARTS_WITH("does not start with", LogTerm.Match.STARTS_WITH, true),
+    NOT_ENDS_WITH("does not end with", LogTerm.Match.ENDS_WITH, true),
     ;
 
     companion object {
         fun of(match: LogTerm.Match, negate: Boolean): LogOperator =
             entries.first { it.match == match && it.negate == negate }
+
+        /** the design's six, in its order. */
+        val OFFERED = listOf(EQUALS, NOT_EQUALS, CONTAINS, NOT_CONTAINS, STARTS_WITH, ENDS_WITH)
     }
 }
 
@@ -161,10 +175,20 @@ data class LogTermSpec(
         return if (value.any { it.isWhitespace() }) "$name:\"$body\"" else "$name:$body"
     }
 
+    /**
+     * the term in words — `tag is not "Choreographer"` — for a pill or a tooltip.
+     *
+     * [names] turns an App value, which is a pid, into the process it belongs to when that's known.
+     */
+    fun describe(names: Map<String, String> = emptyMap()): String {
+        val shown = if (field == LogTerm.Field.APP) names[value] ?: value else value
+        return "${field.label.lowercase()} ${operator.label.lowercase()} \"$shown\""
+    }
+
     companion object {
         /** an expression back into rows, so an existing filter can be edited in the dialog. */
         fun parse(expression: String): List<LogTermSpec> = expression
-            .split(LogFilter.AND)
+            .split(LogFilter.AND, LogFilter.OR)
             .mapNotNull { part -> LogTerm.parse(part.trim()) }
             .map { term ->
                 LogTermSpec(
@@ -177,10 +201,14 @@ data class LogTermSpec(
 }
 
 /**
- * a whole filter: several [LogTerm]s joined with `&&`, all of which must pass.
+ * a whole filter: [LogTerm]s joined with `&&`, all of which must pass, or with `||`, any of which may.
  *
- * anything that isn't a `field:pattern` term is treated as a bare `*:*text*` — so typing a word into
- * the filter box does the obvious thing without having to learn the syntax.
+ * Both can appear, and `&&` binds tighter — `tag:A && level:E* || tag:B` is (A and error) or B. The
+ * filter editor only writes one or the other; the mix is for a filter carried over from the Swing
+ * app, whose filters were typed.
+ *
+ * anything that isn't a `field:pattern` term is treated as a bare `*:*text*` — a word on its own
+ * does the obvious thing without the syntax.
  */
 @Serializable
 data class LogFilter(
@@ -188,13 +216,36 @@ data class LogFilter(
     val expression: String,
     val enabled: Boolean = true,
 ) {
+    // alternatives, each a list of terms that must all pass; an empty expression is no alternatives
     @Transient
-    private val terms: List<LogTerm> = parseTerms(expression)
+    private val groups: List<List<LogTerm>> = expression
+        .split(OR)
+        .map { parseTerms(it) }
+        .filter { it.isNotEmpty() }
 
-    fun accepts(entry: LogEntry): Boolean = terms.all { it.accepts(entry) }
+    fun accepts(entry: LogEntry): Boolean = groups.isEmpty() || groups.any { group -> group.all { it.accepts(entry) } }
+
+    /** whether this matches when any one of its terms does — what the editor's All / Any shows. */
+    val matchesAny: Boolean get() = OR in expression
+
+    /** how many rules it has — what a saved filter's pill counts. */
+    val ruleCount: Int get() = LogTermSpec.parse(expression).size
+
+    /**
+     * the whole filter in words, its rules joined by "and" or "or" as the editor joins them — the
+     * raw expression where it holds something the editor can't (a bare word, `&&` and `||` mixed).
+     */
+    fun describe(names: Map<String, String> = emptyMap()): String {
+        val specs = LogTermSpec.parse(expression)
+        val parts = expression.split(AND, OR).count { it.isNotBlank() }
+        val mixed = AND in expression && OR in expression
+        if (specs.isEmpty() || specs.size != parts || mixed) return expression
+        return specs.joinToString(if (matchesAny) " or " else " and ") { it.describe(names) }
+    }
 
     companion object {
         const val AND = "&&"
+        const val OR = "||"
 
         /** the presets the Swing app puts at the top of the list, in its own order and syntax. */
         val BUILT_IN = listOf(

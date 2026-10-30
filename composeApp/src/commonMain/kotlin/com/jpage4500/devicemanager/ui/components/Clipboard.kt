@@ -18,3 +18,11 @@ fun rememberClipboardCopy(): (String) -> Unit {
     val clipboard = LocalClipboardManager.current
     return remember(clipboard) { { text -> clipboard.setText(AnnotatedString(text)) } }
 }
+
+/** read plain text off the clipboard; null when there is none. */
+@Suppress("DEPRECATION")
+@Composable
+fun rememberClipboardPaste(): () -> String? {
+    val clipboard = LocalClipboardManager.current
+    return remember(clipboard) { { clipboard.getText()?.text } }
+}
