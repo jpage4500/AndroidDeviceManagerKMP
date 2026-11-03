@@ -209,7 +209,7 @@ private fun BatteryBar(level: Int) {
     }
 }
 
-private fun batteryColor(level: Int): Color = when {
+fun batteryColor(level: Int): Color = when {
     level > 30 -> Colors.online
     level > 15 -> Colors.busy
     else -> Colors.error

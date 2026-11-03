@@ -40,10 +40,10 @@ fun ApplicationScope.AppTray(onQuit: () -> Unit) {
         Separator()
         devices.forEach { device ->
             Menu(device.displayName) {
-                Item("Mirror", enabled = device.isReady) { WindowManager.openMirror(device.serial) }
+                Item("Mirror", enabled = device.isReady) { MirrorLauncher.mirror(device.id) }
                 Item("Browse", enabled = device.isReady) { WindowManager.openFiles(device.id) }
                 Item("Logs", enabled = device.isReady) { WindowManager.openLogs(device.id) }
-                Item("Details") { WindowManager.openInfo(device.serial) }
+                Item("Details") { PageManager.openDetails(device.id) }
             }
         }
         if (devices.isNotEmpty()) Separator()

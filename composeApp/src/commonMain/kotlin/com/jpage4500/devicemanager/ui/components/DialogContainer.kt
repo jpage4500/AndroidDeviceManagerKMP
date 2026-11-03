@@ -1,6 +1,7 @@
 package com.jpage4500.devicemanager.ui.components
 
 import androidx.compose.runtime.*
+import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.*
 
 /**
@@ -40,11 +41,17 @@ val LocalDialogFit = staticCompositionLocalOf<() -> Unit> { {} }
  */
 expect val dialogsAreWindows: Boolean
 
+/**
+ * [size] opens a desktop window at that size rather than packed to its content — for a window whose
+ * content fills whatever it's given (Settings' tabs) and so has no size of its own to pack to.
+ * ignored on a phone.
+ */
 @Composable
 expect fun DialogContainer(
     title: String,
     onDismiss: () -> Unit,
     onEnter: (() -> Unit)?,
+    size: DpSize? = null,
     content: @Composable () -> Unit,
 )
 

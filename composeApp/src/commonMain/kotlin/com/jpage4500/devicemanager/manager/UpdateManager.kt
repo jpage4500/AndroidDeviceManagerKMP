@@ -3,6 +3,7 @@ package com.jpage4500.devicemanager.manager
 import com.jpage4500.devicemanager.*
 import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.util.*
+import kotlinx.coroutines.*
 import kotlinx.serialization.*
 
 private val log = LoggerConfig.createLogger("UpdateManager")
@@ -20,6 +21,12 @@ private val log = LoggerConfig.createLogger("UpdateManager")
  * offer is a link to the release page, on every platform.
  */
 object UpdateManager {
+    private const val CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
+    private const val TICK_MS = 60 * 60 * 1000L
+
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private var backgroundJob: Job? = null
+
     private const val LATEST_RELEASE_URL =
         "https://api.github.com/repos/jpage4500/AndroidDeviceManagerRelease/releases/latest"
 
@@ -34,6 +41,33 @@ object UpdateManager {
         @SerialName("tag_name") val tagName: String? = null,
         @SerialName("html_url") val htmlUrl: String? = null,
     )
+
+    /**
+     * look for a release once a day while Settings › General's Check for updates is on, and say so
+     * with a toast when there is one — the Swing app's scheduled check. Safe to call more than once.
+     *
+     * the timer ticks hourly and checks [AppPref.LAST_UPDATE_CHECK] rather than sleeping a day, so a
+     * laptop that slept through the night still checks in the morning, and a restart doesn't check
+     * again if it's been less than a day.
+     */
+    fun startBackgroundChecks() {
+        if (backgroundJob != null) return
+        backgroundJob = scope.launch {
+            while (isActive) {
+                val due = DateUtils.nowMs() - SettingsManager.getLong(AppPref.LAST_UPDATE_CHECK) >= CHECK_INTERVAL_MS
+                if (due && SettingsManager.getBoolean(AppPref.CHECK_UPDATES)) {
+                    val result = checkForUpdates()
+                    log.d("startBackgroundChecks: $result")
+                    if (result is Result.Available) {
+                        ToastManager.showToast("Version ${result.version} is available", actionLabel = "Open") {
+                            PlatformUtils.openUrl(result.url)
+                        }
+                    }
+                }
+                delay(TICK_MS)
+            }
+        }
+    }
 
     suspend fun checkForUpdates(): Result {
         SettingsManager.setLong(AppPref.LAST_UPDATE_CHECK, DateUtils.nowMs())

@@ -1,5 +1,6 @@
 package com.jpage4500.devicemanager.util
 
+import com.jpage4500.devicemanager.adb.*
 import com.jpage4500.devicemanager.data.*
 import kotlinx.coroutines.*
 import java.awt.Desktop
@@ -66,28 +67,10 @@ actual object ScriptHost {
             }
         }
 
-    /**
-     * `PATH` with the usual homes of `adb` in front, and the app's adb server passed on.
-     *
-     * an app started from the Dock or Finder gets launchd's bare `PATH`, which has no Android SDK on
-     * it — a script that works in a terminal would fail here with "adb: not found".
-     */
+    /** the app's adb server, as the device table reads it — see [HostPath]. */
     private fun environment(env: MutableMap<String, String>) {
-        val home = System.getProperty("user.home")
-        val candidates = listOfNotNull(
-            System.getenv("ANDROID_HOME")?.let { "$it/platform-tools" },
-            System.getenv("ANDROID_SDK_ROOT")?.let { "$it/platform-tools" },
-            "$home/Library/Android/sdk/platform-tools",
-            "$home/Android/Sdk/platform-tools",
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-        ).filter { File(it).isDirectory }
-        val key = env.keys.firstOrNull { it.equals("PATH", ignoreCase = true) } ?: "PATH"
-        val current = env[key].orEmpty().split(File.pathSeparator).filter { it.isNotEmpty() }
-        env[key] = (candidates.filterNot { it in current } + current).joinToString(File.pathSeparator)
-        // adb reads this for which server to talk to — the same one the device table comes from
-        val host = SettingsManager.getString(AppPref.ADB_SERVER_HOST)
-        if (!host.isNullOrBlank() && host != "127.0.0.1" && host != "localhost") env["ANDROID_ADB_SERVER_ADDRESS"] = host
+        val host = SettingsManager.getString(AppPref.ADB_SERVER_HOST)?.takeIf { it.isNotBlank() } ?: AdbServer.LOCAL.host
+        HostPath.apply(env, AdbServer(host, SettingsManager.getInt(AppPref.ADB_SERVER_PORT)))
     }
 
     actual fun create(name: String): Script? {

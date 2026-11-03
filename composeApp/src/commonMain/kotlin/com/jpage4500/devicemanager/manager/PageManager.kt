@@ -2,11 +2,12 @@ package com.jpage4500.devicemanager.manager
 
 import androidx.compose.foundation.lazy.*
 import androidx.compose.runtime.*
+import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
 
 /** a page of the desktop shell — what the sidebar switches between. See docs/REDESIGN.md. */
-enum class Page { DEVICES, FILES, LOGS, SCRIPTS }
+enum class Page { DEVICES, FILES, LOGS, INPUT, COMMANDS, SCRIPTS }
 
 /** one device's log in the Logs page, kept whether or not its tab is the one showing. */
 class LogsTab(val deviceId: String, val source: LogsSource) {
@@ -35,6 +36,7 @@ enum class LogLevelFloor(val code: Char, val expression: String?) {
  * kept by the tab rather than by `LogsScreen`, which is created again each time its tab is opened —
  * so switching to another device's log and back leaves this one as it was, down to the scroll.
  * Saved filters are shared by every tab ([LogFilterStore]); which of them are *on* is this tab's.
+ * A new tab starts with the filters and level last set in any tab, which are kept across launches.
  */
 @Stable
 class LogsView {
@@ -43,14 +45,29 @@ class LogsView {
      * filter pills take lines away.
      */
     var search by mutableStateOf("")
-    /** the saved filters switched on here, by name. */
-    var selectedFilters by mutableStateOf(emptySet<String>())
+    /** the saved filters switched on here, by name — remembered for the next tab opened. */
+    private var _selectedFilters by mutableStateOf(
+        JsonUtils.stringToList<String>(SettingsManager.getString(AppPref.LOGS_SELECTED_FILTERS)).toSet()
+    )
+    var selectedFilters: Set<String>
+        get() = _selectedFilters
+        set(value) {
+            _selectedFilters = value
+            SettingsManager.setString(AppPref.LOGS_SELECTED_FILTERS, JsonUtils.toJson(value.toList()))
+        }
     /**
      * filters made by a right-click — Show only, Hide — as expressions. This tab's alone and not
      * saved; clicking one's pill saves it as a filter.
      */
     var quick by mutableStateOf(emptyList<String>())
-    var floor by mutableStateOf(LogLevelFloor.VERBOSE)
+    /** the level buttons' choice — remembered for the next tab opened, like [selectedFilters]. */
+    private var _floor by mutableStateOf(SettingsManager.getEnum<LogLevelFloor>(AppPref.LOGS_LEVEL_FLOOR))
+    var floor: LogLevelFloor
+        get() = _floor
+        set(value) {
+            _floor = value
+            SettingsManager.setEnum(AppPref.LOGS_LEVEL_FLOOR, value)
+        }
     var autoScroll by mutableStateOf(true)
     val listState = LazyListState()
 }
@@ -72,11 +89,20 @@ class ShellState(private val scope: CoroutineScope) {
 
     var page by mutableStateOf(Page.DEVICES)
 
+    /** the Devices page's details panel is open; it shows whichever device leads the selection. */
+    var detailsOpen by mutableStateOf(false)
+
     /** the Settings dialog is open over this window. */
     var settingsOpen by mutableStateOf(false)
 
-    /** Type text is open over this window, for these devices; empty when it isn't. */
-    var inputFor by mutableStateOf(emptyList<String>())
+    /** Share Devices is open over this window. */
+    var shareOpen by mutableStateOf(false)
+
+    /** the tab Settings opens on, when something asked for one; null for the last one shown. */
+    var settingsTab by mutableStateOf<SettingsTab?>(null)
+
+    /** the scrcpy options are open over this window before mirroring these devices; empty when not. */
+    var scrcpyFor by mutableStateOf(emptyList<String>())
 
     val logTabs = mutableStateListOf<LogsTab>()
     var activeLogs by mutableStateOf<String?>(null)
@@ -134,6 +160,19 @@ class ShellState(private val scope: CoroutineScope) {
         if (activeFiles == deviceId) activeFiles = neighbour(fileTabs.map { it.deviceId }, index)
     }
 
+    /**
+     * ⌘W: close the tab showing on Logs or Files. False when there's none — another page, or no
+     * tabs left — and the window itself is what ⌘W closes.
+     */
+    fun closeActiveTab(): Boolean {
+        when (page) {
+            Page.LOGS -> activeLogs?.let { closeLogs(it); return true }
+            Page.FILES -> activeFiles?.let { closeFiles(it); return true }
+            else -> {}
+        }
+        return false
+    }
+
     /** the window is going: every stream it started goes with it. */
     fun dispose() {
         logTabs.forEach { it.source.stop() }
@@ -176,22 +215,50 @@ object PageManager {
         shells.add(shell)
     }
 
+    /** the Devices page — ⌘D from the menu bar. */
+    fun openDevices() = withShell { it.page = Page.DEVICES }
+
+    /** the Devices page with [deviceId] selected and its details panel open — a row's menu, the tray. */
+    fun openDetails(deviceId: String) = withShell {
+        DeviceManager.select(deviceId)
+        it.page = Page.DEVICES
+        it.detailsOpen = true
+    }
+
     fun openLogs(deviceIds: List<String>) = withShell { it.openLogs(deviceIds) }
+
+    /** ⌘W in the window last in front: its open tab, if it's showing one — see [ShellState.closeActiveTab]. */
+    fun closeActiveTab(): Boolean = shells.lastOrNull()?.closeActiveTab() ?: false
 
     fun openFiles(deviceId: String) = withShell { it.openFiles(deviceId) }
 
-    /** the Scripts page, with Choose… set to [deviceIds]. */
+    /** the Scripts page, running on [deviceIds]. */
     fun openScripts(deviceIds: List<String>) = withShell {
-        ScriptManager.choose(deviceIds)
+        if (deviceIds.isNotEmpty()) ScriptManager.choose(deviceIds)
         it.page = Page.SCRIPTS
     }
 
     /** the Settings dialog, over the window last in front — ⌘, from the menu bar. */
-    fun openSettings() = withShell { it.settingsOpen = true }
+    fun openSettings(tab: SettingsTab? = null) = withShell {
+        it.settingsTab = tab
+        it.settingsOpen = true
+    }
 
-    /** Type text for [deviceIds], over the window last in front — the selection bar and ⌘I. */
-    fun openInput(deviceIds: List<String>) {
-        if (deviceIds.isNotEmpty()) withShell { it.inputFor = deviceIds }
+    /** the scrcpy options with Mirror and Cancel, before [deviceIds] go to scrcpy — see [MirrorLauncher]. */
+    fun openScrcpyPrompt(deviceIds: List<String>) {
+        if (deviceIds.isNotEmpty()) withShell { it.scrcpyFor = deviceIds }
+    }
+
+    /** the Input page, typing on [deviceIds] — the selection bar's Type text and ⌘I. */
+    fun openInput(deviceIds: List<String>) = withShell {
+        if (deviceIds.isNotEmpty()) InputManager.choose(deviceIds)
+        it.page = Page.INPUT
+    }
+
+    /** the Commands page, running on [deviceIds] — the selection bar and a row's menu. */
+    fun openCommands(deviceIds: List<String>) = withShell {
+        if (deviceIds.isNotEmpty()) CommandManager.choose(deviceIds)
+        it.page = Page.COMMANDS
     }
 
     private fun withShell(action: (ShellState) -> Unit) {

@@ -23,17 +23,25 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun AboutDialog(onDismiss: () -> Unit) {
+    BaseDialog(
+        titleRes = Res.string.settings_about,
+        icon = Res.drawable.about,
+        onDismiss = onDismiss,
+    ) {
+        AboutBody()
+    }
+}
+
+/** the rows on their own — Settings' About tab on the desktop, and [AboutDialog]'s body. */
+@Composable
+fun AboutBody() {
     var support by remember { mutableStateOf(false) }
     var updates by remember { mutableStateOf(false) }
     var viewLogs by remember { mutableStateOf(false) }
 
     val debug by SettingsManager.getBoolAsState(AppPref.DEBUG_MODE)
 
-    BaseDialog(
-        titleRes = Res.string.settings_about,
-        icon = Res.drawable.about,
-        onDismiss = onDismiss,
-    ) {
+    Column {
         SettingItem(
             icon = Res.drawable.edit,
             labelRes = Res.string.about_support,

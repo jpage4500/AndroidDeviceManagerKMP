@@ -113,6 +113,16 @@ object DeviceTableState {
         SettingsManager.setEnumSet(AppPref.HIDDEN_COLUMNS, next)
     }
 
+    /** hide exactly [columns] — Settings › Devices › Columns. never all of them, as [toggleHidden]. */
+    fun setHidden(columns: Set<DeviceColumn>) {
+        if (columns.size >= DeviceColumn.entries.size) {
+            log.d("setHidden: refusing to hide every column")
+            return
+        }
+        _hidden.value = columns
+        SettingsManager.setEnumSet(AppPref.HIDDEN_COLUMNS, columns)
+    }
+
     /**
      * widen (or narrow) [column] to whatever its widest value needs.
      *

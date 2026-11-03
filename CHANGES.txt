@@ -197,3 +197,56 @@
 - Logs: the status line no longer repeats the device name or shows lines per second and devices capturing
 - Logs: the filter editor grows as rules are added, then scrolls
 - Logs: a saved filter can be deleted from the Add filter panel
+- Logs: an App rule can be picked from the apps in the log, or typed by name
+- Logs: the filter editor no longer has a Delete button
+- Logs: Save asks whether to save the selected lines, the visible lines or the whole log
+- Logs: Save asks where to put the file, then offers to open it or show it in Finder
+- Settings: the desktop window has a tab per area across the top, like the Swing app
+- Settings: the log buffer holds 200,000 lines by default
+- Settings: full refresh can be set as far out as 600 minutes
+- Settings: choose which device columns show, or reset the table layout
+- Desktop: looks for a new release once a day and says when there is one
+- Files: downloads and screenshots go to ~/Downloads, or a folder picked in Settings
+- Mirror: open devices in scrcpy instead of the built-in mirror
+- Logs: fixed a "+" disappearing from a filter value when the filter is saved
+- Logs: New filter from this on an App cell names the app instead of its process id
+- Input: a new page types text or presses keys on every chosen device at once
+- Commands: a new page runs an adb shell command on each chosen device, with a result per device
+- Commands: saved commands, recent ones and the Swing app's commands.txt are listed beside the field
+- Devices: Type text and Commands open their pages with the selection chosen
+- Desktop: the sidebar's pages scroll when the window is too short to show them all
+
+10/31
+- Desktop: toasts appear in the status bar instead of floating over the table
+- Logs: a new tab starts with the level and filters last chosen
+- Logs: picking a device to capture from closes the device list
+- Logs and Files: ⌘W closes the open tab before it closes the window
+- Desktop: ⌘D shows the Devices page
+- Devices: view the devices as icons, from a toggle beside the search box
+
+11/01
+- Devices: the details panel says when a device's screen is off instead of polling a black screen
+- Devices: the details panel shows the last screen seen at once while a fresh one loads
+- Devices: fixed the details panel jumping down when the screen preview appeared
+- Devices: the screen preview starts in the device's own shape, landscape included
+- Devices: a refresh button on the screen preview takes a new screenshot now
+- Devices: the Details button moved beside the List / Icons toggle
+- Devices: removed the action buttons from the details panel
+- Commands: fixed recent commands growing taller when hovered
+- Devices: the icon view sizes itself to fit every device until the size slider is moved
+- Devices: icon view tiles show more about each device the larger they are
+- Devices: the details panel's Restart and Disconnect are icon buttons with tooltips
+- Devices: the details panel lists every device property, replacing the Device Details window
+- Devices: click a property in the details panel to copy it
+- Devices: the details panel scrolls back to the top when another device is selected
+- Devices: search highlights matching text instead of hiding the devices that don't match
+- Devices: typing anywhere on the page searches, and Esc clears the search
+- Devices: a selected icon view tile colours the phone's frame instead of the tile's background
+- fixed a backslash showing before apostrophes in messages
+- Scripts, Commands and Input: always run on devices you pick, starting from the Devices selection
+- Logs, Files, Scripts, Commands and Input: one device checklist with Select all behind every +
+- Desktop: Share Devices serves this computer's devices to the phone app, paired by QR code
+- Files: fixed folders on a Swing app's server listing as files with no date
+- Dialogs: fixed Esc not closing a dialog with a table in it
+- Devices: the table's columns fit its width instead of scrolling sideways
+- Devices: the Model column is gone from two-line rows, which show it under the name

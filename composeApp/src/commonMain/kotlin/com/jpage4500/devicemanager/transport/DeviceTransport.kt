@@ -103,6 +103,16 @@ interface DeviceTransport {
     suspend fun screenshot(serial: String): Result<ByteArray>
 
     /**
+     * a still for a preview that refreshes on its own: the screen, or [ScreenStill.Off] when the
+     * display is asleep, so a timer doesn't keep paying for PNGs of a black screen.
+     *
+     * by default a plain [screenshot] — a transport that can't ask about the display in the same
+     * round trip never reports it off. The adb routes run [CMD_PREVIEW_STILL].
+     */
+    suspend fun previewStill(serial: String): Result<ScreenStill> =
+        screenshot(serial).map { ScreenStill.Shot(it) }
+
+    /**
      * the same screen, pushed rather than asked for, with input going back the same way.
      *
      * null where the only way to see a screen is to ask for one frame at a time, which is what
@@ -341,4 +351,57 @@ object DeviceInput {
     // and the two a keyboard sends that aren't text: `input text` carries neither
     const val KEY_ENTER = 66
     const val KEY_DEL = 67
+
+    // the rest of the Input page's keys
+    const val KEY_DPAD_UP = 19
+    const val KEY_DPAD_DOWN = 20
+    const val KEY_DPAD_LEFT = 21
+    const val KEY_DPAD_RIGHT = 22
+    const val KEY_TAB = 61
+    const val KEY_ESCAPE = 111
+    const val KEY_WAKEUP = 224
+}
+
+/** what [DeviceTransport.previewStill] saw: a PNG, or a display that's asleep. */
+sealed interface ScreenStill {
+    class Shot(val png: ByteArray) : ScreenStill
+    data object Off : ScreenStill
+}
+
+private const val SCREEN_OFF_MARK = "SCREEN_OFF"
+
+/**
+ * one exec that asks the power service before paying for a capture: `SCREEN_OFF` when the display
+ * is asleep or dozing, the `screencap` PNG otherwise.
+ *
+ * it matches *off* rather than *on*, so a build whose `dumpsys power` words it differently — or one
+ * with no `grep` at all, before Android 6 — falls through to the screenshot instead of reporting a
+ * lit screen as dark. `mWakefulness` is 4.2 and later, `mScreenOn` the older field. The grep runs on
+ * the device so `dumpsys`'s tens of KB never cross the wire, and skipping the capture saves the PNG
+ * encode, which is most of a `screencap -p`'s time.
+ *
+ * **not `grep -q`**: it stops reading at the first match, `dumpsys` then fails on the closed pipe
+ * and prints "Failed to write while dumping service power: Broken pipe" — and `exec:` carries
+ * stderr in the same stream, so the marker arrived behind that line (seen on a dozing Pixel 9).
+ * A plain grep reads to the end, and `dumpsys`'s stderr is discarded besides.
+ */
+const val CMD_PREVIEW_STILL =
+    "dumpsys power 2>/dev/null | grep -E 'mWakefulness=(Asleep|Dozing)|mScreenOn=false' >/dev/null" +
+        " && echo $SCREEN_OFF_MARK || screencap -p"
+
+private val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)
+
+/**
+ * read what [CMD_PREVIEW_STILL] printed: a PNG by its signature, the marker on a line of its own,
+ * and anything else a failure that says what came back instead.
+ */
+fun parsePreviewStill(bytes: ByteArray): Result<ScreenStill> {
+    if (bytes.size > PNG_SIGNATURE.size && PNG_SIGNATURE.indices.all { bytes[it] == PNG_SIGNATURE[it] }) {
+        return Result.success(ScreenStill.Shot(bytes))
+    }
+    // short enough to be text and not a picture: look for the marker on any line
+    val text = if (bytes.size < 4096) bytes.decodeToString() else ""
+    if (text.lineSequence().any { it.trim() == SCREEN_OFF_MARK }) return Result.success(ScreenStill.Off)
+    val what = text.trim().take(120).ifEmpty { "${bytes.size} bytes" }
+    return Result.failure(IllegalStateException("not a screenshot: $what"))
 }

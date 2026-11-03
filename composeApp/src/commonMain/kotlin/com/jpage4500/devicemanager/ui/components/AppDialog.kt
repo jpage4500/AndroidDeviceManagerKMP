@@ -40,6 +40,7 @@ fun AppDialog(
     confirmEnabled: Boolean = true,
     onConfirm: (() -> Unit)? = null,
     extraButton: (@Composable () -> Unit)? = null,
+    cancelLabel: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val confirm = onConfirm?.takeIf { confirmEnabled }
@@ -77,7 +78,7 @@ fun AppDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 extraButton?.invoke()
                 Spacer(Modifier.weight(1f))
-                DialogButton(stringResource(Res.string.cancel), onClick = onDismiss)
+                DialogButton(cancelLabel ?: stringResource(Res.string.cancel), onClick = onDismiss)
                 if (onConfirm != null && confirmLabel != null) {
                     Spacer(Modifier.width(Dimens.gap))
                     DialogButton(confirmLabel, enabled = confirmEnabled, primary = true, onClick = onConfirm)
@@ -121,7 +122,8 @@ fun DialogButton(
                 AppIcon(icon, size = Dimens.icon, tint = text)
                 Spacer(Modifier.width(Dimens.gap))
             }
-            Text(label, style = MaterialTheme.typography.bodySmall, color = text)
+            // one line always: a button squeezed narrow should clip, not grow a second line
+            Text(label, style = MaterialTheme.typography.bodySmall, color = text, maxLines = 1, softWrap = false)
         }
     }
 }
@@ -145,12 +147,16 @@ fun AppTextField(
     isError: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     onSubmit: (() -> Unit)? = null,
+    // a password's dots, or nothing
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    textStyle: TextStyle = MaterialTheme.typography.bodySmall,
 ) {
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodySmall.copy(color = Colors.primaryText),
+        visualTransformation = visualTransformation,
+        textStyle = textStyle.copy(color = Colors.primaryText),
         cursorBrush = SolidColor(Colors.primaryText),
         keyboardActions = KeyboardActions(onDone = { onSubmit?.invoke() }),
         keyboardOptions = KeyboardOptions(
@@ -317,25 +323,53 @@ fun FilterField(
         modifier = modifier.then(
             if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
         ),
-        decorationBox = { field ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(Res.drawable.filter, size = 11.dp, tint = Colors.secondaryText)
-                Spacer(Modifier.width(5.dp))
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) {
-                        Text(hint, style = MaterialTheme.typography.bodySmall, color = Colors.secondaryText)
-                    }
-                    field()
-                }
-                if (value.isNotEmpty()) {
-                    AppIcon(
-                        res = Res.drawable.close,
-                        size = 11.dp,
-                        tint = Colors.secondaryText,
-                        modifier = Modifier.plainClickable { onValueChange("") },
-                    )
-                }
-            }
-        },
+        decorationBox = { field -> FilterDecoration(value.isEmpty(), hint, { onValueChange("") }, field) },
     )
+}
+
+/**
+ * the same field holding its caret too — for a caller that writes into it from outside, where the
+ * String version would leave the caret wherever it was and the next key would land before the text.
+ */
+@Composable
+fun FilterField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    hint: String,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+) {
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall.copy(color = Colors.primaryText),
+        cursorBrush = SolidColor(Colors.primaryText),
+        modifier = modifier.then(
+            if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier
+        ),
+        decorationBox = { field -> FilterDecoration(value.text.isEmpty(), hint, { onValueChange(TextFieldValue()) }, field) },
+    )
+}
+
+@Composable
+private fun FilterDecoration(empty: Boolean, hint: String, onClear: () -> Unit, field: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        AppIcon(Res.drawable.filter, size = 11.dp, tint = Colors.secondaryText)
+        Spacer(Modifier.width(5.dp))
+        Box(Modifier.weight(1f)) {
+            if (empty) {
+                Text(hint, style = MaterialTheme.typography.bodySmall, color = Colors.secondaryText)
+            }
+            field()
+        }
+        if (!empty) {
+            AppIcon(
+                res = Res.drawable.close,
+                size = 11.dp,
+                tint = Colors.secondaryText,
+                modifier = Modifier.plainClickable(onClick = onClear),
+            )
+        }
+    }
 }

@@ -87,7 +87,6 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
     val title = when (val content = appWindow.content) {
         is WindowContent.DeviceList -> Branding.appName
         is WindowContent.Mirror -> DeviceManager.nameOf(content.deviceId)
-        is WindowContent.Info -> DeviceManager.nameOf(content.deviceId)
         is WindowContent.Connect -> stringResource(Res.string.connect_window_title)
         is WindowContent.Message -> "Message Viewer"
     }
@@ -138,7 +137,6 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
         when (val content = appWindow.content) {
             is WindowContent.DeviceList -> App(compact = false)
             is WindowContent.Mirror -> AppTheme { MirrorScreen(content.deviceId) }
-            is WindowContent.Info -> AppTheme { DeviceInfoScreen(content.deviceId) }
             is WindowContent.Connect -> AppTheme {
                 ConnectScreen(onClose = { WindowManager.close(appWindow.id) })
             }
@@ -171,7 +169,7 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
                 WindowManager.openWindow(WindowContent.DeviceList)
             }
             Item(stringResource(Res.string.menu_mirror_device), shortcut = KeyShortcut(Key.M, meta = isMac(), ctrl = !isMac())) {
-                DeviceManager.selectedId.value?.let { WindowManager.openMirror(it, appWindow.id) }
+                DeviceManager.selectedId.value?.let { MirrorLauncher.mirror(it) }
             }
             if (!isMac()) {
                 Item(stringResource(Res.string.menu_settings), shortcut = KeyShortcut(Key.Comma, ctrl = true)) {
@@ -180,7 +178,25 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
             }
             Separator()
             Item(stringResource(Res.string.menu_close_window), shortcut = KeyShortcut(Key.W, meta = isMac(), ctrl = !isMac())) {
-                WindowManager.close(appWindow.id)
+                // a device-list window closes its open Logs or Files tab first, as a browser does;
+                // it's the window last in front, since this shortcut only reaches the focused one
+                val closedTab = appWindow.content is WindowContent.DeviceList && PageManager.closeActiveTab()
+                if (!closedTab) WindowManager.close(appWindow.id)
+            }
+        }
+        Menu(stringResource(Res.string.menu_view), mnemonic = 'V') {
+            Item(stringResource(Res.string.devices), shortcut = shortcut(Key.D)) {
+                PageManager.openDevices()
+            }
+            Separator()
+            // the Devices page's List / Icons toggle; picking one also brings that page up
+            Item(stringResource(Res.string.menu_view_list)) {
+                SettingsManager.setString(AppPref.DEVICES_VIEW, DeviceView.LIST.name)
+                PageManager.openDevices()
+            }
+            Item(stringResource(Res.string.menu_view_icons)) {
+                SettingsManager.setString(AppPref.DEVICES_VIEW, DeviceView.ICONS.name)
+                PageManager.openDevices()
             }
         }
         Menu(stringResource(Res.string.menu_device), mnemonic = 'D') {

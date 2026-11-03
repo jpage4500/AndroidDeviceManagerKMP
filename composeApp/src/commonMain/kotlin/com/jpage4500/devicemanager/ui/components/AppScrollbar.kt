@@ -2,6 +2,7 @@ package com.jpage4500.devicemanager.ui.components
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 
@@ -14,6 +15,10 @@ import androidx.compose.ui.*
  */
 @Composable
 expect fun AppVerticalScrollbar(listState: LazyListState, modifier: Modifier = Modifier)
+
+/** the same bar for a lazy grid — the Devices icon view. */
+@Composable
+expect fun AppVerticalScrollbar(gridState: LazyGridState, modifier: Modifier = Modifier)
 
 /** the same bar for anything scrolled by `Modifier.verticalScroll` — a message, a settings pane. */
 @Composable

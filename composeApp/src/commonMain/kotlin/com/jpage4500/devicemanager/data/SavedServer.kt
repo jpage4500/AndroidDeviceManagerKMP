@@ -95,7 +95,7 @@ data class SavedServer(
             )
         }
 
-        /** the same string, for when this app grows a Share Server of its own. */
+        /** the same string, written — what Share Devices puts in its QR code and on the clipboard. */
         fun toConnectionString(server: SavedServer): String {
             val json = JsonUtils.toJson(
                 ConnectionPayload(server.host, server.port, server.token, server.name)

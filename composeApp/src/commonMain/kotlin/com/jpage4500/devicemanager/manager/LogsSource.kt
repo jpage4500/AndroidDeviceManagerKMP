@@ -23,7 +23,8 @@ import org.jetbrains.compose.resources.getString
 class LogsSource(private val deviceId: String) {
     private val log = LoggerConfig.createLogger("LogsSource")
 
-    private val maxLines = SettingsManager.getInt(AppPref.LOGS_MAX_LINES).coerceAtLeast(1_000)
+    // the Swing app's bounds for the same setting
+    private val maxLines = SettingsManager.getInt(AppPref.LOGS_MAX_LINES).coerceIn(MIN_BUFFER, MAX_BUFFER)
 
     /**
      * how far past [maxLines] the buffer may grow while the window is reading history.
@@ -132,6 +133,9 @@ class LogsSource(private val deviceId: String) {
      * fills the buffer, like [setFilter].
      */
     fun count(predicate: (LogEntry) -> Boolean): Int = buffer.count(predicate)
+
+    /** every pid among the held lines — which apps the log has actually heard from. Like [count]. */
+    fun pids(): Set<String> = buffer.mapNotNullTo(HashSet()) { it.pid }
 
     /**
      * keep the oldest lines rather than trimming them, because the window is reading them.
@@ -274,30 +278,36 @@ class LogsSource(private val deviceId: String) {
     }
 
     /**
-     * write what is on screen to a file in the app's `logs` folder.
+     * write [entries] to [path], one logcat line each — which lines is the caller's choice: the
+     * selection, what the filters show, or [all].
      *
-     * what is *on screen*, not what is in the buffer: someone saving a filtered log wants the filter
-     * applied, which is the whole reason they narrowed it.
-     *
-     * @return the file name, or null if it couldn't be written
+     * the text is built off the UI thread; 50,000 lines joined is a visible pause otherwise.
      */
-    suspend fun save(entries: List<LogEntry>, name: String): String? {
-        val fileName = "$name-${DateUtils.formatDate("yyyyMMdd-HHmmss")}.txt"
+    suspend fun save(entries: List<LogEntry>, path: String): Boolean {
+        val fileName = path.substringAfterLast('/').substringAfterLast('\\')
         StatusManager.post("Saving $fileName", progress = 0)
-        val body = entries.joinToString("\n") { it.asLine() }
-        val ok = StorageManager.writeBytes(PATH_LOGS, fileName, body.encodeToByteArray())
+        val body = withContext(Dispatchers.Default) { entries.joinToString("\n") { it.asLine() }.encodeToByteArray() }
+        val ok = writeLocalFile(path, body)
+        log.d("save: ${entries.size} lines to $path: $ok")
         StatusManager.post(
             if (ok) "Saved $fileName" else "Couldn't save $fileName",
             progress = 100,
             isError = !ok,
         )
-        return fileName.takeIf { ok }
+        return ok
     }
 
+    /** every held line, filtered or not — Save's Entire log buffer. Like [count]. */
+    fun all(): List<LogEntry> = buffer.toList()
+
     companion object {
+        // the range Settings › Logs accepts for the buffer — the Swing app's LogsTableModel bounds
+        const val MIN_BUFFER = 10_000
+        const val MAX_BUFFER = 9_999_999
+
         // -o PID,NAME needs Android 8+; the bare `ps` fallback puts the name last on each line,
         // which the parser handles either way
-        private const val CMD_PS = "ps -A -o PID,NAME 2>/dev/null || ps"
+        internal const val CMD_PS = "ps -A -o PID,NAME 2>/dev/null || ps"
         private const val APPS_REFRESH_MS = 30_000L
 
         /**

@@ -274,17 +274,29 @@ object DeviceManager {
     suspend fun screenshot(deviceId: String): Result<ByteArray> =
         on(deviceId) { transport, serial -> transport.screenshot(serial) }
 
+    /** a preview's still — [ScreenStill.Off] instead of a capture when the display is asleep. */
+    suspend fun previewStill(deviceId: String): Result<ScreenStill> =
+        on(deviceId) { transport, serial -> transport.previewStill(serial) }
+
     /**
-     * a screenshot saved to the app's `screenshots` folder, with a toast naming the file — the
-     * selection bar's Screenshot, a row's menu and ⌘S all come here.
+     * a screenshot saved to the screenshot folder (Settings › Files; app storage on a phone), with
+     * a toast naming the file — the selection bar's Screenshot, a row's menu and ⌘S all come here.
      */
     suspend fun saveScreenshot(device: Device) {
         screenshot(device.id)
             .onSuccess { bytes ->
                 val name = "${device.displayName}-${DateUtils.formatDate("yyyyMMdd-HHmmss")}.png"
-                val ok = StorageManager.writeBytes(PATH_SCREENSHOTS, name, bytes)
-                log.d("saveScreenshot: $name, ${bytes.size} bytes, ok:$ok")
-                ToastManager.showToast(if (ok) name else "Couldn't save the screenshot", success = ok)
+                val path = SaveFolders.save(SaveFolders.screenshots(), PATH_SCREENSHOTS, name, bytes)
+                log.d("saveScreenshot: $name, ${bytes.size} bytes, path:$path")
+                if (path == null) {
+                    ToastManager.showToast("Couldn't save the screenshot", success = false)
+                } else {
+                    // a phone has no Finder to show it in
+                    val desktop = localDesktopOS != null
+                    ToastManager.showToast(name, success = true, actionLabel = if (desktop) "Show" else null) {
+                        revealLocalFile(path)
+                    }
+                }
             }
             .onFailure {
                 log.e("saveScreenshot: ${it.message}")

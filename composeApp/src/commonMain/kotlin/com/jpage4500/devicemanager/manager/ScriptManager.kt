@@ -73,10 +73,10 @@ object ScriptManager {
     /** the script the page has open, by file name — here so it outlasts a trip to another page. */
     val selected: StateFlow<String?> = _selected.asStateFlow()
 
-    private val _chosen = MutableStateFlow<List<String>?>(null)
+    private val _chosen = MutableStateFlow<List<String>>(emptyList())
 
-    /** the devices "Choose…" has picked, or null for All. */
-    val chosen: StateFlow<List<String>?> = _chosen.asStateFlow()
+    /** the devices picked to act on — never "all": the user always chooses. */
+    val chosen: StateFlow<List<String>> = _chosen.asStateFlow()
 
     /** read the folder again, off the UI thread. */
     fun reload() {
@@ -91,8 +91,7 @@ object ScriptManager {
         _selected.value = fileName
     }
 
-    /** null is All; a list, even an empty one, is Choose… with those chips. */
-    fun choose(deviceIds: List<String>?) {
+    fun choose(deviceIds: List<String>) {
         _chosen.value = deviceIds
     }
 

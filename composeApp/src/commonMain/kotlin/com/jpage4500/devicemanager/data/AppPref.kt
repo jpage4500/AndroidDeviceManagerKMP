@@ -24,11 +24,15 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     CUSTOM_COMMANDS("custom_commands"),                     // JSON list of the user's saved shell commands
     RECENT_WIRELESS("recent_wireless"),                     // JSON list of WirelessDevice, most recent last
     SAVED_SERVERS("saved_servers"),                         // JSON list of SavedServer — the Device Manager instances this app knows
-    RECENT_INPUT("recent_input"),                           // newline-separated strings typed onto devices
+    RECENT_INPUT("recent_input"),                           // JSON list of RecentInput, newest first (was newline-separated strings)
+    RECENT_COMMANDS("recent_commands"),                     // JSON list of shell commands run from Commands, newest first
     LOGS_FILTERS("logs_filters"),                           // JSON list of LogFilter
+    LOGS_SELECTED_FILTERS("logs_selected_filters"),         // JSON list of saved filter names last switched on — a new log tab starts with them
+    LOGS_LEVEL_FLOOR("logs_level_floor", "VERBOSE"),        // LogLevelFloor name last picked — a new log tab starts on it
     LOGS_HIDDEN_COLUMNS("logs_hidden_columns"),             // comma-separated LogColumn names
     LOGS_COLUMN_ORDER("logs_column_order"),                 // comma-separated LogColumn names, left to right
     LOGS_COLUMN_WIDTHS("logs_column_widths"),               // JSON map of LogColumn name -> px
+    LOGS_SAVE_DIR("logs_save_dir"),                         // folder the last saved log went to
     FILES_COLUMN_WIDTHS("files_column_widths"),             // JSON map of FileColumn name -> px
     FILES_RECENT_PATHS("files_recent_paths"),               // newline-separated paths from "Go To…"
     HIDDEN_COLUMNS("hidden_columns"),                       // comma-separated DeviceColumn names the table hides
@@ -38,6 +42,15 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     INSTALL_ID("install_id"),                               // random UUID identifying this install to log uploads
     INFO_COLLAPSED("info_collapsed"),                       // comma-separated InfoSection names the device details keeps shut
     THEME("theme", "LIGHT"),                                // ThemeMode name: light, dark, or follow the OS
+    DOWNLOAD_FOLDER("download_folder"),                     // desktop: where pulled files go; null = ~/Downloads
+    SCREENSHOT_FOLDER("screenshot_folder"),                 // desktop: where screenshots go; null = DOWNLOAD_FOLDER
+    MIRROR_WITH("mirror_with", "BUILT_IN"),                 // MirrorWith name: what the Mirror action opens
+    SCRCPY_PATH("scrcpy_path"),                             // null = the scrcpy found on PATH
+    SCRCPY_VIDEO_CODEC("scrcpy_video_codec", "h264"),       // --video-codec=
+    SCRCPY_EXTRA_ARGS("scrcpy_extra_args"),                 // whitespace-separated flags after the ones below
+    DEVICES_VIEW("devices_view", "LIST"),                   // DeviceView name: the Devices page as a table or as icons
+    SHARE_NAME("share_name"),                               // desktop: what Share Devices calls this computer; null = its own name
+    SHARE_TOKEN("share_token"),                             // desktop: Share Devices' auth token, kept so a phone that scanned it stays paired
 
     // -------------------------------------------------------------
     // -- boolean settings --
@@ -52,6 +65,12 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     DEVICES_COMPACT("devices_compact", false),              // device table: one line a row instead of name over model
     MESSAGE_WRAP("message_wrap", false),                    // message viewer: line wrapping
     MESSAGE_AUTO_FORMAT("message_auto_format", true),       // message viewer: pretty-print JSON on open
+    CHECK_UPDATES("check_updates", true),                   // desktop: look for a new release once a day
+    SCRCPY_SHOW_TOUCHES("scrcpy_show_touches", true),       // --show-touches — the Swing app's defaults, all three on
+    SCRCPY_STAY_AWAKE("scrcpy_stay_awake", true),           // --stay-awake
+    SCRCPY_NO_AUDIO("scrcpy_no_audio", true),               // --no-audio
+    SCRCPY_ASK("scrcpy_ask", true),                         // show the scrcpy options before each launch
+    SHARE_ENABLED("share_enabled", false),                  // desktop: Share Devices was left running — start it again at launch
 
     // -------------------------------------------------------------
     // -- int settings --
@@ -61,10 +80,12 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     DETAILS_REFRESH_SECS("details_refresh_secs", 60),       // how often battery and free space are re-read
     FULL_REFRESH_MINS("full_refresh_mins", 60),             // ...and how often everything else is, 0 to never
     MAX_MIRROR_WINDOWS("max_mirror_windows", 8),            // how many mirrors can poll at once before the fleet suffers
-    LOGS_MAX_LINES("logs_max_lines", 50000),                // ring buffer per log window
+    LOGS_MAX_LINES("logs_max_lines", 200_000),              // ring buffer per log tab — the Swing app's default
     LOGS_HOLD_LINES("logs_hold_lines", 25000),              // ...and how far past it the buffer may grow while a window reads history
     LOGS_FONT_SIZE("logs_font_size", 13),                   // log table text size, ⌘+/⌘- adjusts it
     SIDEBAR_WIDTH("sidebar_width", 216),                    // desktop sidebar, in dp; under 150 it is the icon rail
+    DEVICES_ICON_SIZE("devices_icon_size", 0),              // Devices icon view: glyph height in dp from the status bar slider; 0 = Fit, sized to show every device
+    SHARE_PORT("share_port", 8765),                         // desktop: Share Devices' port — the Swing app's default
 
     // -------------------------------------------------------------
     // -- long settings --

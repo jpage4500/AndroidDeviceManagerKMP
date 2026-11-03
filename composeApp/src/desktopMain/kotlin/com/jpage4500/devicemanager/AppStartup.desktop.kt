@@ -17,4 +17,7 @@ fun initApp() {
     // registered — see AppLifecycle
     observeAppLifecycle()
     LogManager.onAppStart()
+    UpdateManager.startBackgroundChecks()
+    // a server left running is started again, so a phone that scanned it once keeps working
+    ShareServer.autoStart()
 }

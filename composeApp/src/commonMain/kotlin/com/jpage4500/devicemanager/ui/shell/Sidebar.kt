@@ -120,13 +120,16 @@ fun Modifier.sidebarEdge(width: SidebarWidth): Modifier = pointerInput(width) {
  * expands it again.
  */
 @Composable
-fun Sidebar(shell: ShellState, width: SidebarWidth, onSettings: () -> Unit) {
+fun Sidebar(shell: ShellState, width: SidebarWidth, onShare: () -> Unit, onSettings: () -> Unit) {
     val devices by DeviceManager.devices.collectAsState()
     val runs by ScriptManager.runs.collectAsState()
+    val command by CommandManager.run.collectAsState()
     val items = listOf(
         NavEntry(Page.DEVICES, Res.drawable.android, stringResource(Res.string.devices), devices.size),
         NavEntry(Page.FILES, Res.drawable.folder, stringResource(Res.string.page_files), shell.fileTabs.size),
         NavEntry(Page.LOGS, Res.drawable.logs, stringResource(Res.string.page_logs), shell.logTabs.size, live = shell.logTabs.isNotEmpty()),
+        NavEntry(Page.INPUT, Res.drawable.keyboard, stringResource(Res.string.page_input), 0),
+        NavEntry(Page.COMMANDS, Res.drawable.terminal, stringResource(Res.string.page_commands), 0, live = command?.running == true),
     ) + listOfNotNull(
         // desktop only — a phone has no scripts folder to run
         if (ScriptHost.supported) {
@@ -137,12 +140,20 @@ fun Sidebar(shell: ShellState, width: SidebarWidth, onSettings: () -> Unit) {
         },
     )
     val settingsLabel = stringResource(Res.string.action_settings)
+    // desktop only, beside Settings rather than among the pages: it is a dialog, not a page. the
+    // dot is the point — a running server is every device on this desk open to the network
+    val sharing by ShareServer.state.collectAsState()
+    val share = if (ShareHost.supported) {
+        Footer(Res.drawable.share_on, stringResource(Res.string.share_sidebar), live = sharing.isRunning, onShare)
+    } else {
+        null
+    }
 
     Box(Modifier.width(width.shown).fillMaxHeight()) {
         if (width.rail) {
-            Rail(items, shell, onExpand = width::toggle, settingsLabel = settingsLabel, onSettings = onSettings)
+            Rail(items, shell, onExpand = width::toggle, share = share, settingsLabel = settingsLabel, onSettings = onSettings)
         } else {
-            Expanded(items, shell, onCollapse = width::toggle, settingsLabel = settingsLabel, onSettings = onSettings)
+            Expanded(items, shell, onCollapse = width::toggle, share = share, settingsLabel = settingsLabel, onSettings = onSettings)
         }
         // the edge: a hairline, and the resize cursor over the part of it a drag can start from.
         // the drag itself is Modifier.sidebarEdge, on the row that holds this
@@ -150,6 +161,9 @@ fun Sidebar(shell: ShellState, width: SidebarWidth, onSettings: () -> Unit) {
         Box(Modifier.align(Alignment.CenterEnd).width(Dimens.splitterHandle).fillMaxHeight().resizeCursor())
     }
 }
+
+/** a row under the pages that opens something rather than switching to it. */
+private class Footer(val icon: DrawableResource, val label: String, val live: Boolean, val onClick: () -> Unit)
 
 private class NavEntry(
     val page: Page,
@@ -164,6 +178,7 @@ private fun Expanded(
     items: List<NavEntry>,
     shell: ShellState,
     onCollapse: () -> Unit,
+    share: Footer?,
     settingsLabel: String,
     onSettings: () -> Unit,
 ) {
@@ -190,7 +205,11 @@ private fun Expanded(
             IconSquare(Res.drawable.menu, stringResource(Res.string.sidebar_collapse), onCollapse)
         }
 
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Dimens.hairline * 2)) {
+        // the pages scroll when the window is too short for them all; the header and Settings stay put
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Dimens.hairline * 2),
+        ) {
             items.forEach { item ->
                 NavRow(
                     icon = item.icon,
@@ -205,6 +224,7 @@ private fun Expanded(
 
         HorizontalDivider(color = Colors.sidebarBorder)
         Column {
+            share?.let { NavRow(it.icon, it.label, count = null, selected = false, onClick = it.onClick, live = it.live) }
             NavRow(Res.drawable.settings, settingsLabel, count = null, selected = false, onClick = onSettings)
             Text(
                 "v$APP_VERSION",
@@ -279,6 +299,7 @@ private fun Rail(
     items: List<NavEntry>,
     shell: ShellState,
     onExpand: () -> Unit,
+    share: Footer?,
     settingsLabel: String,
     onSettings: () -> Unit,
 ) {
@@ -299,7 +320,7 @@ private fun Rail(
         }
         Spacer(Modifier.height(Dimens.tabGap))
         Column(
-            Modifier.weight(1f),
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(Dimens.tabGap),
         ) {
@@ -307,6 +328,7 @@ private fun Rail(
                 RailItem(item.icon, item.label, shell.page == item.page, live = item.live) { shell.page = item.page }
             }
         }
+        share?.let { RailItem(it.icon, it.label, selected = false, live = it.live, onClick = it.onClick) }
         RailItem(Res.drawable.settings, settingsLabel, selected = false, onClick = onSettings)
     }
 }

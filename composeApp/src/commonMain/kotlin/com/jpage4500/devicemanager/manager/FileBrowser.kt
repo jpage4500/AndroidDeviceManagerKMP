@@ -128,15 +128,18 @@ class FileBrowser(private val deviceId: String) {
         return files.sortedWith(compareByDescending<DeviceFile> { it.isDirectory }.then(ordered))
     }
 
-    /** save a file into the app's own download folder. @return the name it was saved as */
+    /**
+     * save a file into the download folder (Settings › Files; app storage on a phone).
+     * @return the path it was saved to
+     */
     suspend fun download(file: DeviceFile): Result<String> {
         StatusManager.post("Downloading ${file.name}", progress = 0)
         return DeviceManager.pullFile(deviceId, file.path)
             .mapCatching { bytes ->
-                val ok = StorageManager.writeBytes(PATH_DOWNLOADS, file.name, bytes)
-                if (!ok) throw IllegalStateException("couldn't write ${file.name}")
-                StatusManager.post("Downloaded ${file.name}", progress = 100)
-                file.name
+                val path = SaveFolders.save(SaveFolders.downloads(), PATH_DOWNLOADS, file.name, bytes)
+                    ?: throw IllegalStateException("couldn't write ${file.name}")
+                StatusManager.post("Downloaded ${path.substringAfterLast('/').substringAfterLast('\\')}", progress = 100)
+                path
             }
             .onFailure { StatusManager.post("${file.name}: ${it.message}", isError = true) }
     }

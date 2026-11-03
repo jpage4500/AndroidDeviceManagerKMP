@@ -131,15 +131,37 @@ object Dimens {
     val qrSize = 200.dp
     val serversDialogWidth = 600.dp
     val serversTableHeight = 300.dp
+    // Share Devices: a column of right-aligned labels over the client table — shorter than the Swing
+    // dialog's 150px so Start Server shows without scrolling; a desk rarely has more than a few clients
+    val shareDialogWidth = 600.dp
+    val shareClientsHeight = 90.dp
+    val shareLabelWidth = 110.dp
     // a dialog that is its own window is a form too, so it opens at the same width. the height caps
     // rather than fills: the window packs to whatever its form needs, and only a long one (the app
     // log) reaches the ceiling and scrolls inside it
     val dialogWindowWidth = formWindowWidth
     val dialogWindowMaxHeight = 640.dp
+    // Settings: the Swing dialog was 540x480 with five tabs; seven need the width, and the height is
+    // what keeps General's rows on screen without scrolling
+    val settingsWindowWidth = 720.dp
+    val settingsWindowHeight = 560.dp
+    val settingsTabPadding = 10.dp
+    val settingsDropdownWidth = 180.dp
     val messageWindowWidth = 760.dp
     val messageWindowHeight = 520.dp
     val toolbarHeight = 44.dp
     val statusBarHeight = 28.dp
+
+    // a toast in the status bar — FileExplorerKMP's pill. capped so a long path can't push the
+    // Devices bar's own figures off its edges; the tooltip has the rest
+    val statusToastHeight = 20.dp
+    val statusToastCorner = 10.dp
+    val statusToastPaddingH = 8.dp
+    val statusToastSpacing = 5.dp
+    val statusToastIcon = 12.dp
+    val statusToastActionInset = 2.dp
+    val statusToastActionPaddingH = 6.dp
+    val statusToastMaxWidth = 520.dp
 
     // --- the desktop shell — see docs/REDESIGN.md ---
 
@@ -184,6 +206,11 @@ object Dimens {
     // two lines a row — name over model — unless the compact density is on
     val deviceRowHeight = 44.dp
     val stateDot = 8.dp
+    // the Devices icon view: a tile is the phone frame with everything inside it, and never
+    // narrower than a name needs however small the frame is dragged
+    val deviceTileMinWidth = 72.dp
+    val deviceIconSliderWidth = 120.dp
+    val viewToggleSegment = 32.dp
     // the onboarding cards when nothing is connected
     val onboardingWidth = 980.dp
     val onboardingCardIcon = 34.dp
@@ -191,8 +218,12 @@ object Dimens {
     val detailsPanelWidth = 300.dp
     // tall enough to read a phone's screen at a glance, short enough to leave the facts on screen
     val previewHeight = 220.dp
+    val previewSpinner = 14.dp
+    val previewSpinnerLarge = 28.dp
+    val previewSpinnerStroke = 2.dp
+    val previewOffIcon = 28.dp
+    val previewCornerButton = 22.dp
     val detailsTitleSize = 16.sp
-    val quickActionHeight = 56.dp
     val factLabelWidth = 84.dp
     val checkbox = 16.dp
     val checkboxCorner = 4.dp
@@ -212,6 +243,9 @@ object Dimens {
     val folderFilterWidth = 180.dp
     // Scripts: the list down the left, and the results table's fixed columns
     val scriptListWidth = 260.dp
+    // Commands: the saved and recent list down the left — wider than Scripts', a command is longer
+    // than a script's name
+    val commandListWidth = 300.dp
     val resultDeviceWidth = 180.dp
     val resultStateWidth = 90.dp
     val resultExitWidth = 56.dp
@@ -222,6 +256,9 @@ object Dimens {
     val savedFiltersMaxHeight = 300.dp
     // the filter editor's rules and summary: about eight rules before they scroll
     val filterRulesMaxHeight = 360.dp
+    // an App rule's ▾: wide enough for a package name, about ten apps before it scrolls
+    val appPickerWidth = 300.dp
+    val appPickerMaxHeight = 240.dp
     val pillMaxWidth = 220.dp
     val pillClose = 10.dp
     val levelButton = 24.dp
@@ -235,7 +272,7 @@ object Dimens {
     // which is sized for "12 more"
     val tabMinWidth = 120.dp
     val tabMoreWidth = 96.dp
-    // + on the Logs page: the design's "Capture logs from" checklist
+    // the + device checklist on Logs, Files, Scripts, Commands and Input — the design's "Capture logs from"
     val tabPickerWidth = 280.dp
     val tabAccent = 3.dp
     val tabDot = 8.dp
@@ -614,6 +651,13 @@ object Colors {
     val mirrorHoldInk = Color(0xFFFFA000)
     val mirrorHoldGlow = Color(0x46FFA000)
     val mirrorHoldFill = Color(0xFFFFB919)
+
+    // a sleeping device's preview: the black of a dark panel in either theme, with dim grey on it
+    val previewScreenOff = Color(0xFF000000)
+    val previewScreenOffText = Color(0xFF8A8F99)
+    // the preview's corner button sits on a screenshot of anything, so it brings its own dark disc
+    val previewScrim = Color(0x8C000000)
+    val previewScrimIcon = Color(0xFFFFFFFF)
 
     // a mark or a count drawn on a coloured ground — the sidebar's brand square, a live badge
     val onAccent = Color(0xFFFFFFFF)

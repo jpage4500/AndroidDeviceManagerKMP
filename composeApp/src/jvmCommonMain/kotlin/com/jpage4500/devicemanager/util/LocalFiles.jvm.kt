@@ -12,3 +12,7 @@ actual fun localFileInfo(path: String): LocalFile? {
     if (!file.isFile) return null
     return LocalFile(file.absolutePath, file.name, file.length())
 }
+
+actual suspend fun writeLocalFile(path: String, bytes: ByteArray): Boolean = withContext(ioDispatcher) {
+    runCatching { File(path).writeBytes(bytes) }.isSuccess
+}

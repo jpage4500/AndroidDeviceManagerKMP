@@ -21,7 +21,8 @@ class AdbServerTransport(
     port: Int = 5037,
 ) : DeviceTransport {
 
-    private val server = AdbServer(host, port)
+    // public so a program run against the same server — scrcpy — can be pointed at it
+    val server = AdbServer(host, port)
 
     override val id: String get() = "adb://$server"
 
@@ -48,14 +49,21 @@ class AdbServerTransport(
      * `exec:` and not `shell:` matters more here than anywhere else: `shell:` rewrites every `\n` in
      * the stream as `\r\n`, and doing that to a PNG corrupts it.
      */
-    override suspend fun screenshot(serial: String): Result<ByteArray> {
+    override suspend fun screenshot(serial: String): Result<ByteArray> = execBytes(serial, "screencap -p")
+
+    /** [CMD_PREVIEW_STILL]: the power service first, the capture only if the screen is on. */
+    override suspend fun previewStill(serial: String): Result<ScreenStill> =
+        execBytes(serial, CMD_PREVIEW_STILL).mapCatching { parsePreviewStill(it).getOrThrow() }
+
+    /** a command's whole output, unaltered — which is what a PNG needs. */
+    private suspend fun execBytes(serial: String, command: String): Result<ByteArray> {
         val opened = AdbConnection.toDevice(server, serial)
         val connection = when (opened) {
             is AdbOutcome.Err -> return Result.failure(AdbException(opened))
             is AdbOutcome.Ok -> opened.value
         }
         return connection.use {
-            when (val outcome = it.request("exec:screencap -p")) {
+            when (val outcome = it.request("exec:$command")) {
                 is AdbOutcome.Err -> Result.failure(AdbException(outcome))
                 is AdbOutcome.Ok -> runCatching { it.raw.readAll() }
             }

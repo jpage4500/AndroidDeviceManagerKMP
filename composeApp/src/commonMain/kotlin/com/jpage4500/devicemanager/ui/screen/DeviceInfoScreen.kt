@@ -21,43 +21,10 @@ import com.jpage4500.devicemanager.util.*
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * everything known about one device, as its own scrolling screen — the desktop's Device Details
- * window.
- *
- * The phone draws the same two pieces, [DeviceStatus] and [DeviceDetails], with its own Commands
- * section between them — see [DeviceSheet], which already has a scroll of its own around them.
- */
-@Composable
-fun DeviceInfoScreen(deviceId: String, modifier: Modifier = Modifier) {
-    val devices by DeviceManager.devices.collectAsState()
-
-    // outside the scroll: EmptyState fills its space, and nothing can fill an unbounded height
-    if (devices.none { it.id == deviceId }) {
-        EmptyState(
-            title = stringResource(Res.string.info_gone),
-            detail = Device.serialOf(deviceId),
-            modifier = modifier,
-        )
-        return
-    }
-
-    Column(
-        modifier
-            .fillMaxSize()
-            .background(Colors.listBg)
-            .verticalScroll(rememberScrollState())
-            .padding(Dimens.gapLarge),
-    ) {
-        DeviceStatus(deviceId)
-        Spacer(Modifier.height(Dimens.gapLarge))
-        DeviceDetails(deviceId)
-    }
-}
-
-/**
  * what the device is: every property it reports, one per row.
  *
- * Ported from the Swing app's `DeviceInfoScreen`. Reads the live device, so it follows a refresh
+ * The phone's device sheet; the desktop shows the same properties in its details panel beside the
+ * device table (see [DeviceDetailsPanel]). Ported from the Swing app's `DeviceInfoScreen`. Reads the live device, so it follows a refresh
  * rather than showing a snapshot — the values move while it is open.
  *
  * A section rather than a card-on-grey: the same header and flat rows a settings screen uses, so it
@@ -68,8 +35,7 @@ fun DeviceInfoScreen(deviceId: String, modifier: Modifier = Modifier) {
  * of properties are the longest thing here and the least often read — a phone that opens on them
  * has to be scrolled past them to reach anything that can be pressed.
  *
- * [onRename] draws a pencil on the Name row when it is given. The desktop's window is read-only and
- * passes nothing.
+ * [onRename] draws a pencil on the Name row when it is given.
  */
 @Composable
 fun DeviceDetails(deviceId: String, onRename: (() -> Unit)? = null) {

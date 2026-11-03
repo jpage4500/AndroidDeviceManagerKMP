@@ -31,6 +31,32 @@ object DeviceDetails {
     /** counts deep sleep, so this is time since reboot rather than time awake. */
     const val CMD_UPTIME = "cat /proc/uptime"
 
+    /**
+     * the screen's size the way it's turned right now, for a preview's frame before its first still.
+     *
+     * the input service's viewport first: its `logicalFrame` follows the rotation, where `wm size`
+     * is the panel's natural shape — a tablet held landscape reports `Physical size: 1200x1920`
+     * and a viewport of `[0, 0, 1920, 1200]`. `wm size` stays as the fallback for an Android whose
+     * `dumpsys input` doesn't print a viewport. `2>/dev/null` because `-m1` closes the pipe early
+     * and `dumpsys` complains about it on stderr.
+     */
+    const val CMD_SCREEN_SIZE = "dumpsys input 2>/dev/null | grep -m1 'Viewport INTERNAL' ; wm size"
+
+    private val VIEWPORT = Regex("""logicalFrame=\[\s*-?\d+,\s*-?\d+,\s*(\d+),\s*(\d+)\s*]""")
+    private val WM_SIZE = Regex("""(Override|Physical) size:\s*(\d+)x(\d+)""")
+
+    /** width and height from [CMD_SCREEN_SIZE]'s output, or null if neither line was there. */
+    fun parseScreenSize(output: String): Pair<Int, Int>? {
+        VIEWPORT.find(output)?.let { m ->
+            val w = m.groupValues[1].toInt()
+            val h = m.groupValues[2].toInt()
+            if (w > 0 && h > 0) return w to h
+        }
+        // an override (set with `wm size`) is what the screen actually draws at, so it wins
+        val sizes = WM_SIZE.findAll(output).associate { it.groupValues[1] to (it.groupValues[2].toInt() to it.groupValues[3].toInt()) }
+        return (sizes["Override"] ?: sizes["Physical"])?.takeIf { it.first > 0 && it.second > 0 }
+    }
+
     /** "1" once the device has finished booting; anything else means it is still coming up. */
     const val CMD_BOOTED = "getprop sys.boot_completed"
 

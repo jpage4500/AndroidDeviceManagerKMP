@@ -482,19 +482,27 @@ private fun ExploreStatusBar(total: Int, selected: Int, device: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.gapLarge),
     ) {
-        Text(
-            text = if (selected > 0) stringResource(Res.string.files_count_selected, total, selected)
-            else stringResource(Res.string.files_count, total),
-            style = MaterialTheme.typography.labelSmall,
-            color = Colors.secondaryText,
-        )
+        // a toast takes the count's place while it's up
+        StatusToastSlot(contentAlignment = Alignment.CenterStart) {
+            Text(
+                text = if (selected > 0) stringResource(Res.string.files_count_selected, total, selected)
+                else stringResource(Res.string.files_count, total),
+                style = MaterialTheme.typography.labelSmall,
+                color = Colors.secondaryText,
+            )
+        }
         Spacer(Modifier.weight(1f))
+        // the folder Settings › Files names, or app storage's on a phone
+        SettingsManager.observePref(AppPref.DOWNLOAD_FOLDER)
+        val folder = SaveFolders.downloads()
         Text(
-            text = stringResource(Res.string.files_saved_to, FileBrowser.PATH_DOWNLOADS),
+            text = stringResource(Res.string.files_saved_to, folder ?: FileBrowser.PATH_DOWNLOADS),
             style = MaterialTheme.typography.labelSmall,
             color = Colors.secondaryText,
-            modifier = Modifier.plainClickable {
-                StorageManager.getAbsolutePath(FileBrowser.PATH_DOWNLOADS, "")
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false).plainClickable {
+                (folder ?: StorageManager.getAbsolutePath(FileBrowser.PATH_DOWNLOADS, ""))
                     ?.let { PlatformUtils.openUrl(it) }
             },
         )

@@ -40,6 +40,16 @@ private fun buildHighlighted(text: String, needle: String?, current: Boolean): A
     }
 }
 
+/**
+ * what the page around a cell is searching for, so a cell can highlight it without every layer in
+ * between passing it down — the Devices page sets it, and its table cells and icon tiles read it.
+ */
+val LocalSearch = compositionLocalOf<String?> { null }
+
+/** [text] with whatever [LocalSearch] holds highlighted. */
+@Composable
+fun searchHighlighted(text: String): AnnotatedString = highlighted(text, LocalSearch.current, false)
+
 /** true when [needle] appears anywhere in [text]. */
 fun matches(text: String?, needle: String?): Boolean =
     !needle.isNullOrEmpty() && text != null && text.contains(needle, ignoreCase = true)

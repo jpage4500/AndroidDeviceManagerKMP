@@ -13,7 +13,7 @@ import com.jpage4500.devicemanager.ui.theme.*
 
 /**
  * two or three choices in one outlined control, the picked one filled — the filter editor's
- * All / Any, and Scripts' All N / Choose….
+ * All / Any.
  */
 @Composable
 fun <T> SegmentedToggle(

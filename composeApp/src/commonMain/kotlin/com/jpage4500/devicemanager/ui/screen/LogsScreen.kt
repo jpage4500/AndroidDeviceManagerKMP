@@ -89,6 +89,8 @@ fun LogsScreen(
     var selection by remember { mutableStateOf(TableSelection<Any?>()) }
     var editing by remember { mutableStateOf<LogFilter?>(null) }
     var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
+    var askingSave by remember { mutableStateOf(false) }
+    var savedLog by remember { mutableStateOf<SavedLog?>(null) }
     // the quick filter being saved through the editor, so saving it can take its dashed pill away
     var savingQuick by remember { mutableStateOf<String?>(null) }
     var autoScroll by state::autoScroll
@@ -119,8 +121,11 @@ fun LogsScreen(
     }
     // handed to the source rather than applied here: it keeps the filtered list incrementally, so a
     // batch only tests its own new lines instead of re-walking 50,000 of them ten times a second
-    LaunchedEffect(active) {
-        source.setFilter(if (active.isEmpty()) null else { entry -> active.all { it.accepts(entry) } })
+    // an App rule matches the process name too, so new names re-run it — only then: a refreshed
+    // process table would otherwise re-filter 50,000 lines for filters that never look at it
+    val filterApps = if (active.any { it.usesApp }) apps else emptyMap()
+    LaunchedEffect(active, filterApps) {
+        source.setFilter(if (active.isEmpty()) null else { entry -> active.all { it.accepts(entry, filterApps) } })
     }
 
     val query = remember(search) { LogSearch.parse(search) }
@@ -349,7 +354,7 @@ fun LogsScreen(
                         current = hitNumber,
                         onNext = ::nextMatch,
                         onPrevious = ::previousMatch,
-                        onSaveAsFilter = { query?.let { editing = LogFilter("", it.asExpression(apps)) } },
+                        onSaveAsFilter = { query?.let { editing = LogFilter("", it.asExpression()) } },
                         modifier = Modifier.weight(1f).widthIn(min = Dimens.logSearchMinWidth),
                     )
                 },
@@ -360,14 +365,7 @@ fun LogsScreen(
                 onPause = {
                     if (!running) source.start(streamScope) else source.setPaused(!paused)
                 },
-                onSave = {
-                    scope.launch {
-                        source.save(shown, DeviceManager.nameOf(deviceId).replace(Regex("[^A-Za-z0-9_-]"), "_"))
-                            ?.let { saved ->
-                                StorageManager.getAbsolutePath(PATH_LOGS, saved)?.let(PlatformUtils::openUrl)
-                            }
-                    }
-                },
+                onSave = { askingSave = true },
                 menu = {
                     Item(stringResource(Res.string.logs_clear_log)) { source.clear() }
                     Separator()
@@ -520,7 +518,10 @@ fun LogsScreen(
                             else stringResource(Res.string.logs_hide_value, shown.clip(MENU_VALUE_CHARS)),
                         ) { if (hide !in quick) quick = quick + hide }
                         Item(stringResource(Res.string.logs_new_filter_from)) {
-                            editing = LogFilter("", only)
+                            // a saved filter outlives the process, so it names the app rather than
+                            // the pid, where the name is known
+                            val saved = if (column == LogColumn.APP && shown != raw) cellFilter(column, shown)?.first else null
+                            editing = LogFilter("", saved ?: only)
                         }
                         Separator()
                     }
@@ -620,6 +621,33 @@ fun LogsScreen(
 
     ConfirmDialog(confirm, onDismiss = { confirm = null })
 
+    val pickTitle = stringResource(Res.string.logs_save_pick)
+    SaveLogDialog(
+        open = askingSave,
+        selected = selection.size,
+        visible = shown.size,
+        total = total,
+        onDismiss = { askingSave = false },
+        onSave = { what ->
+            // taken now, before the file dialog: the log keeps moving while it is up
+            val entries = when (what) {
+                LogSaveScope.SELECTED -> shown.filter { it.id in selection }
+                LogSaveScope.VISIBLE -> shown
+                LogSaveScope.ALL -> source.all()
+            }
+            val device = DeviceManager.nameOf(deviceId).replace(Regex("[^A-Za-z0-9_-]"), "_")
+            val name = "$device-${DateUtils.formatDate("yyyyMMdd-HHmmss")}.txt"
+            scope.launch {
+                val path = pickSaveFile(pickTitle, name, SettingsManager.getString(AppPref.LOGS_SAVE_DIR)?.ifBlank { null })
+                    ?: return@launch
+                // the next save starts where this one went
+                SettingsManager.setString(AppPref.LOGS_SAVE_DIR, path.substringBeforeLast('/').substringBeforeLast('\\'))
+                savedLog = SavedLog(path, entries.size, source.save(entries, path))
+            }
+        },
+    )
+    LogSavedDialog(savedLog, onDismiss = { savedLog = null })
+
     val floorLabel = stringResource(floor.label())
     FilterDialog(
         filter = editing,
@@ -636,17 +664,17 @@ fun LogsScreen(
             savingQuick?.let { quick = quick - it }
             savingQuick = null
         },
-        onDelete = { filter ->
-            selectedFilters = selectedFilters - filter.name
-            LogFilterStore.delete(filter.name)
-        },
         names = apps,
+        // read once as the editor opens rather than per batch: it walks every held line
+        apps = remember(editing, apps) {
+            if (editing == null) emptyList() else source.pids().mapNotNull { apps[it] }.distinct().sortedBy { it.lowercase() }
+        },
         count = { candidate ->
             // the others on in this tab — not the one being edited, nor the quick filter it replaces
             val others = active.filter { it.name != editing?.name && it.expression != savingQuick }
             FilterCount(
-                alone = source.count { candidate.accepts(it) },
-                combined = if (others.isEmpty()) null else source.count { e -> candidate.accepts(e) && others.all { it.accepts(e) } },
+                alone = source.count { candidate.accepts(it, apps) },
+                combined = if (others.isEmpty()) null else source.count { e -> candidate.accepts(e, apps) && others.all { it.accepts(e, apps) } },
                 total = source.total.value,
                 device = DeviceManager.nameOf(deviceId),
                 // as their pills name them: the level by what it shows, a quick filter in words
@@ -762,15 +790,12 @@ private class LogSearch(val column: LogColumn?, val needle: String) {
     /**
      * the search as a filter expression, for Save as filter.
      *
-     * a filter on App tests the pid, so `app:` becomes the pids whose process names match now —
-     * joined by `||` — and falls back to the text anywhere when none do.
+     * a filter on App tests the process name as well as the pid, so `app:` carries over as it was
+     * typed.
      */
-    fun asExpression(apps: Map<String, String>): String = when (column) {
+    fun asExpression(): String = when (column) {
         LogColumn.TAG -> LogTermSpec(LogTerm.Field.TAG, LogOperator.CONTAINS, needle).asExpression()
-        LogColumn.APP -> apps.filterValues { matches(it, needle) }.keys
-            .map { LogTermSpec(LogTerm.Field.APP, LogOperator.EQUALS, it).asExpression() }
-            .ifEmpty { listOf(LogTermSpec(LogTerm.Field.ANY, LogOperator.CONTAINS, needle).asExpression()) }
-            .joinToString(" ${LogFilter.OR} ")
+        LogColumn.APP -> LogTermSpec(LogTerm.Field.APP, LogOperator.CONTAINS, needle).asExpression()
         else -> LogTermSpec(LogTerm.Field.ANY, LogOperator.CONTAINS, needle).asExpression()
     }
 
@@ -828,14 +853,16 @@ private fun LogsStatusBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.gapLarge),
     ) {
-        Text(
-            text = parts.joinToString(" · "),
-            style = MaterialTheme.typography.labelSmall,
-            color = Colors.secondaryText,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        // a toast takes the count's place while it's up
+        StatusToastSlot(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            Text(
+                text = parts.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = Colors.secondaryText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         val state = when {
             !running -> stringResource(Res.string.tab_stopped)
             paused -> stringResource(Res.string.logs_status_paused)

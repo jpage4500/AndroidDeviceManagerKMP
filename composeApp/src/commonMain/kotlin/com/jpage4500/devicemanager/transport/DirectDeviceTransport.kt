@@ -135,6 +135,11 @@ class DirectDeviceTransport(
     override suspend fun screenshot(serial: String): Result<ByteArray> =
         onConnection { it.exec("exec:screencap -p", AdbStream.TRANSFER_MS) }.toResult()
 
+    /** [CMD_PREVIEW_STILL], on the same shared connection. */
+    override suspend fun previewStill(serial: String): Result<ScreenStill> =
+        onConnection { it.exec("exec:$CMD_PREVIEW_STILL", AdbStream.TRANSFER_MS) }.toResult()
+            .mapCatching { parsePreviewStill(it).getOrThrow() }
+
     /**
      * `logcat` on the device, drained off one stream of the shared connection.
      *

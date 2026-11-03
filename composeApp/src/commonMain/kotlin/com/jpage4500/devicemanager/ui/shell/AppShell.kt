@@ -34,7 +34,8 @@ import org.jetbrains.compose.resources.stringResource
  *
  * Logs and Files were windows of their own, one per device; they are pages here, with a tab per
  * device, and this window's [ShellState] owns their streams — see [PageManager] and
- * docs/REDESIGN.md. Mirror, device details, Connect and the message viewer are still windows.
+ * docs/REDESIGN.md. Type text and Commands were dialogs; they are pages too. Mirror, device details,
+ * Connect and the message viewer are still windows.
  */
 @Composable
 fun AppShell() {
@@ -66,20 +67,30 @@ fun AppShell() {
                 connect
             }
     ) {
-        Sidebar(shell = shell, width = width, onSettings = { shell.settingsOpen = true })
+        Sidebar(shell = shell, width = width, onShare = { shell.shareOpen = true }, onSettings = { shell.settingsOpen = true })
         Box(Modifier.weight(1f).fillMaxHeight().background(Colors.listBg)) {
             when (shell.page) {
-                Page.DEVICES -> DeviceScreen()
+                Page.DEVICES -> DeviceScreen(detailsOpen = shell.detailsOpen, onDetailsOpen = { shell.detailsOpen = it })
                 Page.LOGS -> LogsPage(shell, scope)
                 Page.FILES -> FilesPage(shell)
+                Page.INPUT -> InputScreen()
+                Page.COMMANDS -> CommandsScreen()
                 Page.SCRIPTS -> ScriptsScreen()
             }
         }
     }
 
-    if (shell.settingsOpen) SettingsDialog(onDismiss = { shell.settingsOpen = false })
-    // the shell's rather than the Devices page's, so ⌘I opens it whichever page is showing
-    InputDialog(deviceIds = shell.inputFor, onDismiss = { shell.inputFor = emptyList() })
+    if (shell.settingsOpen) {
+        SettingsDialog(
+            initialTab = shell.settingsTab,
+            onDismiss = {
+                shell.settingsOpen = false
+                shell.settingsTab = null
+            },
+        )
+    }
+    if (shell.shareOpen) ShareDialog(onDismiss = { shell.shareOpen = false })
+    ScrcpyPromptDialog(deviceIds = shell.scrcpyFor, onDismiss = { shell.scrcpyFor = emptyList() })
 }
 
 /**
@@ -171,6 +182,7 @@ private fun FilesPage(shell: ShellState) {
                 onClose = shell::closeFiles,
                 onPick = shell::openFiles,
                 openGround = Colors.toolbarBg,
+                pickerTitle = stringResource(Res.string.files_browse_on),
                 modifier = Modifier.weight(1f).padding(end = Dimens.pageGutter),
             )
         }

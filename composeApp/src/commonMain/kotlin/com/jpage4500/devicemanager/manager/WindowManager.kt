@@ -30,7 +30,6 @@ data class WindowSize(val width: Int, val height: Int)
 enum class WindowKind(val defaultWidth: Dp, val defaultHeight: Dp) {
     DEVICE_LIST(Dimens.windowWidth, Dimens.windowHeight),
     MIRROR(Dimens.mirrorWindowWidth, Dimens.mirrorWindowHeight),
-    INFO(Dimens.formWindowWidth, Dimens.formWindowHeight),
     CONNECT(Dimens.connectWindowWidth, Dimens.connectWindowHeight),
     MESSAGE(Dimens.messageWindowWidth, Dimens.messageWindowHeight),
 }
@@ -50,7 +49,6 @@ sealed interface WindowContent {
     data class Mirror(val deviceId: String) : WindowContent
 
     /** everything known about one device. */
-    data class Info(val deviceId: String) : WindowContent
 
     /** reach a device over the network. */
     data object Connect : WindowContent
@@ -64,7 +62,6 @@ val WindowContent.kind: WindowKind
     get() = when (this) {
         is WindowContent.DeviceList -> WindowKind.DEVICE_LIST
         is WindowContent.Mirror -> WindowKind.MIRROR
-        is WindowContent.Info -> WindowKind.INFO
         is WindowContent.Connect -> WindowKind.CONNECT
         is WindowContent.Message -> WindowKind.MESSAGE
     }
@@ -142,9 +139,6 @@ object WindowManager {
 
     /** a device's filesystem, as a tab in the Files page — see [openLogs]. */
     fun openFiles(deviceId: String) = PageManager.openFiles(deviceId)
-
-    fun openInfo(deviceId: String, from: Long? = activeWindowId): Long =
-        openOnce(WindowContent.Info(deviceId), from)
 
     fun openConnect(from: Long? = activeWindowId): Long = openOnce(WindowContent.Connect, from)
 

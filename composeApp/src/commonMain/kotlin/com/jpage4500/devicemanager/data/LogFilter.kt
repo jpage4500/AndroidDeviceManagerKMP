@@ -45,10 +45,14 @@ data class LogTerm(
 
     enum class Match { EQUALS, STARTS_WITH, ENDS_WITH, CONTAINS }
 
-    fun accepts(entry: LogEntry): Boolean {
+    /**
+     * [names] is pid -> process: an App term passes on either, so `app:com.test` names the app and
+     * outlives its process, while the pid a right-click filter writes still works.
+     */
+    fun accepts(entry: LogEntry, names: Map<String, String> = emptyMap()): Boolean {
         val values = when (field) {
             Field.DATE -> listOf(entry.date)
-            Field.APP -> listOf(entry.pid)
+            Field.APP -> listOf(entry.pid, entry.pid?.let { names[it] })
             Field.TID -> listOf(entry.tid)
             Field.LEVEL -> listOf(entry.level)
             Field.TAG -> listOf(entry.tag)
@@ -102,10 +106,12 @@ data class LogTerm(
             if (negate) pattern = pattern.drop(1)
 
             val leading = pattern.startsWith('*')
+            if (leading) pattern = pattern.drop(1)
             // "+" is the Swing app's own spelling for a level floor ("level:D+"); LOGS.md documents
-            // "*". Both mean the same thing, so both are taken
-            val trailing = (pattern.endsWith('*') || pattern.endsWith('+')) && pattern.length > 1
-            pattern = pattern.trim('*', '+')
+            // "*". Both mean the same thing on a level, but anywhere else a "+" is part of the value
+            // ("tag:HD+*"), so only the one marker comes off and only a level reads "+" as one
+            val trailing = pattern.endsWith('*') || (field == Field.LEVEL && pattern.endsWith('+'))
+            if (trailing) pattern = pattern.dropLast(1)
             if (pattern.isEmpty()) return null
 
             val match = when {
@@ -223,7 +229,12 @@ data class LogFilter(
         .map { parseTerms(it) }
         .filter { it.isNotEmpty() }
 
-    fun accepts(entry: LogEntry): Boolean = groups.isEmpty() || groups.any { group -> group.all { it.accepts(entry) } }
+    /** [names] is pid -> process, which an App term also matches on. */
+    fun accepts(entry: LogEntry, names: Map<String, String> = emptyMap()): Boolean =
+        groups.isEmpty() || groups.any { group -> group.all { it.accepts(entry, names) } }
+
+    /** whether a rule looks at the App column, and so has to be re-run when process names arrive. */
+    val usesApp: Boolean get() = groups.any { group -> group.any { it.field == LogTerm.Field.APP } }
 
     /** whether this matches when any one of its terms does — what the editor's All / Any shows. */
     val matchesAny: Boolean get() = OR in expression

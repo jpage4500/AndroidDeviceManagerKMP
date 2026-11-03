@@ -1,9 +1,13 @@
 package com.jpage4500.devicemanager.ui.components
 
 import androidx.compose.runtime.*
+// explicit: the graphics package's Color would collide with AWT's
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.*
+import com.jpage4500.devicemanager.ui.theme.*
+import java.awt.Color as AwtColor
 
 actual val dialogsAreWindows = true
 
@@ -19,14 +23,12 @@ actual fun DialogContainer(
     title: String,
     onDismiss: () -> Unit,
     onEnter: (() -> Unit)?,
+    size: DpSize?,
     content: @Composable () -> Unit,
 ) {
-    val state = rememberDialogState(size = DpSize.Unspecified)
-    // an unspecified height has the window measure the form again; the width the user gave it stays
-    val fit = remember(state) { { state.size = DpSize(state.size.width, Dp.Unspecified) } }
     DialogWindow(
         onCloseRequest = onDismiss,
-        state = state,
+        state = rememberDialogState(size = size ?: DpSize.Unspecified),
         title = title,
         // resizable, because one of these is now the app log viewer and a form the user can't
         // widen is a form with a scrollbar it didn't need
@@ -41,6 +43,26 @@ actual fun DialogContainer(
             }
         },
     ) {
+        // the form's height as the window measures it, set directly and only when it differs. Not by
+        // handing the state an unspecified height again: that packs the window to the screen's height
+        // before shrinking it to the form, and every rule added flashed the window tall
+        val fit = remember(window) {
+            // a window opened at a size of its own keeps it
+            if (size != null) return@remember {}
+            {
+                val wanted = window.preferredSize.height
+                if (wanted != window.height) window.setSize(window.width, wanted)
+            }
+        }
+        // the window itself in the form's colour: Compose leaves what its content doesn't cover to the
+        // window's background, so a window made bigger than its form showed the form on a grey panel.
+        // Not a fillMaxSize box under the content — the window packs against the screen's size, and
+        // that box opened every dialog full screen
+        val ground = Colors.menuBg.toArgb()
+        SideEffect {
+            window.background = AwtColor(ground, true)
+            window.contentPane.background = AwtColor(ground, true)
+        }
         CompositionLocalProvider(LocalDialogTitled provides true, LocalDialogFit provides fit) { content() }
     }
 }

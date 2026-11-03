@@ -171,8 +171,17 @@ From a composable that's `stringResource(Res.string.foo)`; from a manager that h
 ## Toasts
 
 `ToastManager.showToast()` is callable from anywhere, which is the point: a manager has no
-composable to show a snackbar from. `ToastHost()` is placed once in `App` and draws whatever is
-current. One at a time, newest wins.
+composable to show a snackbar from. One at a time, newest wins.
+
+On the desktop it's drawn **in the status bar**, the way FileExplorerKMP does it: the Devices,
+Files and Logs bars each wrap one segment in `StatusToastSlot`, which shows that segment normally
+and a tinted pill (icon, message, optional action button) while a toast is up — Devices gives up
+its centre activity line, Files and Logs their count. Clicking the pill dismisses it; a tooltip
+repeats the message when it was clipped. In the bar it covers no row somebody is about to click.
+
+`ToastHost()`, placed once in `App`, floats the toast over the bottom of the window **only while no
+`StatusToastSlot` is composed** — the phone, the Input, Commands and Scripts pages, and the Logs and
+Files pages with no tab open. Each slot counts itself into `ToastManager.statusBars` while composed.
 
 ## Not brought across
 

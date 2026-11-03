@@ -13,9 +13,10 @@ the actions, and almost none of the layout.
 
 ## The shell
 
-The desktop is **one window**: a sidebar, and the page it has picked — Devices, Files or Logs. Logs
-and Files used to be a window per device; they are pages now, with a tab per device. Mirror, device
-details, Connect and the message viewer are still windows of their own. The design and the rest of
+The desktop is **one window**: a sidebar, and the page it has picked — Devices, Files, Logs, Input,
+Commands or Scripts. Logs and Files used to be a window per device; they are pages now, with a tab per
+device. Type text and Commands were dialogs; they are pages too. Mirror, device details, Connect and
+the message viewer are still windows of their own. The design and the rest of
 the plan are in [REDESIGN.md](REDESIGN.md).
 
 | Piece | Where | What it does |
@@ -23,7 +24,8 @@ the plan are in [REDESIGN.md](REDESIGN.md).
 | `AppShell` | `ui/shell/AppShell.kt` | The sidebar and the page; the desktop branch of `App` |
 | `ShellState` | `manager/PageManager.kt` | One per window: the page, the open log and file tabs |
 | `PageManager` | `manager/PageManager.kt` | Sends "logs for this device" to the window last in front |
-| `DeviceTabStrip` | `ui/components/DeviceTabStrip.kt` | The tabs over Logs and Files: a status dot per tab, "N more" past the 120 dp minimum, and + as a menu or (Logs) a checklist |
+| `DeviceTabStrip` | `ui/components/DeviceTabStrip.kt` | The tabs over Logs and Files: a status dot per tab, "N more" past the 120 dp minimum, and + as the shared device checklist |
+| `DevicePickerButton` | `ui/components/DevicePicker.kt` | The + device checklist with Select all — Logs and Files tabs, and Runs on for Scripts, Commands and Input |
 
 **A tab's stream belongs to the window, not to the tab's composable.** `ShellState` starts each
 `LogsSource` on the window's scope and hands it to `LogsScreen` as `owned`, so opening another tab
@@ -70,7 +72,7 @@ bar in `DeviceHeader.kt`):
 │ │ 2 selected  Mirror Screenshot Logs Files Install Type text …  Clear│ │  selection bar
 │ └────────────────────────────────────────────────────────────────────┘ │
 │ ┌────────────────────────────────────────────────────────────────────┐ │
-│ │ Name ▲          │ Serial     │ Model   │ Battery │ OS │ Free │ …   │ │  sortable header
+│ │ Name ▲          │ Serial     │ Battery │ OS │ Free │ Carrier │ …   │ │  sortable header
 │ │ ● bathroom 2     adb-2025…   T26-EEA   [▓▓▓]⚡   13   42.8G       │ │  name over model
 │ │   T26-EEA                                                          │ │
 │ └────────────────────────────────────────────────────────────────────┘ │
@@ -83,10 +85,20 @@ has something to count, except the one that's on), search (⌘F), refresh and Co
 toolbar is gone: Settings is in the sidebar, and everything that acts on a device is in the selection
 bar, the row's menu, or both.
 
+**Search** highlights, it doesn't filter — the same rule as the log. Every device stays where it is
+and the matching text in its cells, or on its tile in the icon view, is marked yellow; only the
+chips take devices away, so the rows don't reshuffle under the pointer as a name is typed. Typing
+anywhere on the page starts a search (any printable key with no ⌘/⌥, except a leading space) and
+moves focus to the box, and Escape clears it — an empty box lets Escape through to clear the
+selection. That takes over the table's and the grid's type-to-select on this page. The search
+reaches the cells through `LocalSearch` (`Highlight.kt`) rather than a parameter on every layer, and
+the box holds a `TextFieldValue` so text typed from outside it leaves the caret at the end.
+
 **Selection bar** — a hint with nothing selected; with a selection, its count and Mirror, Screenshot,
 Logs, Files, Install, Type text, Commands, Run script (desktop) and Details. They act on the selected
 devices that are **ready**, so one offline device in a selection of ten doesn't stop the other nine;
-Logs opens a tab per device in the Logs page, and Run script opens Scripts with them chosen. The bar
+Logs opens a tab per device in the Logs page; Type text, Commands and Run script open Input,
+Commands and Scripts with them chosen. The bar
 is `SelectionBarFrame`, which the Files page uses too.
 
 **Table** — the hard part, see below. Rows are two lines, name over model, with a dot for the device's
@@ -101,9 +113,22 @@ it would reach are ringed while the drag is over the table. The row comes from `
 `dropAt`/`onDropRow`, fed by `fileDropTarget`'s `onMove` — on desktop the AWT drop point times the
 window's density, the same sum Compose's internal `positionInRoot` does.
 
-**Details panel** — opens beside the table from the selection bar's Details. At its top, a still of
+**Details panel** — opens beside the table from the Details toggle next to List / Icons, which stays
+lit while it's open. It has no action tiles of its own; the selection bar covers them. At its top, a still of
 the device's screen: a one-shot `screencap` every 10s while the panel shows it, not the mirror's
-stream, and a click opens the mirror.
+stream, and a click opens the mirror. Each tick is one exec, `CMD_PREVIEW_STILL` in
+`DeviceTransport.kt`, which greps `dumpsys power` on the device first and answers `SCREEN_OFF`
+instead of a PNG while the display is asleep or dozing; the panel draws that as a black screen with
+"Screen off". The grep is a plain one, not `grep -q`: an early exit makes `dumpsys` print a
+broken-pipe error into the same stream, ahead of the marker. A remote server has no such check and
+always sends the PNG. The frame is a fixed `Dimens.previewHeight` tall from the start, so nothing
+below it moves when the still arrives; its shape comes from `DeviceDetails.CMD_SCREEN_SIZE`, asked
+alongside the first still. That reads the input viewport's `logicalFrame`, which follows rotation,
+because `wm size` gives the natural shape (a landscape tablet says 1200x1920). It falls back to
+`wm size`, then to 9:20. The last still per device, shrunk to the preview's
+height, is kept in memory, so returning to a device shows it at once with a spinner over it while the
+next one loads. A refresh button in the frame's top-right corner asks for a still now, and that
+corner shows the spinner while one loads.
 
 **No devices** — three cards in place of the table: the USB steps, Wi-Fi pairing, and another
 computer, the last two opening the Connect window, which already does both. Under them, which adb
@@ -150,6 +175,14 @@ What the table does today:
   `Debouncer`, because `draggable` reports every delta of a resize and a settings write rewrites the
   whole properties file on the calling thread. The in-memory width still changes per pixel; only the
   file waits for the drag to stop.
+- **Fit to width** (`fitColumns = true`, the device table): the widths are proportions, scaled so
+  the row ends exactly at the table's edge and never scrolls sideways — Swing's
+  `AUTO_RESIZE_SUBSEQUENT_COLUMNS`. Dragging an edge takes from or gives to the columns after it,
+  and every shown width is written back, so after a drag the stored widths are the shown ones until
+  the window next changes size. The last column's edge doesn't drag: nothing follows it to pay.
+- **Model column** is left out of the device table while rows are two lines, since the model is
+  already under the name; Compact rows bring it back (unless hidden). Header reorder indices are
+  mapped back onto `DeviceTableState.visible` for that reason.
 - **Tooltips:** rest the pointer on a cell and it answers with the value in full — but only when the
   value didn't fit, which is what makes them worth leaving on. Off with **Show Tooltips** in
   Settings.
@@ -428,12 +461,13 @@ Three things make that work:
   and what keeps a `TextInputDialog`'s field above the soft keyboard — the dialog's measured height
   shrinks when the keyboard opens rather than the field sliding under it.
 
-**Settings is a drill-down, not a page.** `SettingsDialog` is five rows — Connection, Device list,
-Logs, App, About — each opening a dialog of its own, and a row in *those* opens the control that
-fits what it holds. It was one long scroll of every pref (the Swing app's shape, and this app's until
-now); it broke on the phone, where the same list is a page and a half of scrolling with no room for
-the section headings that made it readable. There is no `SettingsScreen` and no `WindowKind.SETTINGS`
-any more: on the desktop the dialog *is* the window.
+**Settings is tabs on the desktop and a drill-down on a phone.** The desktop's `SettingsDialog` is
+the Swing app's tabbed window — General, Devices, Logs, Files, scrcpy, Connection, About — each tab a
+form of rows under section headers; on a phone the same tabs are a list, each opening a dialog of its
+own. Both draw the same per-tab bodies, so the two can't drift. A single long scroll broke on the
+phone, where it is a page and a half with no room for the headers that made it readable. There is no
+`SettingsScreen` and no `WindowKind.SETTINGS`: on the desktop the dialog *is* the window. See
+[SETTINGS.md](SETTINGS.md).
 
 **Settings rows are sized twice.** `SettingItem`, `SettingSwitchItem`, `SettingSliderItem` and
 `SettingStepperItem` read `LocalCompactUi` (provided by `App(compact)`) through `Dimens`. The
@@ -443,16 +477,21 @@ right is red on purpose and is the one place in the app that uses red for someth
 wrong — in a list of thirty rows it is the only part anyone scans.
 
 **`DialogContainer` is the `expect` under both families.** The desktop actual is a `DialogWindow`
-sized to its content (`DpSize.Unspecified`), which is what the Swing app's `JDialog`s were; a phone
+sized to its content (`DpSize.Unspecified`), which is what the Swing app's `JDialog`s were, with the
+form's colour under the whole window so one made bigger than its form stays a single panel; a phone
 gets an overlay, because a phone has no windows. `AppDialog` draws its own heading only when the
 container has none (`LocalDialogTitled`). Escape and Enter are handled by the *window* as well as by
 the panel, so the default button answers Enter in a dialog with no fields in it — anything focused
-inside sees the key first and can consume it.
+inside sees the key first and can consume it. A `DataTable` takes focus as it appears, so it claims
+Esc only when it has a selection to clear; with none, Esc reaches the window and closes the dialog.
+(Handling Esc in the window's *preview* instead would close the dialog over an open `Popup`, which is
+a layer of the same window — the filter editor's App list.)
 
 The window measures its form **once**, when it opens. A form that grows afterwards calls
-`LocalDialogFit`, which sets the dialog state's height back to `Dp.Unspecified` so Compose measures
-the form again (the width the user gave it stays); on a phone it does nothing. A growing part of a
-form needs a `heightIn(max)` cap and its own scroll rather than a `weight` — the window measures with
+`LocalDialogFit`, which sets the window's height to the form's preferred height directly; on a phone
+it does nothing. Not by handing the dialog state `Dp.Unspecified` again — that packs the window to
+the screen's height before shrinking it, and the window flashes tall on every re-fit. A growing part
+of a form needs a `heightIn(max)` cap and its own scroll rather than a `weight` — the window measures with
 an unbounded height, and a weighted child measured that way comes out zero tall.
 
 This has one consequence worth knowing: a `Popup` is drawn inside its own window's layer, so a menu
@@ -472,7 +511,12 @@ saved-filter file already speaks, so nothing downstream knows the dialog exists.
 summary box: the filter in words, how many lines it passes on its own of all held on the device, and
 "Combined with *A* + *B*" when the tab has other filters on — re-counted 150ms after the last
 keystroke (`LogsSource.count`). A new filter's button is **Save and turn on**; an edited one keeps
-whether it was on, and has Delete filter in the corner. `LogTermSpec.parse` reads a filter back,
+whether it was on. Deleting is the 🗑 in the + Add filter panel, behind a prompt, not a button
+here. An **App** rule has a ▾ beside its value listing the apps the log has lines from
+(`LogsSource.pids`, named through the process table, read once as the editor opens), with a search
+box over it; Enter takes the first match, and typing a name into the rule still works. The list is
+its own focusable `Popup`, which is a layer of the dialog's window rather than a child of the form,
+so it consumes Escape itself — left alone, the key reaches the window and closes the whole dialog. `LogTermSpec.parse` reads a filter back,
 which is what makes Edit work on one typed by hand or written by the Swing app. Quotes go outside both the `!` and the stars
 (`msg:"!*hello you*"`), because that is the order `LogTerm.parse` strips them in.
 
@@ -565,7 +609,10 @@ name is whatever `/api/info` says.
 
 **Logs** (`LogsScreen`) — two rows of controls over the table. The first: search, the level buttons
 (V D I W E, the lowest level shown, each in its level's colour), Pause and Save…, and ⋯ for Clear
-log, Horizontal scrolling and text size. The second: the
+log, Horizontal scrolling and text size. **Save…** asks what first — Selected lines (only for more
+than one), Visible lines, or the Entire log buffer (`LogsSource.all`) — then the native save dialog
+(`pickSaveFile`, starting in the folder the last save went to, `AppPref.LOGS_SAVE_DIR`, else
+Downloads), then says where it went with Open and Show in Finder / Explorer. The second: the
 filters that are on, as pills. The two rows are one card hanging off the open tab (`joinedCard`, as
 Files does), the table is a card of its own under it, both inset by the page gutter, and under them
 a plain status line: N of M lines shown and filters on — not the device, which the open tab
@@ -608,7 +655,9 @@ Three things carry most of its usefulness:
   New filter from this… on tag, app and thread; Show only / Hide lines containing this on the message;
   that level and above on the level; nothing on the date. Then Copy *that column's value*, Copy line,
   and View message. Show only and Hide are **quick filters** — a dashed pill, this tab's alone and
-  not saved; clicking it opens the editor to save it as a filter. A message filter is cut at the first
+  not saved; clicking it opens the editor to save it as a filter. New filter from this… on an app
+  writes the process name rather than the pid when the name is known, since a saved filter outlives
+  the process; the quick filters keep the pid. A message filter is cut at the first
   `&&`, `||` or quote, which the expression syntax would read as its own.
 - **The message panel is fixed, not a floating tooltip.** The Swing app pins it to the top or bottom
   edge of the table at the table's own width (`MessageTooltipPanel`, light yellow on a darker
@@ -629,7 +678,9 @@ Three things carry most of its usefulness:
   away; only the level and the pills filter. The box counts the hits (3 of 41) — off the UI thread,
   once per batch — and steps through them with ↑ ↓, Enter / ⇧Enter, ⌘G / ⇧⌘G. `tag:` and `app:`
   (the process name) look in one column. **Save as filter** opens the editor with the search as a
-  rule; an `app:` search becomes the pids whose names match now, since a filter on App tests the pid.
+  rule; an `app:` search carries over as typed, since a filter on App tests the process name as
+  well as the pid. That makes an App rule depend on the process table, so the tab's filter is
+  re-run when the table changes — but only while a filter that's on has an App rule (`usesApp`).
 - **Typing anywhere searches.** Any printable key with no ⌘ appends to Search and moves focus there,
   and Escape clears it — scanning a log is a two-hand job and reaching for the box first is a step
   nobody should have to take. Both typed boxes report focus back up so this doesn't fire while one of
@@ -768,9 +819,10 @@ both through `DeviceManager.runCommand`.
 **A script runs once per device, with that device's serial as `$1`** — not once with every serial,
 as the Swing app does — which is what gives each device its own result. `ScriptManager` runs them
 eight at a time across every script (a guess, to tune on the rig), keeps each device's last 500
-lines of output, and saves each script's last run to `scripts/last_runs.json`. **Runs on: All N |
-Choose…** — All is every ready device, with a note counting the ones it skips; Choose… shows chips,
-starting from the Devices selection, and removing the last goes back to All. The source shows
+lines of output, and saves each script's last run to `scripts/last_runs.json`. **Runs on** is
+chips for the chosen devices and a + opening the shared device checklist (`DevicePickerButton`, with
+Select all) — never "all"; nothing chosen when the page opens starts from the Devices selection, and
+a note counts chosen devices that aren't ready. The source shows
 read-only with line numbers; Open in editor, Show folder and New script (a starter that says how to
 loop over `$@` for the old behaviour) are the buttons. Results are a row per device — state, exit
 code, time, last line — with the clicked one's output under them, and Run again on failed.
@@ -790,15 +842,12 @@ print the JSON on open) and **Edit** (hand the text to whatever opens `.txt`). B
 remembered. `TextUtils.formatJson` is a character walk rather than parse-and-re-serialise, because
 the input is a log *sentence* with a payload in the middle and the prose either side has to survive.
 
-**Device Details** (`DeviceInfoScreen`) — the storage and battery gauges, then the properties list
-under a section header rather than in cards, so the window reads like the settings forms beside it.
-The gauges carry no header and don't fold: two bars are shorter than the header that would hide them.
-The properties do fold, remembered in `AppPref.INFO_COLLAPSED`, which the phone's sheet shares — it
-adds a second, Commands. The two pieces are `DeviceStatus` and `DeviceDetails`, which that sheet
-drops into its own scroll with Commands between them; the screen is the scrolling wrapper around the
-pair, gauges first, and owns the empty state for a device that is gone — nothing can fill an
-unbounded height, so that check has to sit outside the scroll. Every property row copies itself on
-click, with a ripple, a copy hint in the gutter and a toast naming what it took.
+**Device Details** — no longer a window. On the desktop every property is in the Devices page's
+details panel (`DeviceDetailsPanel`), opened by the Details toggle, a row's Device Details item or the
+tray; each row copies its value on click, with a copy icon on hover and a toast naming what it took,
+and the panel scrolls back to the top when another device is selected. The phone's sheet draws the
+gauges and properties from `DeviceStatus` and `DeviceDetails` in `DeviceInfoScreen.kt`; the
+properties fold, remembered in `AppPref.INFO_COLLAPSED`, alongside the sheet's Commands section.
 
 **Settings** (`SettingsDialog`) — and one section with no Swing equivalent: **which transport the
 device list reads from**. That app is always a client of a local adb server; this one can also point
@@ -816,12 +865,14 @@ pushed to `/data/local/tmp` first and removed afterwards; `adb install` does the
 hides it. `-r -d` so a reinstall keeps its data and a downgrade is allowed, which is what makes it
 useful for iterating on a build.
 
-Three new platform seams came with it, all no-ops on mobile:
+The local-file platform seams, all no-ops on mobile — the save, open and reveal ones came later, with saving a log:
 
 | | Desktop | Why |
 |---|---|---|
 | `pickLocalFiles` | `java.awt.FileDialog` | maps to a real `NSOpenPanel` on macOS; `JFileChooser` draws its own and looks like nothing else on the machine. Its extension filter is advisory on some platforms, so the result is filtered again |
 | `readLocalFile` | `java.io` (`jvmCommonMain`) | `StorageManager` is rooted at the app's own folder; an APK is anywhere |
+| `pickSaveFile` / `writeLocalFile` | `FileDialog` in SAVE mode / `java.io` | a saved log goes where the user picks, not into the app's folder; the native dialog asks before replacing |
+| `openLocalFile` / `revealLocalFile` | `Desktop.open` / `Desktop.browseFileDirectory`, `explorer /select,` on Windows | the saved-log dialog's Open and Show in Finder |
 | `Modifier.fileDropTarget` | `dragAndDropTarget` + AWT `javaFileListFlavor` | `shouldStartDragAndDrop` checks for files, so text dragged from another app falls through rather than being swallowed |
 
 `pushFile` is new on `DeviceTransport`, over `AdbSync.push`.

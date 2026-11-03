@@ -139,21 +139,52 @@ screen: `MirrorScreen` — `ui/screen/MirrorScreen.kt`, from the Mirror tile
 
 ### settings
 
-description: five categories, one dialog each  
+description: the desktop's Settings tabs as a list, one dialog each — see [SETTINGS.md](SETTINGS.md)  
 screen: `SettingsDialog` — `ui/dialog/SettingsDialog.kt`, from the gear in the `AppBar`
 
 | element | what it is |
 |---|---|
-| `SettingItem` | "Connection" — `ConnectionSettingsDialog` |
-| `SettingItem` | "Device list" — `DeviceListSettingsDialog` |
-| `SettingItem` | "Logs" — `LogSettingsDialog` |
-| `SettingItem` | "App" — `AppSettingsDialog` |
-| `SettingItem` | "About" — `AboutDialog` |
+| `SettingItem` | "General" |
+| `SettingItem` | "Devices" |
+| `SettingItem` | "Logs" |
+| `SettingItem` | "Connection" |
+| `SettingItem` | "About" — `AboutBody`, the same rows `AboutDialog` shows |
+
+Files and scrcpy are desktop-only tabs (`SettingsTab.desktopOnly`) and aren't listed. Each row opens
+a `BaseDialog` holding that tab's body — the same composable the desktop draws as a tab page.
+
+### settings ▸ general
+
+| element | what it is |
+|---|---|
+| "Theme" | `ChoiceSetting` → an `OptionsDialog` of Light / Dark / Same as the system |
+| "Confirm destructive commands" | `SwitchSetting` — what the device page's Restart reads before it asks |
+| PREFERENCES › "Reset all settings" | RESET, behind a `ConfirmationDialog` |
+
+### settings ▸ devices
+
+| element | what it is |
+|---|---|
+| "Full refresh (mins)" | `SliderSetting`, 0–600; 0 reads "Never" |
+| "Refresh battery/disk (secs)" | `SliderSetting` → `SliderDialog` |
+| TABLE › "Compact device rows", "Show Tooltips" | `SwitchSetting`s; tooltips are desktop-only in effect |
+| BUILT-IN MIRROR › "Mirror interval (ms)" | `SliderSetting` |
+| BUILT-IN MIRROR › "Mirror windows at once" | `StepperSetting`; windows are a desktop thing, the row shows here too |
+
+### settings ▸ logs
+
+description: the log viewer's prefs, which the phone doesn't have a viewer for yet
+
+| element | what it is |
+|---|---|
+| "Log buffer (lines)" | `TextSetting`, clamped to 10,000–9,999,999; 200,000 by default |
+| "Hold while scrolled up (lines)" | `TextSetting`, numbers only |
+| "Log font size" | `SliderSetting` |
+| "Scroll the log sideways" | `SwitchSetting` |
 
 ### settings ▸ connection
 
-description: how this app reaches devices, and at what address  
-screen: `ConnectionSettingsDialog` — `ui/dialog/SettingsDialog.kt`
+description: how this app reaches devices, and at what address
 
 | element | what it is |
 |---|---|
@@ -162,42 +193,6 @@ screen: `ConnectionSettingsDialog` — `ui/dialog/SettingsDialog.kt`
 | "adb server port" | `TextSetting`, numbers only |
 | "Remote Device Manager URL" | `TextSetting` |
 | "Remote token" | `TextSetting`, shown obfuscated |
-
-### settings ▸ device list
-
-description: how often devices are re-read, and how the mirror behaves  
-screen: `DeviceListSettingsDialog` — `ui/dialog/SettingsDialog.kt`
-
-| element | what it is |
-|---|---|
-| "Refresh battery/disk (secs)" | `SliderSetting` → `SliderDialog` |
-| "Full refresh (mins)" | `SliderSetting`; 0 reads "Never" |
-| "Mirror interval (ms)" | `SliderSetting`. reads and writes the pref and nothing else does: a polled mirror runs at `MirrorSource.DEFAULT_INTERVAL_MS` |
-| "Mirror windows at once" | `StepperSetting`. windows are a desktop thing; the row shows here too |
-| "Show Tooltips" | `SwitchSetting`. also desktop-only in effect — a phone has no pointer to hover |
-
-### settings ▸ logs
-
-description: the log viewer's prefs, which the phone doesn't have a viewer for yet  
-screen: `LogSettingsDialog` — `ui/dialog/SettingsDialog.kt`
-
-| element | what it is |
-|---|---|
-| "Log buffer (lines)" | `TextSetting`, numbers only |
-| "Hold while scrolled up (lines)" | `TextSetting`, numbers only |
-| "Log font size" | `SliderSetting` |
-
-### settings ▸ app
-
-description: the app's own behaviour  
-screen: `AppSettingsDialog` — `ui/dialog/SettingsDialog.kt`
-
-| element | what it is |
-|---|---|
-| "Stay in the menu bar when closed" | `SwitchSetting`; desktop-only in effect |
-| "Keep windows on top" | `SwitchSetting`; desktop-only in effect |
-| "Confirm destructive commands" | `SwitchSetting` — what the device page's Restart reads before it asks |
-| "Reset all settings" | RESET, behind a `ConfirmationDialog` |
 
 ### settings ▸ about
 
@@ -453,10 +448,10 @@ row's device icon tinted by the same state colour, and the second line is where 
 rather than its serial — a wireless serial eats the line to say nothing, and it is the first row of
 Details anyway.
 
-- **The body is `DeviceStatus` and `DeviceDetails`**, the gauges and the rows the desktop's Device
-  Details window draws, reading the live device rather than a snapshot — so the free space and the
-  battery move while the sheet is open. `DeviceInfoScreen` is the desktop's scrolling wrapper around
-  the same two pieces; the sheet has a scroll of its own and calls them directly. **Sections rather
+- **The body is `DeviceStatus` and `DeviceDetails`** (in `DeviceInfoScreen.kt`), the gauges and the
+  property rows, reading the live device rather than a snapshot — so the free space and the battery
+  move while the sheet is open. The desktop lists the same properties in its details panel beside
+  the device table; the Device Details window that used to wrap these two pieces is gone. **Sections rather
   than cards on grey**: the same `SectionHeader` and flat rows a settings screen uses, because two
   white cards floating on a band of `headerBg` was the one part of the phone app that looked like a
   different product.
@@ -783,11 +778,12 @@ ever had wireless debugging switched on needs a desk once, to pair.
 
 ### Route 3, first: connect to a Device Manager server
 
-This is the route that works **today, against the Swing app, with no new protocol** — so it goes
-first on the panel and first in the build order, whatever order the three get listed in.
+This is the route that needs **no new protocol** — the Swing app's — so it goes first on the panel
+and first in the build order, whatever order the three get listed in. Either desktop serves it: the
+Swing app, or this one's Share Devices ([SHARE-SERVER.md](SHARE-SERVER.md)).
 
-`RemoteHttpTransport` already speaks it. Verified against the Swing app's `RemoteHttpServer`, the
-endpoints are:
+`RemoteHttpTransport` speaks it. Verified against the Swing app's `RemoteHttpServer`, the endpoints
+are:
 
 | | |
 |---|---|
@@ -1093,14 +1089,15 @@ all, so until that host is set to a desk the app can only read a Device Manager 
 devices, and pairing — which needs an adb server behind it — can never be offered. Connecting
 **straight to a device** is the one route that needs nothing set there at all.
 
-It is no longer a desktop form squeezed onto a phone. Settings is a **drill-down of dialogs**:
-`SettingsDialog` is five rows — Connection, Device list, Logs, App, About — each opening a dialog of
-its own, and a row in one of those opens the control that fits what it holds: a slider for a
-duration, +/- for a small count, radio buttons for the transport, a field for an address. On a phone
-each level replaces the one before it and comes back when the inner one closes, so there is only ever
-one card on screen; on the desktop each is its own window. The rows come from `ui/setting/` (ported
-from DashboardWeatherKMP) and read `LocalCompactUi` through `Dimens`, so the phone gets a 26dp icon
-and a 20sp label against the desktop's 18dp and 14sp. See the Dialogs section of
+It is no longer a desktop form squeezed onto a phone. On a phone Settings is a **drill-down of
+dialogs**: `SettingsDialog` lists the tabs the desktop shows across the top — General, Devices, Logs,
+Connection, About — each opening a dialog of its own, and a row in one of those opens the control
+that fits what it holds: a slider for a duration, +/- for a small count, radio buttons for a choice,
+a field for an address. Each level replaces the one before it and comes back when the inner one
+closes, so there is only ever one card on screen. The desktop draws the same tab bodies as pages of
+one tabbed window — see [SETTINGS.md](SETTINGS.md). The rows come from `ui/setting/` (ported from
+DashboardWeatherKMP) and read `LocalCompactUi` through `Dimens`, so the phone gets a 26dp icon and a
+20sp label against the desktop's 18dp and 14sp. See the Dialogs section of
 [UI-PORT.md](UI-PORT.md) for the rest of what differs between the two.
 
 **About is the phone's whole support story**, and the order of its rows is the order to work through

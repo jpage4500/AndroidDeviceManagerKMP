@@ -12,6 +12,7 @@ import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.*
+import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.*
@@ -29,7 +30,7 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * the Devices page: a header with filter chips, a bar of actions for the selection, every device as
- * a row in a table, and a status bar. See docs/REDESIGN.md.
+ * a row in a table — or as a tile in [DeviceGrid] — and a status bar. See docs/REDESIGN.md.
  *
  * Still a table rather than a two-pane list — this is a screen for watching 45 devices at once, and
  * a split view spends half the window on one of them. The toolbar it used to have is gone: Connect
@@ -38,7 +39,11 @@ import org.jetbrains.compose.resources.stringResource
  * [WindowManager]).
  */
 @Composable
-fun DeviceScreen(modifier: Modifier = Modifier) {
+fun DeviceScreen(
+    detailsOpen: Boolean,
+    onDetailsOpen: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val devices by DeviceManager.devices.collectAsState()
     val selection by DeviceManager.selection.collectAsState()
     val busy by DeviceManager.busy.collectAsState()
@@ -48,16 +53,29 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
     val sort by DeviceTableState.sort.collectAsState()
     val scope = rememberCoroutineScope()
 
-    var filter by remember { mutableStateOf("") }
+    // a TextFieldValue rather than a String: typing on the page writes into it from outside the
+    // field, and the caret has to follow that text or the next key lands in front of it
+    var filter by remember { mutableStateOf(TextFieldValue()) }
+    val search = filter.text.trim()
+    var searchFocused by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf<InputRequest?>(null) }
     var historyOpen by remember { mutableStateOf(false) }
-    var commandsOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var dropping by remember { mutableStateOf(false) }
     var chip by remember { mutableStateOf(DeviceChip.ALL) }
-    // the details panel beside the table; it shows whichever device leads the selection
-    var detailsOpen by remember { mutableStateOf(false) }
     val compact by SettingsManager.getBoolAsState(AppPref.DEVICES_COMPACT)
+    // two-line rows already show the model under the name, so a Model column would say it twice
+    val tableColumns = remember(columns, compact) {
+        if (compact) columns else columns.filterNot { it == DeviceColumn.MODEL }
+    }
+    val viewName by SettingsManager.getAsState(AppPref.DEVICES_VIEW)
+    val view = DeviceView.of(viewName)
+    // the icon view's size: 0 in the pref means Fit, and the grid reports what it fitted to so the
+    // slider can show it. A drag is held here until release, then saved — which ends Fit
+    val savedIconSize by SettingsManager.getIntAsState(AppPref.DEVICES_ICON_SIZE)
+    var draggedIconSize by remember { mutableStateOf<Int?>(null) }
+    var fittedIconSize by remember { mutableStateOf(MIN_DEVICE_ICON) }
+    val iconSize: Int? = draggedIconSize ?: savedIconSize.takeIf { it > 0 }
     val installTitle = stringResource(Res.string.install_title)
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -71,7 +89,9 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
         deviceTooltip(row, column, clipped, upLabel)
     }
 
-    val visible = remember(devices, filter, chip) { devices.filter { chip.matches(it) && it.matches(filter) } }
+    // the search highlights rather than filters — a device with nothing matching stays in its place,
+    // so the rows don't jump about as it's typed. The chips are what narrow the list
+    val visible = remember(devices, chip) { devices.filter { chip.matches(it) } }
     val sorted = remember(visible, sort) { DeviceTableState.sorted(visible) }
 
     // the first device to arrive is selected, so the toolbar has something to act on straight away.
@@ -99,14 +119,31 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
         else -> listOf(hovered.id)
     }
 
+    CompositionLocalProvider(LocalSearch provides search) {
     Column(
         modifier
             .fillMaxSize()
-            // preview, so it reaches the filter box before the table's own key handling claims it
+            // preview, so it reaches the search box before the table's own key handling claims it
             .onPreviewKeyEvent { event ->
-                val find = event.key == Key.F && (event.isMetaPressed || event.isCtrlPressed)
-                if (event.type != KeyEventType.KeyDown || !find) return@onPreviewKeyEvent false
-                runCatching { filterFocus.requestFocus() }
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val meta = event.isMetaPressed || event.isCtrlPressed
+                when {
+                    event.key == Key.F && meta -> runCatching { filterFocus.requestFocus() }
+                    // Esc clears the search first; only an empty one lets it through to clear the
+                    // selection
+                    event.key == Key.Escape && filter.text.isNotEmpty() -> filter = TextFieldValue()
+                    meta || event.isAltPressed || searchFocused -> return@onPreviewKeyEvent false
+                    else -> {
+                        // a printable key anywhere else on the page starts a search with it — keys
+                        // with no character report 0xFFFF. A leading space would search for nothing
+                        val codePoint = event.utf16CodePoint
+                        if (codePoint == 0xFFFF || codePoint < 0x20 || codePoint in 0x7F..0x9F) return@onPreviewKeyEvent false
+                        if (codePoint == 0x20 && filter.text.isEmpty()) return@onPreviewKeyEvent false
+                        val text = filter.text + codePoint.toChar()
+                        filter = TextFieldValue(text, TextRange(text.length))
+                        runCatching { filterFocus.requestFocus() }
+                    }
+                }
                 true
             }
     ) {
@@ -117,6 +154,11 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
             filter = filter,
             onFilterChange = { filter = it },
             filterFocus = filterFocus,
+            onFilterFocused = { searchFocused = it },
+            view = view,
+            onView = { SettingsManager.setString(AppPref.DEVICES_VIEW, it.name) },
+            detailsOpen = detailsOpen,
+            onDetails = { onDetailsOpen(!detailsOpen) },
             onRefresh = { DeviceManager.refresh() },
         )
 
@@ -125,7 +167,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
         } else {
             SelectionBar(
                 selected = selected,
-                onMirror = { list -> list.forEach { WindowManager.openMirror(it.id) } },
+                onMirror = { list -> MirrorLauncher.mirror(list.map { it.id }) },
                 onScreenshot = { list -> scope.launch { list.forEach { DeviceManager.saveScreenshot(it) } } },
                 onLogs = { list -> PageManager.openLogs(list.map { it.id }) },
                 onFiles = { d -> WindowManager.openFiles(d.id) },
@@ -136,9 +178,8 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                     }
                 },
                 onInput = { PageManager.openInput(DeviceManager.selectedIds.value) },
-                onCommands = { commandsOpen = true },
+                onCommands = { PageManager.openCommands(DeviceManager.selectedIds.value) },
                 onRunScript = { list -> PageManager.openScripts(list.map { it.id }) },
-                onDetails = { detailsOpen = true },
                 onClear = { DeviceManager.setSelection(TableSelection()) },
             )
 
@@ -169,27 +210,56 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                             title = stringResource(Res.string.no_matches),
                             detail = stringResource(Res.string.no_matches_msg),
                         )
+                    } else if (view == DeviceView.ICONS) {
+                        DeviceGrid(
+                            rows = sorted,
+                            selection = selection,
+                            busy = busy,
+                            iconSize = iconSize,
+                            onFitted = { fittedIconSize = it },
+                            onSelectionChange = { DeviceManager.setSelection(it) },
+                            onActivate = { row -> MirrorLauncher.mirror(row.id) },
+                            dropAt = dropAt,
+                            onDropRow = { dropRow = it },
+                            dropKeys = if (dropping) dropIds.toSet() else emptySet(),
+                            menu = { row ->
+                                DeviceMenu(
+                                    device = row,
+                                    column = null,
+                                    onCopy = copyToClipboard,
+                                    onEdit = { input = it },
+                                    onAction = { action -> scope.launch { action() } },
+                                )
+                            },
+                        )
                     } else {
                         DataTable(
                             rows = sorted,
-                            columns = columns,
-                            widths = widths.withDefaults(columns),
+                            columns = tableColumns,
+                            widths = widths.withDefaults(tableColumns),
+                            fitColumns = true,
                             sortedBy = sort.column,
                             sortAscending = sort.ascending,
                             selection = selection,
                             rowKey = { it.id },
                             header = { it.label },
                             rowHeight = if (compact) Dimens.tableRowHeight else Dimens.deviceRowHeight,
-                            // typing "gal" jumps to the Galaxy, the way it does in any file manager
-                            typeAheadText = { it.displayName },
                             onSelectionChange = { DeviceManager.setSelection(it) },
                             dropAt = dropAt,
                             onDropRow = { dropRow = it },
                             dropKeys = if (dropping) dropIds.toSet() else emptySet(),
                             onSort = { DeviceTableState.sortBy(it) },
                             onResize = { column, width -> DeviceTableState.resize(column, width) },
-                            onReorder = { from, to -> DeviceTableState.moveColumn(from, to) },
-                            onActivate = { row -> WindowManager.openMirror(row.id) },
+                            // indices into what the header draws, which can be short the Model column — mapped back
+                            // onto the visible list the state reorders
+                            onReorder = { from, to ->
+                                val moved = tableColumns.getOrNull(from)
+                                val target = tableColumns.getOrNull(to)
+                                if (moved != null && target != null) {
+                                    DeviceTableState.moveColumn(columns.indexOf(moved), columns.indexOf(target))
+                                }
+                            },
+                            onActivate = { row -> MirrorLauncher.mirror(row.id) },
                             tooltip = cellTooltip.takeIf { showTooltips },
                             rowMenu = { row, column ->
                                 DeviceMenu(
@@ -208,7 +278,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                                         DeviceTableState.sizeToFit(target, widestIn(sorted, target, measurer, density))
                                     },
                                     onSizeAllToFit = {
-                                        columns.forEach { each ->
+                                        tableColumns.forEach { each ->
                                             DeviceTableState.sizeToFit(each, widestIn(sorted, each, measurer, density))
                                         }
                                     },
@@ -230,15 +300,7 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
                     DeviceDetailsPanel(
                         device = shown,
                         busy = shown.id in busy,
-                        onClose = { detailsOpen = false },
-                        onScreenshot = { d -> scope.launch { DeviceManager.saveScreenshot(d) } },
-                        onInstall = {
-                            scope.launch {
-                                val files = pickLocalFiles(installTitle, extensions = listOf("apk"))
-                                if (files.isNotEmpty()) InstallManager.send(listOf(shown.id), files)
-                            }
-                        },
-                        onInput = { PageManager.openInput(listOf(shown.id)) },
+                        onClose = { onDetailsOpen(false) },
                     )
                 }
             }
@@ -251,20 +313,32 @@ fun DeviceScreen(modifier: Modifier = Modifier) {
             shown = sorted.size,
             selected = selection.size,
             onHistory = { historyOpen = true },
+            // the icon view has no columns, so the one selected device's facts go here instead
+            info = device.takeIf { view == DeviceView.ICONS && selection.size == 1 },
+            slider = if (view == DeviceView.ICONS && devices.isNotEmpty()) {
+                {
+                    DeviceIconSizeSlider(
+                        value = iconSize ?: fittedIconSize,
+                        fitting = iconSize == null,
+                        onFit = { SettingsManager.setInt(AppPref.DEVICES_ICON_SIZE, 0) },
+                        onChange = { draggedIconSize = it },
+                        onChangeFinished = {
+                            SettingsManager.setInt(AppPref.DEVICES_ICON_SIZE, it)
+                            draggedIconSize = null
+                        },
+                    )
+                }
+            } else {
+                null
+            },
         )
+    }
+
     }
 
     InputDialog(input) { input = null }
     StatusHistoryDialog(open = historyOpen, onDismiss = { historyOpen = false })
-    CommandDialog(open = commandsOpen, onDismiss = { commandsOpen = false })
     if (settingsOpen) SettingsDialog(onDismiss = { settingsOpen = false })
-}
-
-/** free-text filter: any field, case-insensitive — the Swing toolbar's search box. */
-private fun Device.matches(filter: String): Boolean {
-    if (filter.isBlank()) return true
-    val text = filter.trim()
-    return DeviceColumn.entries.any { column -> column.text(this).containsIgnoreCase(text) }
 }
 
 /** widths the user hasn't touched fall back to the column's own default. */
@@ -291,12 +365,12 @@ private fun DeviceCell(
             Box(Modifier.size(Dimens.stateDot).clip(CircleShape).background(device.stateColor(busy)))
             Spacer(Modifier.width(Dimens.gap))
             if (compact) {
-                TableText(device.displayName)
+                TableText(searchHighlighted(device.displayName))
             } else {
                 Column {
-                    TableText(device.displayName, color = if (device.isOnline) Color.Unspecified else Colors.secondaryText)
+                    TableText(searchHighlighted(device.displayName), color = if (device.isOnline) Color.Unspecified else Colors.secondaryText)
                     Text(
-                        text = device.subtitle(),
+                        text = searchHighlighted(device.subtitle()),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (device.needsAccepting) Colors.busy else Colors.secondaryText,
                         maxLines = 1,
@@ -314,11 +388,11 @@ private fun DeviceCell(
         // greyed rather than hidden when a device is offline: the number was true when it was read,
         // and a blank cell reads as "unknown" instead of "stale"
         DeviceColumn.FREE -> TableText(
-            text = column.text(device),
+            text = searchHighlighted(column.text(device).orEmpty()),
             color = if (device.isOnline) Color.Unspecified else Colors.offline,
         )
 
-        else -> TableText(column.text(device))
+        else -> TableText(searchHighlighted(column.text(device).orEmpty()))
     }
 }
 
@@ -407,10 +481,10 @@ private fun AppMenuScope.DeviceMenu(
     Item(stringResource(Res.string.copy_line)) { onCopy(device.asLine()) }
     Separator()
 
-    Item(stringResource(Res.string.device_details)) { WindowManager.openInfo(deviceId) }
+    Item(stringResource(Res.string.device_details)) { PageManager.openDetails(deviceId) }
     Item(stringResource(Res.string.action_browse)) { WindowManager.openFiles(deviceId) }
     Item(stringResource(Res.string.action_view_logs)) { WindowManager.openLogs(deviceId) }
-    Item(stringResource(Res.string.action_mirror)) { WindowManager.openMirror(deviceId) }
+    Item(stringResource(Res.string.action_mirror)) { MirrorLauncher.mirror(deviceId) }
     Item(stringResource(Res.string.action_screenshot)) { onAction { DeviceManager.saveScreenshot(device) } }
     Item(stringResource(Res.string.action_install)) {
         onAction {
@@ -420,15 +494,14 @@ private fun AppMenuScope.DeviceMenu(
     }
     Item(stringResource(Res.string.restart)) { onAction { DeviceManager.reboot(deviceId).toast() } }
 
+    Separator()
     val commands by CommandStore.commands.collectAsState()
-    if (commands.isNotEmpty()) {
-        Separator()
-        commands.forEach { entry ->
-            Item(entry.name) {
-                onAction { DeviceManager.runCommand(deviceId, entry.command, entry.name + " on").toast() }
-            }
+    commands.forEach { entry ->
+        Item(entry.name) {
+            onAction { DeviceManager.runCommand(deviceId, entry.command, entry.name + " on").toast() }
         }
     }
+    Item(stringResource(Res.string.menu_run_command)) { PageManager.openCommands(listOf(deviceId)) }
 
     if (device.isWireless) {
         Separator()
@@ -526,9 +599,19 @@ private fun AppMenuScope.ColumnMenu(
 /**
  * the version and the heap on the left, what the app is doing in the middle, and how fresh the rows
  * are and how many there are on the right.
+ *
+ * In the icon view, [info] — the one selected device — takes the space between the heap and the
+ * middle, and [slider] sizes the icons from the right-hand corner, where FileExplorerKMP keeps it.
  */
 @Composable
-private fun DeviceStatusBar(devices: List<Device>, shown: Int, selected: Int, onHistory: () -> Unit) {
+private fun DeviceStatusBar(
+    devices: List<Device>,
+    shown: Int,
+    selected: Int,
+    onHistory: () -> Unit,
+    info: Device? = null,
+    slider: (@Composable () -> Unit)? = null,
+) {
     val status by StatusManager.current.collectAsState()
     val total = devices.size
     // ticks so "12s ago" counts up between refreshes; the heap figure rides along with it
@@ -567,22 +650,30 @@ private fun DeviceStatusBar(devices: List<Device>, shown: Int, selected: Int, on
         val heap = remember(now) { PlatformUtils.getMemoryInfo().let { it.totalBytes - it.freeBytes } }
         StatusText(Utils.bytesToDisplayString(heap))
 
-        Spacer(Modifier.weight(1f))
-        // whatever the app is doing right now, or "History" when it is idle — the Swing status bar
-        Row(
-            Modifier.plainClickable(onClick = onHistory).padding(horizontal = Dimens.gap),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AppIcon(Res.drawable.logs, size = 12.dp, tint = Colors.secondaryText)
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = status?.label ?: stringResource(Res.string.history),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (status?.isError == true) Colors.error else Colors.secondaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 280.dp),
-            )
+        if (info != null) {
+            Spacer(Modifier.width(Dimens.gapLarge))
+            DeviceInfoLine(info, Modifier.weight(1f))
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
+        // whatever the app is doing right now, or "History" when it is idle — the Swing status bar.
+        // a toast takes this place while it's up
+        StatusToastSlot {
+            Row(
+                Modifier.plainClickable(onClick = onHistory).padding(horizontal = Dimens.gap),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppIcon(Res.drawable.logs, size = 12.dp, tint = Colors.secondaryText)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = status?.label ?: stringResource(Res.string.history),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (status?.isError == true) Colors.error else Colors.secondaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 280.dp),
+                )
+            }
         }
         Spacer(Modifier.weight(1f))
 
@@ -607,7 +698,52 @@ private fun DeviceStatusBar(devices: List<Device>, shown: Int, selected: Int, on
                 else -> pluralStringResource(Res.plurals.device_count, total, total)
             }
         )
+        if (slider != null) {
+            Spacer(Modifier.width(Dimens.gapLarge))
+            slider()
+        }
     }
+}
+
+/**
+ * one device's facts in a line: its name and model, Android version, battery, free space, how it's
+ * connected and its serial — the table's columns, for the view that has none.
+ *
+ * Ellipsized from the end, so a narrow window loses the serial before the name.
+ */
+@Composable
+private fun DeviceInfoLine(device: Device, modifier: Modifier = Modifier) {
+    val model = device.model
+    val level = device.batteryLevel
+    val parts = listOfNotNull(
+        if (model != null && model != device.displayName) "${device.displayName} ($model)" else device.displayName,
+        when {
+            device.state == DeviceState.UNAUTHORIZED || device.state == DeviceState.AUTHORIZING ->
+                stringResource(Res.string.state_unauthorized_short)
+            !device.isOnline -> stringResource(Res.string.state_offline)
+            else -> null
+        },
+        device.os?.let { stringResource(Res.string.details_android, it) },
+        level?.let {
+            if (device.powerStatus.isCharging) {
+                stringResource(Res.string.details_battery_charging, it)
+            } else {
+                stringResource(Res.string.battery_percent, it)
+            }
+        },
+        device.freeSpace?.let { stringResource(Res.string.device_free_space, Utils.bytesToDisplayString(it)) },
+        stringResource(if (device.isWireless) Res.string.details_wifi else Res.string.details_usb),
+        device.phone,
+        device.serial,
+    )
+    Text(
+        text = parts.joinToString("  ·  "),
+        style = MaterialTheme.typography.labelSmall,
+        color = Colors.primaryText,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier.padding(end = Dimens.gap),
+    )
 }
 
 // how often the status bar's clock moves; "refreshed 12s ago" doesn't need finer than this

@@ -3,6 +3,7 @@ package com.jpage4500.devicemanager.ui.components
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
@@ -23,6 +24,15 @@ private val tableScrollbarStyle
 actual fun AppVerticalScrollbar(listState: LazyListState, modifier: Modifier) {
     VerticalScrollbar(
         adapter = rememberScrollbarAdapter(listState),
+        style = tableScrollbarStyle,
+        modifier = modifier.fillMaxHeight().padding(Dimens.scrollbarInset),
+    )
+}
+
+@Composable
+actual fun AppVerticalScrollbar(gridState: LazyGridState, modifier: Modifier) {
+    VerticalScrollbar(
+        adapter = rememberScrollbarAdapter(gridState),
         style = tableScrollbarStyle,
         modifier = modifier.fillMaxHeight().padding(Dimens.scrollbarInset),
     )

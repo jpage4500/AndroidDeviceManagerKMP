@@ -16,3 +16,33 @@ expect suspend fun readLocalFile(path: String): ByteArray?
 
 /** what a path points at, without reading it. */
 expect fun localFileInfo(path: String): LocalFile?
+
+/**
+ * ask where to save a file, starting in [directory] (null for the platform's own choice).
+ *
+ * @return the chosen path, or null if the dialog was cancelled or the platform has none — a phone,
+ *   where nothing saves a file to a place the user picks yet
+ */
+expect suspend fun pickSaveFile(title: String, suggestedName: String, directory: String? = null): String?
+
+/** write [bytes] to [path], replacing what's there. false if it couldn't be written. */
+expect suspend fun writeLocalFile(path: String, bytes: ByteArray): Boolean
+
+/** open a file on this machine in whatever the OS opens it with. false where there is no such thing. */
+expect fun openLocalFile(path: String): Boolean
+
+/** show a file on this machine selected in Finder or Explorer. false where there is no such thing. */
+expect fun revealLocalFile(path: String): Boolean
+
+/** which desktop this is, so a button can say Finder or Explorer; null on a phone. */
+expect val localDesktopOS: DesktopOS?
+
+/**
+ * ask for a folder, starting in [directory] (null for the platform's own choice).
+ *
+ * @return its path, or null if the dialog was cancelled or the platform has none
+ */
+expect suspend fun pickLocalFolder(title: String, directory: String? = null): String?
+
+/** `~/Downloads` on a desktop — where the Swing app saved everything; null on a phone. */
+expect val defaultDownloadFolder: String?

@@ -36,28 +36,36 @@ object InstallManager {
         deviceIds.forEachIndexed { index, deviceId ->
             val name = DeviceManager.nameOf(deviceId)
             StatusManager.post("Installing ${file.name} on $name", progress = percent(index, deviceIds.size))
-            val remote = "$SCRATCH/${file.name}"
-            val pushed = DeviceManager.pushFile(deviceId, bytes, remote)
-            if (pushed.isFailure) {
-                StatusManager.post("$name: ${pushed.exceptionOrNull()?.message}", isError = true)
-                return@forEachIndexed
-            }
-            val output = DeviceManager.runCommand(
-                deviceId = deviceId,
-                command = "pm install -r -d ${Utils.shellQuote(remote)}",
-                label = "Installing on",
-            ).getOrNull().orEmpty()
-            // pm prints "Success" or "Failure [REASON]"; the exit code isn't carried by exec:
-            if (output.contains("Success", ignoreCase = true)) {
-                installed++
-            } else {
-                log.w("installApk: $deviceId: ${output.trim().take(200)}")
-                StatusManager.post("$name: ${output.trim().lineSequence().lastOrNull()}", isError = true)
-            }
-            DeviceManager.runCommand(deviceId, "rm -f ${Utils.shellQuote(remote)}", "Cleaning up on")
+            installBytes(deviceId, bytes, file.name)
+                .onSuccess { installed++ }
+                .onFailure { StatusManager.post("$name: ${it.message}", isError = true) }
         }
         StatusManager.post("Installed ${file.name} on $installed of ${deviceIds.size}", progress = 100)
         return installed
+    }
+
+    /**
+     * push [bytes] to the scratch folder as [fileName], install them, and remove them again.
+     *
+     * One device's share of [installApk], and what Share Devices' `/api/install` runs for a client
+     * — which is why it takes bytes rather than a local file.
+     *
+     * @return a failure carrying pm's last line, or the push's error
+     */
+    suspend fun installBytes(deviceId: String, bytes: ByteArray, fileName: String): Result<Unit> {
+        val remote = "$SCRATCH/$fileName"
+        val pushed = DeviceManager.pushFile(deviceId, bytes, remote)
+        if (pushed.isFailure) return pushed
+        val output = DeviceManager.runCommand(
+            deviceId = deviceId,
+            command = "pm install -r -d ${Utils.shellQuote(remote)}",
+            label = "Installing on",
+        ).getOrNull().orEmpty()
+        DeviceManager.runCommand(deviceId, "rm -f ${Utils.shellQuote(remote)}", "Cleaning up on")
+        // pm prints "Success" or "Failure [REASON]"; the exit code isn't carried by exec:
+        if (output.contains("Success", ignoreCase = true)) return Result.success(Unit)
+        log.w("installBytes: $deviceId: ${output.trim().take(200)}")
+        return Result.failure(IllegalStateException(output.trim().lineSequence().lastOrNull() ?: "install failed"))
     }
 
     /** copy [file] to each device's Download folder. */

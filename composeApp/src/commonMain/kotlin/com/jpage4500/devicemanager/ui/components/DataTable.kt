@@ -131,6 +131,13 @@ fun <T, C> DataTable(
      * off — a log whose message column should always run to the edge and never further.
      */
     scrollsSideways: Boolean = true,
+    /**
+     * every column scales to fill the table's width exactly, the Swing table's
+     * `AUTO_RESIZE_SUBSEQUENT_COLUMNS`: [widths] are proportions rather than sizes, nothing scrolls
+     * sideways, and dragging an edge gives to or takes from the columns after it. Overrides
+     * [scrollsSideways].
+     */
+    fitColumns: Boolean = false,
     /** hoisted so a caller can drive the scroll — the log viewer follows the tail. */
     listState: LazyListState = rememberLazyListState(),
     /** row text size; the log viewer scales it with ⌘+/⌘-. */
@@ -205,17 +212,42 @@ fun <T, C> DataTable(
     // first layout, which leaves the widths as given for that one frame
     var viewport by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
-    val shownWidths = if (scrollsSideways || viewport == 0.dp || columns.isEmpty()) widths else {
-        val last = columns.last()
-        val others = columns.dropLast(1).fold(0.dp) { sum, column ->
-            sum + (widths[column] ?: Dimens.columnDefault)
-        } + Dimens.resizeHandle * columns.size
-        widths + (last to (viewport - others).coerceAtLeast(Dimens.columnMin))
+    val sideways = scrollsSideways && !fitColumns
+    val shownWidths = when {
+        viewport == 0.dp || columns.isEmpty() -> widths
+        fitColumns -> fittedWidths(columns, widths, viewport - Dimens.resizeHandle * columns.size)
+        sideways -> widths
+        else -> {
+            val last = columns.last()
+            val others = columns.dropLast(1).fold(0.dp) { sum, column ->
+                sum + (widths[column] ?: Dimens.columnDefault)
+            } + Dimens.resizeHandle * columns.size
+            widths + (last to (viewport - others).coerceAtLeast(Dimens.columnMin))
+        }
     }
     // turned off while scrolled across: back to the start, or the scroll it can no longer change
     // would hold the columns where they were
-    LaunchedEffect(scrollsSideways) {
-        if (!scrollsSideways) horizontalScroll.scrollTo(0)
+    LaunchedEffect(sideways) {
+        if (!sideways) horizontalScroll.scrollTo(0)
+    }
+    // fitted, a drag on one edge is paid for by the columns after it, so the edge stays under the
+    // pointer and the row still ends at the table's edge. every shown width is written back, which
+    // makes the stored proportions the shown sizes until the table is next resized
+    val headerResize: (C, Dp) -> Unit = if (!fitColumns) onResize else { column, next ->
+        val index = columns.indexOf(column)
+        val after = columns.drop(index + 1)
+        if (index >= 0 && after.isNotEmpty()) {
+            val current = shownWidths[column] ?: Dimens.columnDefault
+            val afterTotal = after.fold(0.dp) { sum, each -> sum + (shownWidths[each] ?: Dimens.columnDefault) }
+            val room = afterTotal - Dimens.columnMin * after.size
+            val delta = (next - current).coerceAtMost(room)
+            val factor = if (afterTotal > 0.dp) (afterTotal - delta) / afterTotal else 1f
+            columns.take(index).forEach { each -> onResize(each, shownWidths[each] ?: Dimens.columnDefault) }
+            onResize(column, current + delta)
+            after.forEach { each ->
+                onResize(each, ((shownWidths[each] ?: Dimens.columnDefault) * factor).coerceAtLeast(Dimens.columnMin))
+            }
+        }
     }
 
     val totalWidth = columns.fold(0.dp) { sum, column ->
@@ -317,6 +349,10 @@ fun <T, C> DataTable(
             event.key == Key.PageUp -> moveBy(-page, shift)
             event.key == Key.PageDown -> moveBy(page, shift)
             event.key == Key.A && meta -> apply(selectionNow.selectAll(keysNow))
+            // with nothing to clear, Esc isn't the table's: it goes on to whatever holds the table.
+            // a dialog closes on it — and the table takes focus as it appears, so claiming it here
+            // left every dialog with a table (Share Devices, Remote Servers) deaf to Esc
+            event.key == Key.Escape && selectionNow.isEmpty -> return false
             event.key == Key.Escape -> apply(selectionNow.clear())
             event.key == Key.Enter || event.key == Key.NumPadEnter -> {
                 val index = selectionNow.lead?.let { keysNow.indexOf(it) } ?: return true
@@ -341,7 +377,7 @@ fun <T, C> DataTable(
         LocalTableTextSize provides textSize,
     ) {
     Column(modifier.fillMaxSize().onSizeChanged { viewport = with(density) { it.width.toDp() } }) {
-        Row(Modifier.horizontalScroll(horizontalScroll, enabled = scrollsSideways)) {
+        Row(Modifier.horizontalScroll(horizontalScroll, enabled = sideways)) {
             TableHeader(
                 columns = columns,
                 widths = shownWidths,
@@ -349,7 +385,7 @@ fun <T, C> DataTable(
                 sortAscending = sortAscending,
                 header = header,
                 onSort = onSort,
-                onResize = onResize,
+                onResize = headerResize,
                 onReorder = onReorder,
                 drag = drag,
                 menu = headerMenu,
@@ -423,7 +459,7 @@ fun <T, C> DataTable(
         ) {
             // sized to the columns rather than to its rows, so it scrolls as far as the header does
             // even with no rows to measure
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().horizontalScroll(horizontalScroll, enabled = scrollsSideways).width(totalWidth)) {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize().horizontalScroll(horizontalScroll, enabled = sideways).width(totalWidth)) {
                 itemsIndexed(rows, key = { _, row -> rowKey(row) }) { index, row ->
                     val key = rowKey(row)
                     val band = stripeOffset + index
@@ -461,7 +497,7 @@ fun <T, C> DataTable(
             AppVerticalScrollbar(listState, Modifier.align(Alignment.CenterEnd))
             // maxValue is 0 when every column already fits, which is the only reliable way to ask —
             // the window's width isn't the table's
-            if (scrollsSideways && horizontalScroll.maxValue > 0) {
+            if (sideways && horizontalScroll.maxValue > 0) {
                 AppHorizontalScrollbar(horizontalScroll, Modifier.align(Alignment.BottomCenter))
             }
         }
@@ -770,6 +806,24 @@ private fun ColumnResizeHandle(width: Dp, onResize: (Dp) -> Unit) {
     ) {
         VerticalDivider(Modifier.height(Dimens.headerSeparator), color = Colors.headerDivider)
     }
+}
+
+/**
+ * [widths] scaled so the columns add up to exactly [available] — see `fitColumns`.
+ *
+ * the last column takes whatever rounding left over, so the row ends on the table's edge rather than
+ * a pixel short of it. a table too narrow for every column at its minimum overflows instead, and is
+ * clipped.
+ */
+private fun <C> fittedWidths(columns: List<C>, widths: Map<C, Dp>, available: Dp): Map<C, Dp> {
+    val total = columns.fold(0.dp) { sum, column -> sum + (widths[column] ?: Dimens.columnDefault) }
+    if (total <= 0.dp) return widths
+    val scale = available / total
+    val fitted = columns.dropLast(1).associateWith { column ->
+        ((widths[column] ?: Dimens.columnDefault) * scale).coerceAtLeast(Dimens.columnMin)
+    }
+    val used = fitted.values.fold(0.dp) { sum, width -> sum + width }
+    return fitted + (columns.last() to (available - used).coerceAtLeast(Dimens.columnMin))
 }
 
 /**

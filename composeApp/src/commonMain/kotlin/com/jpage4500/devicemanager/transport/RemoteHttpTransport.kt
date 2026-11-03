@@ -17,9 +17,9 @@ import kotlinx.serialization.json.*
  * devices reached through a running Device Manager instance, over its HTTP API.
  *
  * This is the route the phone app should ship first: bearer-token auth, no adb client on the phone
- * at all, and it reaches the desktop's whole USB fleet. The Swing app already serves these endpoints
- * on port 8765 — `/api/devices`, `/api/execute`, `/api/files/list`, `/api/screenshot` — so a phone
- * speaking this protocol works against today's app before any of it is ported.
+ * at all, and it reaches the desktop's whole USB fleet. Both desktops serve these endpoints on port
+ * 8765 — `/api/devices`, `/api/execute`, `/api/files/list`, `/api/screenshot` — the Swing app, and
+ * this one's Share Devices ([ShareServer]), so a phone reads either the same way.
  *
  * The device list is polled — `/api/info` is a count the server already holds, and `/api/devices` is
  * re-read only when that count moves. A mirrored screen is the one thing here that is **not** polled:
@@ -277,10 +277,21 @@ class RemoteHttpTransport(
                 name = name,
                 path = obj.text("path") ?: "$parent/$name",
                 size = obj.text("size")?.toLongOrNull() ?: 0,
-                modifiedMs = obj.text("date")?.toLongOrNull() ?: 0,
-                mode = obj.text("mode")?.toIntOrNull() ?: 0,
+                // a Swing server says `dateMs`; this app's own says both
+                modifiedMs = (obj.text("date") ?: obj.text("dateMs"))?.toLongOrNull() ?: 0,
+                mode = obj.text("mode")?.toIntOrNull() ?: obj.fileType(),
             )
         }
+    }
+
+    /**
+     * the type a Swing server's `DeviceFile` gives as booleans, as the mode bits this app reads it from.
+     * Without it every folder on a Swing server listed as a file and couldn't be opened.
+     */
+    private fun JsonObject.fileType(): Int = when {
+        bool("isDirectory") == true -> AdbFileMode.S_IFDIR
+        bool("isSymbolicLink") == true -> AdbFileMode.S_IFLNK
+        else -> AdbFileMode.S_IFREG
     }
 
     private fun JsonObject.text(key: String): String? =

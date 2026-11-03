@@ -10,6 +10,7 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.*
+import androidx.compose.ui.text.input.*
 import androidx.compose.ui.text.style.*
 import androidx.compose.ui.unit.*
 import com.jpage4500.devicemanager.data.*
@@ -44,7 +45,8 @@ enum class DeviceChip(val label: StringResource) {
 }
 
 /**
- * the Devices page's title row: filter chips, search, refresh and Connect.
+ * the Devices page's title row: filter chips, search, List / Icons, the details panel's toggle,
+ * refresh and Connect.
  *
  * a chip only shows while it has something to count, so an all-USB desk isn't offered an empty
  * Wi-Fi filter — except the one that's on, which stays so it can be turned off again.
@@ -54,9 +56,14 @@ fun DeviceHeader(
     devices: List<Device>,
     chip: DeviceChip,
     onChip: (DeviceChip) -> Unit,
-    filter: String,
-    onFilterChange: (String) -> Unit,
+    filter: TextFieldValue,
+    onFilterChange: (TextFieldValue) -> Unit,
     filterFocus: FocusRequester,
+    onFilterFocused: (Boolean) -> Unit,
+    view: DeviceView,
+    onView: (DeviceView) -> Unit,
+    detailsOpen: Boolean,
+    onDetails: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     Row(
@@ -85,9 +92,11 @@ fun DeviceHeader(
         }
         Spacer(Modifier.weight(1f))
         if (devices.isNotEmpty()) {
-            SearchBox(filter, onFilterChange, filterFocus)
+            SearchBox(filter, onFilterChange, filterFocus, onFilterFocused)
+            DeviceViewToggle(view, onView)
+            IconBox(Res.drawable.about, stringResource(Res.string.sel_details), on = detailsOpen, onClick = onDetails)
         }
-        IconBox(Res.drawable.refresh, stringResource(Res.string.action_refresh), onRefresh)
+        IconBox(Res.drawable.refresh, stringResource(Res.string.action_refresh), onClick = onRefresh)
         PrimaryButton(Res.drawable.add, stringResource(Res.string.action_connect)) { WindowManager.openConnect() }
     }
 }
@@ -115,7 +124,12 @@ private fun FilterChip(label: String, on: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SearchBox(value: String, onValueChange: (String) -> Unit, focus: FocusRequester) {
+private fun SearchBox(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    focus: FocusRequester,
+    onFocused: (Boolean) -> Unit,
+) {
     val shape = RoundedCornerShape(Dimens.navCorner)
     Row(
         Modifier
@@ -133,26 +147,42 @@ private fun SearchBox(value: String, onValueChange: (String) -> Unit, focus: Foc
             onValueChange = onValueChange,
             hint = stringResource(Res.string.devices_search),
             focusRequester = focus,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).onFocusChanged { onFocused(it.isFocused) },
         )
     }
 }
 
-/** a bordered square holding one icon — refresh. */
+/** a bordered square holding one icon, its [label] as the tooltip — refresh, the details panel's actions. */
 @Composable
-fun IconBox(icon: DrawableResource, label: String, onClick: () -> Unit) {
+fun IconBox(icon: DrawableResource, label: String, on: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+    IconBox(label, on = on, enabled = enabled, onClick = onClick) { tint ->
+        AppIcon(icon, size = Dimens.icon, tint = tint, contentDescription = label)
+    }
+}
+
+/** the same square around any icon — [icon] is handed its tint, lit when [on] and dimmed when disabled. */
+@Composable
+fun IconBox(
+    label: String,
+    on: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+    icon: @Composable (Color) -> Unit,
+) {
     val shape = RoundedCornerShape(Dimens.navCorner)
     CellTooltip(text = { label }) {
         Box(
             Modifier
                 .size(Dimens.controlHeight)
                 .clip(shape)
-                .background(Colors.listBg)
-                .border(Dimens.hairline, Colors.divider, shape)
-                .clickable(onClick = onClick),
+                // on: the List / Icons toggle's lit segment, so the two read as one family
+                .background(if (on) Colors.chipOn else Colors.listBg)
+                .border(Dimens.hairline, if (on) Colors.chipOn else Colors.divider, shape)
+                .clickable(enabled = enabled, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            AppIcon(icon, size = Dimens.icon, tint = Colors.toolbarIcon, contentDescription = label)
+            val tint = if (on) Colors.chipOnText else Colors.toolbarIcon
+            icon(tint.copy(alpha = if (enabled) 1f else 0.4f))
         }
     }
 }
@@ -211,7 +241,7 @@ fun OutlinedAction(
  *
  * the actions act on the selected devices that are **ready** — an offline device in a selection of
  * ten doesn't stop the other nine being mirrored — and are disabled when none are. The ones that
- * open a single thing (Files, Details) take the first ready device.
+ * open a single thing (Files) take the first ready device.
  */
 @Composable
 fun SelectionBar(
@@ -224,7 +254,6 @@ fun SelectionBar(
     onInput: () -> Unit,
     onCommands: () -> Unit,
     onRunScript: (List<Device>) -> Unit,
-    onDetails: (Device) -> Unit,
     onClear: () -> Unit,
 ) {
     val ready = selected.filter { it.isReady }
@@ -246,7 +275,6 @@ fun SelectionBar(
         if (ScriptHost.supported) {
             BarAction(Res.drawable.script, stringResource(Res.string.sel_run_script), any) { onRunScript(ready) }
         }
-        BarAction(Res.drawable.about, stringResource(Res.string.sel_details), first != null) { first?.let(onDetails) }
     }
 }
 
