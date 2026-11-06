@@ -179,6 +179,28 @@ fun LogsScreen(
         SettingsManager.setInt(AppPref.LOGS_FONT_SIZE, fontSize)
     }
 
+    // the selected lines in the order they arrived, not the order they were clicked
+    fun selectedEntries(): List<LogEntry> = if (selection.isEmpty) emptyList() else shown.filter { it.id in selection }
+
+    fun copySelection() {
+        val entries = selectedEntries().ifEmpty { return }
+        copyToClipboard(entries.joinToString("\n") { it.asLine() })
+    }
+
+    // one line opens as its message, the way a double-click does; several keep their date and tag,
+    // or the viewer would be a column of messages with nothing to say which came from where
+    fun viewSelection() {
+        val entries = selectedEntries().ifEmpty { return }
+        WindowManager.openMessage(entries.singleOrNull()?.message ?: entries.joinToString("\n") { it.asLine() })
+    }
+
+    // ⌘S, from the menu bar
+    LaunchedEffect(state.saveRequested) {
+        if (!state.saveRequested) return@LaunchedEffect
+        state.saveRequested = false
+        askingSave = true
+    }
+
     if (owned == null) {
         LaunchedEffect(deviceId) { source.start(scope) }
         DisposableEffect(deviceId) { onDispose { source.stop() } }
@@ -327,6 +349,16 @@ fun LogsScreen(
                     }
                     // ⌘G / ⇧⌘G: the next or previous hit, from wherever the cursor last was
                     Key.G -> if (event.isShiftPressed) previousMatch() else nextMatch()
+                    // ⌘C copies the selected lines and ⇧⌘V opens them in the viewer — except while
+                    // a text field has the keyboard, where both are the field's own
+                    Key.C -> {
+                        if (fieldFocused || event.isShiftPressed || selection.isEmpty) return@onPreviewKeyEvent false
+                        copySelection()
+                    }
+                    Key.V -> {
+                        if (fieldFocused || !event.isShiftPressed || selection.isEmpty) return@onPreviewKeyEvent false
+                        viewSelection()
+                    }
                     else -> return@onPreviewKeyEvent false
                 }
                 true
@@ -494,6 +526,14 @@ fun LogsScreen(
                 onReorder = { from, to -> LogsTableState.moveColumn(from, to) },
                 onActivate = { WindowManager.openMessage(it.message) },
                 rowMenu = { entry, column ->
+                    // a right-click inside a multi-selection keeps it, and the menu is about all of
+                    // it: what to do with those lines, and nothing about the one cell under the pointer
+                    val many = selection.size
+                    if (many > 1 && entry.id in selection) {
+                        Item(stringResource(Res.string.logs_copy_lines, many), shortcut = "⌘C") { copySelection() }
+                        Item(stringResource(Res.string.logs_view_lines, many), shortcut = "⇧⌘V") { viewSelection() }
+                        return@DataTable
+                    }
                     // the App column holds a pid; the menu names the process when it's known
                     // null when the click wasn't on a cell: the line's own items, and nothing else
                     val raw = column?.text(entry).orEmpty()

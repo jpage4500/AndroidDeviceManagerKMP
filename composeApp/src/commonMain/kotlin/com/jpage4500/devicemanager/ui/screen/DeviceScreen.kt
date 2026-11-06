@@ -25,6 +25,8 @@ import com.jpage4500.devicemanager.ui.dialog.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
+import androidx.compose.foundation.text.selection.*
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -313,8 +315,6 @@ fun DeviceScreen(
             shown = sorted.size,
             selected = selection.size,
             onHistory = { historyOpen = true },
-            // the icon view has no columns, so the one selected device's facts go here instead
-            info = device.takeIf { view == DeviceView.ICONS && selection.size == 1 },
             slider = if (view == DeviceView.ICONS && devices.isNotEmpty()) {
                 {
                     DeviceIconSizeSlider(
@@ -600,8 +600,8 @@ private fun AppMenuScope.ColumnMenu(
  * the version and the heap on the left, what the app is doing in the middle, and how fresh the rows
  * are and how many there are on the right.
  *
- * In the icon view, [info] — the one selected device — takes the space between the heap and the
- * middle, and [slider] sizes the icons from the right-hand corner, where FileExplorerKMP keeps it.
+ * In the icon view, [slider] sizes the icons from the right-hand corner, where FileExplorerKMP
+ * keeps it.
  */
 @Composable
 private fun DeviceStatusBar(
@@ -609,7 +609,6 @@ private fun DeviceStatusBar(
     shown: Int,
     selected: Int,
     onHistory: () -> Unit,
-    info: Device? = null,
     slider: (@Composable () -> Unit)? = null,
 ) {
     val status by StatusManager.current.collectAsState()
@@ -631,13 +630,12 @@ private fun DeviceStatusBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // the version is the handle for "where are this app's own logs?" — same corner the Swing
-        // status bar puts them behind
-        Row(
-            Modifier.plainClickable {
-                StorageManager.getAbsolutePath(PATH_LOGS, FILE_LOG)?.let(PlatformUtils::openUrl)
-            },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        // status bar puts them behind, and opened in an editor as it does there
+        val logPath = remember { StorageManager.getAbsolutePath(PATH_LOGS, FILE_LOG) }
+        val logOpenFailed = stringResource(Res.string.status_log_open_failed, logPath.orEmpty())
+        StatusBarButton(onClick = {
+            if (logPath == null || !editLocalFile(logPath)) ToastManager.showToast(logOpenFailed, success = false)
+        }) {
             AppIcon(Res.drawable.file_logs, size = 12.dp, tint = Colors.secondaryText)
             Spacer(Modifier.width(4.dp))
             StatusText("v$APP_VERSION")
@@ -650,18 +648,14 @@ private fun DeviceStatusBar(
         val heap = remember(now) { PlatformUtils.getMemoryInfo().let { it.totalBytes - it.freeBytes } }
         StatusText(Utils.bytesToDisplayString(heap))
 
-        if (info != null) {
-            Spacer(Modifier.width(Dimens.gapLarge))
-            DeviceInfoLine(info, Modifier.weight(1f))
-        } else {
-            Spacer(Modifier.weight(1f))
-        }
-        // whatever the app is doing right now, or "History" when it is idle — the Swing status bar.
-        // a toast takes this place while it's up
+        Spacer(Modifier.weight(1f))
+        // whatever the app is doing right now, or "History" when it is idle — the Swing status bar,
+        // with its progress fill behind a running command. a toast takes this place while it's up
         StatusToastSlot {
-            Row(
-                Modifier.plainClickable(onClick = onHistory).padding(horizontal = Dimens.gap),
-                verticalAlignment = Alignment.CenterVertically,
+            StatusBarButton(
+                onClick = onHistory,
+                progress = status?.progress ?: -1,
+                isError = status?.isError == true,
             ) {
                 AppIcon(Res.drawable.logs, size = 12.dp, tint = Colors.secondaryText)
                 Spacer(Modifier.width(4.dp))
@@ -705,47 +699,6 @@ private fun DeviceStatusBar(
     }
 }
 
-/**
- * one device's facts in a line: its name and model, Android version, battery, free space, how it's
- * connected and its serial — the table's columns, for the view that has none.
- *
- * Ellipsized from the end, so a narrow window loses the serial before the name.
- */
-@Composable
-private fun DeviceInfoLine(device: Device, modifier: Modifier = Modifier) {
-    val model = device.model
-    val level = device.batteryLevel
-    val parts = listOfNotNull(
-        if (model != null && model != device.displayName) "${device.displayName} ($model)" else device.displayName,
-        when {
-            device.state == DeviceState.UNAUTHORIZED || device.state == DeviceState.AUTHORIZING ->
-                stringResource(Res.string.state_unauthorized_short)
-            !device.isOnline -> stringResource(Res.string.state_offline)
-            else -> null
-        },
-        device.os?.let { stringResource(Res.string.details_android, it) },
-        level?.let {
-            if (device.powerStatus.isCharging) {
-                stringResource(Res.string.details_battery_charging, it)
-            } else {
-                stringResource(Res.string.battery_percent, it)
-            }
-        },
-        device.freeSpace?.let { stringResource(Res.string.device_free_space, Utils.bytesToDisplayString(it)) },
-        stringResource(if (device.isWireless) Res.string.details_wifi else Res.string.details_usb),
-        device.phone,
-        device.serial,
-    )
-    Text(
-        text = parts.joinToString("  ·  "),
-        style = MaterialTheme.typography.labelSmall,
-        color = Colors.primaryText,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = modifier.padding(end = Dimens.gap),
-    )
-}
-
 // how often the status bar's clock moves; "refreshed 12s ago" doesn't need finer than this
 private const val STATUS_TICK_MS = 5_000L
 
@@ -759,47 +712,133 @@ private fun StatusText(text: String) {
 }
 
 /**
- * what the app has been doing, newest first.
+ * what the app has been doing, newest first — the Swing app's Status History.
  *
  * the status bar only ever shows the latest line and then goes quiet; this is where "what did that
- * command say?" is answered after the fact.
+ * command say?" is answered after the fact. A filter narrows it, rows multi-select and copy, and a
+ * double-click opens a line's [StatusEvent.detail] — the per-device results a summary stands for.
  */
 @Composable
 private fun StatusHistoryDialog(open: Boolean, onDismiss: () -> Unit) {
     if (!open) return
     val history by StatusManager.history.collectAsState()
+    var filter by remember { mutableStateOf("") }
+    var selection by remember { mutableStateOf(TableSelection<Any?>()) }
+    var shownEvent by remember { mutableStateOf<StatusEvent?>(null) }
+    val widths = remember { mutableStateMapOf<HistoryColumn, Dp>().apply { HistoryColumn.entries.forEach { put(it, it.width) } } }
+    val headers = HistoryColumn.entries.associateWith { stringResource(it.label) }
+    val copy = rememberClipboardCopy()
+    // read here rather than in rowContentColor, which isn't composable
+    val errorColor = Colors.error
+    val textColor = Colors.primaryText
+    val focus = remember { FocusRequester() }
+    val rows = remember(history, filter) {
+        if (filter.isBlank()) history
+        else history.filter { it.label.contains(filter, true) || it.detail?.contains(filter, true) == true }
+    }
+    fun copySelected() {
+        val text = rows.filter { it in selection }.joinToString("\n") { it.historyLine() }
+        if (text.isNotEmpty()) copy(text)
+    }
     AppDialog(
         title = stringResource(Res.string.history),
         onDismiss = onDismiss,
         extraButton = {
             DialogButton(stringResource(Res.string.logs_clear)) { StatusManager.clearHistory() }
         },
-        modifier = Modifier.width(520.dp),
+        modifier = Modifier.width(Dimens.historyDialogWidth),
     ) {
-            if (history.isEmpty()) {
+        FilterField(
+            value = filter,
+            onValueChange = { filter = it },
+            hint = stringResource(Res.string.history_filter),
+            focusRequester = focus,
+            modifier = Modifier.width(Dimens.historyFilterWidth),
+        )
+        Spacer(Modifier.height(Dimens.gap))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(Dimens.historyTableHeight)
+                .border(Dp.Hairline, Colors.divider)
+        ) {
+            if (rows.isEmpty()) {
                 Text(
                     text = stringResource(Res.string.history_empty),
                     style = MaterialTheme.typography.bodySmall,
                     color = Colors.secondaryText,
+                    modifier = Modifier.align(Alignment.Center),
                 )
             } else {
-                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                    history.forEach { event ->
-                        Row(Modifier.padding(vertical = 3.dp)) {
-                            Text(
-                                text = DateUtils.formatDate(DateUtils.timeToDate(event.timeMs), "HH:mm:ss"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Colors.secondaryText,
-                                modifier = Modifier.width(64.dp),
-                            )
-                            Text(
-                                text = event.label,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (event.isError) Colors.error else Colors.primaryText,
-                            )
-                        }
+                DataTable(
+                    rows = rows,
+                    columns = HistoryColumn.entries,
+                    widths = widths,
+                    fitColumns = true,
+                    sortedBy = null,
+                    sortAscending = true,
+                    selection = selection,
+                    // the event itself: two lines can share a label and even a millisecond
+                    rowKey = { it },
+                    header = { headers.getValue(it) },
+                    rowContentColor = { if (it.isError) errorColor else textColor },
+                    onSelectionChange = { selection = it },
+                    onResize = { column, width -> widths[column] = width },
+                    onActivate = { shownEvent = it },
+                    tooltip = { event, column, clipped ->
+                        if (column == HistoryColumn.EVENT) event.detail ?: event.label.takeIf { clipped } else null
+                    },
+                    rowMenu = { event, _ ->
+                        Item(stringResource(Res.string.copy)) { copySelected() }
+                        Item(stringResource(Res.string.history_show_detail)) { shownEvent = event }
+                    },
+                ) { event, column ->
+                    when (column) {
+                        HistoryColumn.TIME -> TableText(event.historyTime())
+                        HistoryColumn.EVENT -> TableText(
+                            if (event.detail.isNullOrEmpty()) event.label
+                            else "${event.label} — ${event.detail.lineSequence().joinToString(" | ")}"
+                        )
                     }
                 }
             }
+        }
     }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+
+    shownEvent?.let { event ->
+        AppDialog(
+            title = event.historyTime(),
+            onDismiss = { shownEvent = null },
+            extraButton = {
+                DialogButton(stringResource(Res.string.copy)) { copy(event.historyLine()) }
+            },
+            cancelLabel = stringResource(Res.string.close),
+            modifier = Modifier.width(Dimens.historyDialogWidth),
+        ) {
+            SelectionContainer {
+                Text(
+                    text = listOfNotNull(event.label, event.detail?.takeIf { it.isNotEmpty() }).joinToString("\n\n"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (event.isError) Colors.error else Colors.primaryText,
+                    modifier = Modifier
+                        .heightIn(max = Dimens.historyTableHeight)
+                        .verticalScroll(rememberScrollState()),
+                )
+            }
+        }
+    }
+}
+
+private enum class HistoryColumn(val label: StringResource, val width: Dp) {
+    TIME(Res.string.run_col_time, 80.dp),
+    EVENT(Res.string.history_col_event, 560.dp),
+}
+
+private fun StatusEvent.historyTime(): String = DateUtils.formatDate(DateUtils.timeToDate(timeMs), "HH:mm:ss")
+
+/** a line as it copies: time, label, and any detail under it. */
+private fun StatusEvent.historyLine(): String = buildString {
+    append(historyTime()).append("  ").append(label)
+    if (!detail.isNullOrEmpty()) append('\n').append(detail)
 }

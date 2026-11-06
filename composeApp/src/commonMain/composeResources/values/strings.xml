@@ -299,6 +299,11 @@
     <string name="device_details">Device Details</string>
     <string name="history">History</string>
     <string name="history_empty">Nothing yet</string>
+    <string name="history_filter">Filter</string>
+    <string name="history_col_event">Event</string>
+    <string name="history_show_detail">Show Details</string>
+    <string name="status_log_open_failed">Couldn't open the log: %1$s</string>
+    <string name="copy">Copy</string>
 
     <!-- custom commands -->
     <string name="commands_saved">Saved</string>
@@ -455,6 +460,11 @@
     <string name="message_restore">Restore</string>
     <string name="message_wrap_off">Wrap OFF</string>
     <string name="message_wrap_on">Wrap ON</string>
+    <string name="message_restore_tip">Put the text back the way it opened</string>
+    <string name="message_wrap_tip">Wrap long lines to the window's width</string>
+    <string name="message_format_tip">Pretty-print any JSON in the text when it opens</string>
+    <string name="message_edit_tip">Open the text in the default text editor</string>
+    <string name="message_copy_tip">Copy the text to the clipboard</string>
 
     <!-- input -->
     <string name="input_delete">Delete</string>
@@ -548,6 +558,7 @@
     <string name="logs_copy_message">Copy Message</string>
     <string name="logs_copy_value">Copy %1$s</string>
     <string name="logs_copy_line">Copy line</string>
+    <string name="logs_copy_lines">Copy %1$d lines</string>
     <string name="logs_show_only_containing">Show only lines containing this</string>
     <string name="logs_hide_containing">Hide lines containing this</string>
     <string name="logs_duplicate_filter">Duplicate Filter</string>
@@ -596,6 +607,7 @@
     <string name="logs_saved_explorer">Show in Explorer</string>
     <string name="logs_saved_folder">Show in folder</string>
     <string name="logs_view_message">View message</string>
+    <string name="logs_view_lines">View %1$d lines</string>
 
     <!-- toolbar -->
     <string name="action_adb">ADB</string>
@@ -636,6 +648,7 @@
 
     <!-- desktop menu bar -->
     <string name="menu_close_window">Close Window</string>
+    <string name="menu_save_log">Save Log…</string>
     <string name="menu_file">File</string>
     <string name="menu_device">Device</string>
     <string name="menu_logs">View Logs</string>
@@ -673,4 +686,8 @@
     <string name="about_no_logs">Nothing logged yet.</string>
     <string name="about_open_file">Open File</string>
     <string name="reporting_crash">Reporting a crash from last time</string>
+    <string name="tray_open">Open</string>
+    <string name="tray_quit">Quit</string>
+    <string name="tray_server">Server: %1$s</string>
+    <string name="tray_tooltip">%1$d Devices</string>
 </resources>

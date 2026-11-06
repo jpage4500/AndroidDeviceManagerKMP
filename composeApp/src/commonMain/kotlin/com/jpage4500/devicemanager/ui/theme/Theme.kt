@@ -135,6 +135,12 @@ object Dimens {
     // dialog's 150px so Start Server shows without scrolling; a desk rarely has more than a few clients
     val shareDialogWidth = 600.dp
     val shareClientsHeight = 90.dp
+
+    // the status History dialog: wide enough for a summary and its per-device detail on one line,
+    // tall enough for 15 rows — the Swing list's visible count
+    val historyDialogWidth = 720.dp
+    val historyTableHeight = 380.dp
+    val historyFilterWidth = 200.dp
     val shareLabelWidth = 110.dp
     // a dialog that is its own window is a form too, so it opens at the same width. the height caps
     // rather than fills: the window packs to whatever its form needs, and only a long one (the app
@@ -298,6 +304,7 @@ object Dimens {
     // toolbar
     val toolbarIcon = 22.dp
     val toolbarButtonWidth = 58.dp
+    val toolbarButtonPadding = 6.dp
 
     val icon = 16.dp
     val iconLarge = 24.dp
@@ -397,6 +404,17 @@ object Dimens {
     val menuTextSize: TextUnit @Composable get() = if (LocalCompactUi.current) 17.sp else 13.sp
     /** a heading over a group of items — smaller than the items, the way a section label reads. */
     val menuHeaderSize: TextUnit @Composable get() = if (LocalCompactUi.current) 14.sp else 11.sp
+
+    // the menu-bar popup. a device row is a menu row with four buttons on the end, so it's taller
+    // than a plain item by enough to give each button a target bigger than its 16dp icon
+    val trayWidth = 320.dp
+    val trayRowHeight = 28.dp
+    val trayButton = 24.dp
+    val trayButtonGap = 2.dp
+    // room around the menu inside its transparent window for the shadow to fall into
+    val trayShadowInset = 8.dp
+    // kept clear of the screen's edge, and of the menu bar or taskbar it opens from
+    val trayScreenMargin = 4.dp
 }
 
 /**
@@ -691,6 +709,9 @@ object Colors {
     val headerDragged: Color @Composable get() = LocalPalette.current.headerDragged
     val headerDivider: Color @Composable get() = LocalPalette.current.headerDivider
     val statusBarBg: Color @Composable get() = LocalPalette.current.statusBarBg
+
+    /** a status bar button under the pointer — the Swing `HoverLabel`'s grey, from either ground. */
+    val statusBarHover: Color @Composable get() = LocalPalette.current.secondaryText.copy(alpha = 0.16f)
     val primaryText: Color @Composable get() = LocalPalette.current.primaryText
     val secondaryText: Color @Composable get() = LocalPalette.current.secondaryText
     val divider: Color @Composable get() = LocalPalette.current.divider

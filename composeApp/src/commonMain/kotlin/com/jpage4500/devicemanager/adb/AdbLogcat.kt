@@ -4,6 +4,7 @@ import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.*
 import kotlinx.coroutines.flow.*
+import kotlinx.datetime.*
 
 private val log = LoggerConfig.createLogger("AdbLogcat")
 
@@ -16,13 +17,16 @@ private val log = LoggerConfig.createLogger("AdbLogcat")
  *
  * `-v threadtime` is the format [com.jpage4500.devicemanager.data.LogEntry] parses. The stream is
  * closed when the collector goes away, which is what stops `logcat` on the device.
+ *
+ * [since] is where to start — see [logcatArgs].
  */
 fun adbLogcat(
     server: AdbServer,
     serial: String,
-    args: String = "-v threadtime",
+    since: String? = null,
     flushMs: Long = 100,
 ): Flow<List<String>> = channelFlow {
+    val args = logcatArgs(since)
     val opened = AdbConnection.toDevice(server, serial)
     val connection = when (opened) {
         is AdbOutcome.Err -> {
@@ -37,7 +41,7 @@ fun adbLogcat(
             log.w("adbLogcat: $serial: refused")
             return@channelFlow
         }
-        log.d("adbLogcat: $serial: started")
+        log.d("adbLogcat: $serial: started, $args")
 
         val pending = mutableListOf<String>()
         // a line can be split across two reads, so whatever follows the last newline is held over
@@ -76,3 +80,37 @@ fun adbLogcat(
         connection.close()
     }
 }.flowOn(ioDispatcher)
+
+/**
+ * `logcat`'s arguments, starting no further back than [MAX_LOG_HISTORY_MINS].
+ *
+ * Without `-T` logcat replays its whole ring buffer first, which on a Galaxy S21 reached back most
+ * of a day. The Swing app's rule: start [since] — the last line already seen, when a log is resumed
+ * — or 10 minutes ago, whichever is later.
+ *
+ * The time is this computer's clock, read as the device's: logcat has no other way to take it. A
+ * device on another time zone starts that much earlier or later, as it did in the Swing app.
+ */
+fun logcatArgs(since: String?): String = "-v threadtime -T '${logcatStartTime(since)}'"
+
+// max logcat history pulled when logging starts — the Swing app's MAX_LOG_HISTORY_MINS
+private const val MAX_LOG_HISTORY_MINS = 10
+private const val LOG_TIME_PATTERN = "MM-dd HH:mm:ss.SSS"
+
+/** `MM-dd HH:mm:ss.SSS`, the form `logcat -T` takes — [since], or 10 minutes ago if that's later. */
+internal fun logcatStartTime(since: String?): String {
+    val zone = TimeZone.currentSystemDefault()
+    val now = DateUtils.nowMs()
+    val earliest = now - MAX_LOG_HISTORY_MINS * 60_000L
+    val last = since?.let { DateUtils.parseDate(it, if ('.' in it) LOG_TIME_PATTERN else "MM-dd HH:mm:ss") }
+    if (last != null) {
+        var ms = last.toInstant(zone).toEpochMilliseconds()
+        // a line from December read in January: parseDate gave it this year
+        if (ms - now > 86_400_000L) {
+            ms = LocalDateTime(last.year - 1, last.month, last.day, last.hour, last.minute, last.second, last.nanosecond)
+                .toInstant(zone).toEpochMilliseconds()
+        }
+        if (ms >= earliest) return DateUtils.formatDate(last, LOG_TIME_PATTERN)
+    }
+    return DateUtils.formatDate(DateUtils.timeToDate(earliest), LOG_TIME_PATTERN)
+}

@@ -35,8 +35,8 @@ class AdbServerTransport(
         adbExec(server, serial, command).toResult()
 
     // the adb client knows nothing about process names — `ps` is the log window's job here
-    override fun logcat(serial: String): Flow<LogBatch> =
-        adbLogcat(server, serial).map { LogBatch(it) }
+    override fun logcat(serial: String, since: String?): Flow<LogBatch> =
+        adbLogcat(server, serial, since).map { LogBatch(it) }
 
     override val canStreamLogs: Boolean get() = true
 

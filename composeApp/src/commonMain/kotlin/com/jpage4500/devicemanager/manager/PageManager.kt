@@ -70,6 +70,8 @@ class LogsView {
         }
     var autoScroll by mutableStateOf(true)
     val listState = LazyListState()
+    /** ⌘S asked this tab to save its log; the tab opens its save dialog and puts this back. */
+    var saveRequested by mutableStateOf(false)
 }
 
 /** one device's filesystem in the Files page; [browser] holds the folder it was left in. */
@@ -173,6 +175,14 @@ class ShellState(private val scope: CoroutineScope) {
         return false
     }
 
+    /** ⌘S on Logs: the open tab's save dialog. False when no tab is showing. */
+    fun saveActiveLog(): Boolean {
+        if (page != Page.LOGS) return false
+        val tab = logTabs.firstOrNull { it.deviceId == activeLogs } ?: return false
+        tab.view.saveRequested = true
+        return true
+    }
+
     /** the window is going: every stream it started goes with it. */
     fun dispose() {
         logTabs.forEach { it.source.stop() }
@@ -194,8 +204,9 @@ class ShellState(private val scope: CoroutineScope) {
  * opened and handed the request once it exists.
  */
 object PageManager {
-    // most recently in front last
-    private val shells = mutableListOf<ShellState>()
+    // most recently in front last. state, so the menu bar's page-dependent shortcuts follow a
+    // window coming to the front as well as a page change inside one
+    private val shells = mutableStateListOf<ShellState>()
     private val pending = mutableListOf<(ShellState) -> Unit>()
 
     fun register(shell: ShellState) {
@@ -214,6 +225,12 @@ object PageManager {
         shells.remove(shell)
         shells.add(shell)
     }
+
+    /** the page showing in the window last in front; null with no window open. */
+    val activePage: Page? get() = shells.lastOrNull()?.page
+
+    /** ⌘S on Logs in the window last in front — see [ShellState.saveActiveLog]. */
+    fun saveActiveLog(): Boolean = shells.lastOrNull()?.saveActiveLog() ?: false
 
     /** the Devices page — ⌘D from the menu bar. */
     fun openDevices() = withShell { it.page = Page.DEVICES }

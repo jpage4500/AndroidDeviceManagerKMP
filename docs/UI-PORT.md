@@ -139,6 +139,16 @@ in the centre, and on the right how long since the newest device read, then the 
 12 selected" while a selection is live, "5 of 12 shown" while a chip or search hides some). It ticks
 every 5s.
 
+The version and the status are `StatusBarButton`s — the Swing `HoverLabel`: flat until hovered, then
+a grey chip. The version opens the app's own log through `editLocalFile` (`Desktop.edit`, so the OS's
+editor rather than Finder). The status fills green — red on an error — behind a running command, as
+the Swing label does, and opens **History**: `StatusManager.history`, newest first, the last 100, in a
+`DataTable` with a filter field. Rows multi-select and copy from the right-click menu; a double-click
+opens the line's `detail` — what a summary stands for, such as an install's one line per device —
+which the bar itself never shows. The device tracker posts a line whenever a device connects,
+disconnects or drops offline, so History answers "when did that cable go?". A connection's first
+list is one "N devices found" line instead, or 45 devices at startup would fill half of History.
+
 ### The table is the piece with no shortcut
 
 Compose has no data table, and neither does any library worth adding. **FileExplorerKMP builds its
@@ -542,17 +552,33 @@ four inline actions — Mirror, Browse, Logs, Screenshot — plus Open and Quit.
 
 The Swing app gets this from **dorkbox SystemTray**, and had to force a Swing-drawn tray on macOS to
 get icons at all, then hand-draw each row (`TrayUiFactory`) because a native menu can't hold buttons.
-Compose Desktop has `Tray` in `androidx.compose.ui.window`, but it takes an ordinary `Menu` — text
-items and separators, no per-row buttons.
+Compose Desktop's own `Tray` has the same wall: it builds an AWT `PopupMenu`, which on macOS is a
+native menu — text items and separators, no icons, no per-row buttons.
 
-So the honest options were: a submenu per device (native, plain, one extra click per action), or the
-whole thing drawn in an undecorated always-on-top `Window` positioned under the icon (matches the
-screenshot, costs the platform's own menu behaviour).
+**So `AppTray` doesn't use `Tray`.** It adds a plain AWT `TrayIcon` with no menu, and a click on it
+opens `TrayPopup`: an undecorated, transparent, always-on-top `DialogWindow` drawn in Compose with
+the context menu's look (`AppMenuScope` for Open, the server headings and Quit). That is the same
+trick dorkbox's Swing tray plays, so nothing native is given up that the Swing app had.
 
-**Built as a submenu** (`AppTray`), for the reason above — the row-of-buttons version can replace it
-later without anything above it changing. Two things it can't do that the Swing app does: no device
-count drawn onto the icon (Compose's `Tray` takes a `Painter`, not a bitmap to badge), and no icon
-per row. The count is in the tooltip instead.
+- **Placement** — left edge at the click, under the menu bar when the click was in the top half of
+  its screen, above the taskbar otherwise, clamped onto that screen's usable bounds. Placed again on
+  every resize, because the height is `Unspecified` until the content is measured.
+- **Dismissal** — on focus loss, the way a menu closes on a click elsewhere, and on Esc. A click on
+  the icon while it's open closes it; a click within 400ms of a focus-loss close is that same click
+  and doesn't reopen it.
+- **Dialog, not window** — an ownerless dialog gets no taskbar button on Windows.
+- **Rows** — this computer's devices, then each connected server's under a "Server: name" heading
+  (inline, where Swing used a submenu), each sorted by name and scrolling past the screen's height.
+  A row is the status icon, name and Mirror / Browse / Logs / Screenshot; a click elsewhere on it
+  shows the Devices page. A device that isn't ready is drawn disabled. Browse, Logs and Open bring
+  the device list forward through `WindowManager.bringToFront`, which the window answers on its
+  `raise` flow — the tray belongs to no window and can't raise one itself.
+
+**The icon** is `trayIconImage`, a port of the Swing app's `getTrayIconWithCount`: the count on an
+android head (eyes instead at zero), drawn at 64px with auto-size on. The digits are **cut out** of
+the head rather than painted in a second colour, so on macOS it works as a template image
+(`apple.awt.enableTemplateImages`, set in `main`) and the menu bar colours it. Elsewhere the head is
+white or black after skiko's `currentSystemTheme`, re-read every 5s since nothing reports a change.
 
 The icon only appears while **Stay in the menu bar when closed** is on — a tray icon that can't be
 dismissed is one someone has to look at forever. With it on, closing the last window leaves the app
@@ -649,7 +675,8 @@ Three things carry most of its usefulness:
   by name) rather than as its expression. Clear filters leaves the level alone.
 - **Pause stops showing, not reading.** `LogsSource.setPaused` stops publishing `entries` while the
   stream and the buffer carry on, so Resume shows everything that arrived meanwhile. A stream that
-  has ended — the device went away — is started again by Resume.
+  has ended — the device went away — is started again by Resume, from the last line it already has.
+  A new log starts 10 minutes back rather than at the start of the device's buffer.
 - **The right-click menu is about the cell that was clicked.** A heading names it (`TAG ·
   Choreographer`, the app by process name), then the filters, then the copies: Show only, Hide and
   New filter from this… on tag, app and thread; Show only / Hide lines containing this on the message;
@@ -773,7 +800,7 @@ is no longer the newest a moment later. ⇧⌘↓, extending to the end, stays w
 also toggles following, and scrolling back to the bottom re-arms it. The ⌘G jump is a
 `requestScrollToItem` for the same reason the table's reveal is.
 
-It reads `logcat -v threadtime` over `exec:` through `adbLogcat` — or, for a device on a Device
+It reads `logcat -v threadtime -T <start>` over `exec:` through `adbLogcat` — or, for a device on a Device
 Manager server, takes the batches that server pushes over `/ws/logs` through `remoteLogcat`; either
 way what arrives is a `LogBatch`, and the window can't tell which. Both **batch lines rather than
 emitting one at a time**: a busy device prints thousands a second, and an emission
@@ -836,10 +863,12 @@ behind a native save dialog — a file chooser is an `expect`/`actual` per platf
 here is one someone is about to look at anyway. `pullFile` is new on `DeviceTransport`; it returns
 the whole file rather than a channel, which is enough until something needs to pull a video.
 
-**Message Viewer** (`MessageScreen`) — one log line in a window of its own, opened by double-click.
-The Swing toolbar: **Restore** (undo the formatting), **Wrap ON/OFF**, **Auto Format ON/OFF** (pretty-
-print the JSON on open) and **Edit** (hand the text to whatever opens `.txt`). Both toggles are
-remembered. `TextUtils.formatJson` is a character walk rather than parse-and-re-serialise, because
+**Message Viewer** (`MessageScreen`) — log lines in a window of its own, opened by double-click or
+⇧⌘V. The text is an editable field. The Swing toolbar: **Restore** (back to the text as it opened,
+undoing formatting and edits), **Wrap ON/OFF**, **Auto Format ON/OFF** (pretty-print the JSON on
+open) and **Edit** (write the text as it stands to `messages/` and open it with `editLocalFile`, the
+OS's default editor). Each button has a tooltip, and grows past `toolbarButtonWidth` rather than
+cutting its label off. Both toggles are remembered. `TextUtils.formatJson` is a character walk rather than parse-and-re-serialise, because
 the input is a log *sentence* with a payload in the middle and the prose either side has to survive.
 
 **Device Details** — no longer a window. On the desktop every property is in the Devices page's
@@ -873,6 +902,7 @@ The local-file platform seams, all no-ops on mobile — the save, open and revea
 | `readLocalFile` | `java.io` (`jvmCommonMain`) | `StorageManager` is rooted at the app's own folder; an APK is anywhere |
 | `pickSaveFile` / `writeLocalFile` | `FileDialog` in SAVE mode / `java.io` | a saved log goes where the user picks, not into the app's folder; the native dialog asks before replacing |
 | `openLocalFile` / `revealLocalFile` | `Desktop.open` / `Desktop.browseFileDirectory`, `explorer /select,` on Windows | the saved-log dialog's Open and Show in Finder |
+| `editLocalFile` | `Desktop.edit`, falling back to `Desktop.open` | the status bar's version opens the app's log in an editor — `open` gives a `.log` to Console |
 | `Modifier.fileDropTarget` | `dragAndDropTarget` + AWT `javaFileListFlavor` | `shouldStartDragAndDrop` checks for files, so text dragged from another app falls through rather than being swallowed |
 
 `pushFile` is new on `DeviceTransport`, over `AdbSync.push`.

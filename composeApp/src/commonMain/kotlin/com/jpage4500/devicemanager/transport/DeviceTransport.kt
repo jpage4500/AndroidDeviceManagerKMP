@@ -79,8 +79,12 @@ interface DeviceTransport {
      * has already got the stream open and pushes it over `/ws/logs`, gzipped — see [remoteLogcat].
      * Neither reconnects on its own: a stream that ends is a log that has stopped, and the window
      * says so rather than resuming with a silent gap in the middle.
+     *
+     * [since] is the last line's `MM-dd HH:mm:ss.SSS` when a stopped log is started again, so it
+     * carries on from there. Either way an adb route goes back no more than 10 minutes — see
+     * [logcatArgs]. A Device Manager server takes no start time and applies its own limit.
      */
-    fun logcat(serial: String): Flow<LogBatch> = emptyFlow()
+    fun logcat(serial: String, since: String? = null): Flow<LogBatch> = emptyFlow()
 
     /** whether [logcat] will produce anything — what a log window checks before it says "no logs". */
     val canStreamLogs: Boolean get() = false

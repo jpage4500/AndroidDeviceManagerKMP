@@ -9,6 +9,8 @@ actual suspend fun pickSaveFile(title: String, suggestedName: String, directory:
 
 actual fun openLocalFile(path: String): Boolean = false
 
+actual fun editLocalFile(path: String): Boolean = false
+
 actual fun revealLocalFile(path: String): Boolean = false
 
 actual val localDesktopOS: DesktopOS? = null

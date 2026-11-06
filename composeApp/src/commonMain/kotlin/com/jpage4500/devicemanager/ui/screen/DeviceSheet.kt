@@ -213,7 +213,7 @@ fun deviceHeading(deviceId: String): DeviceHeading {
 }
 
 /** the colour a device's state reads as, the same mapping the list row uses. */
-private fun stateColor(state: DeviceState?): Color = when (state) {
+internal fun stateColor(state: DeviceState?): Color = when (state) {
     DeviceState.DEVICE -> Colors.online
     DeviceState.UNAUTHORIZED, DeviceState.AUTHORIZING -> Colors.unauthorized
     DeviceState.OFFLINE, DeviceState.DETACHED -> Colors.offline

@@ -154,7 +154,8 @@ class RemoteHttpTransport(
      * finishes, and `logcat` never finishes. It is also the reason a log window on a phone costs no
      * shell commands at all, since the names for its App column arrive with the lines.
      */
-    override fun logcat(serial: String): Flow<LogBatch> =
+    // `/ws/logs` takes no start time — the server picks it, as the Swing app's always has
+    override fun logcat(serial: String, since: String?): Flow<LogBatch> =
         remoteLogcat(client, wsUrl, serial) { auth() }
 
     override val canStreamLogs: Boolean get() = true

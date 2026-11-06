@@ -52,6 +52,12 @@ actual fun openLocalFile(path: String): Boolean = runCatching {
     Desktop.getDesktop().open(File(path))
 }.onFailure { log.e("openLocalFile: ${it.message}") }.isSuccess
 
+/** `Desktop.edit` where the OS has an editor role, as the Swing app's version label used; open otherwise. */
+actual fun editLocalFile(path: String): Boolean = runCatching {
+    val desktop = Desktop.getDesktop()
+    if (desktop.isSupported(Desktop.Action.EDIT)) desktop.edit(File(path)) else desktop.open(File(path))
+}.onFailure { log.e("editLocalFile: ${it.message}") }.isSuccess
+
 /**
  * `Desktop.browseFileDirectory` selects the file in Finder; Windows has no such action, so Explorer
  * is asked directly, and anything else gets the folder opened with nothing selected.

@@ -250,3 +250,24 @@
 - Dialogs: fixed Esc not closing a dialog with a table in it
 - Devices: the table's columns fit its width instead of scrolling sideways
 - Devices: the Model column is gone from two-line rows, which show it under the name
+
+11/06
+- Desktop: the menu-bar icon shows the device count
+- Desktop: the menu-bar menu lists each device with Mirror, Browse, Logs and Screenshot buttons
+- Logs: a new log starts 10 minutes back instead of at the oldest line the device holds
+- Logs: fixed Resume doing nothing after a device's log had stopped
+- Devices: selecting a device in the icon view no longer lists its details in the status bar
+- Status bar: the version and History highlight when the pointer is over them
+- Status bar: clicking the version opens the app's log in a text editor
+- Status bar: a running command fills the status behind its text as it progresses
+- History: filter the list, copy lines, and double-click one to see its details
+- History: devices connecting, disconnecting and going offline are listed
+- Logs: ⌘C copies every selected line
+- Logs: ⇧⌘V opens the selected lines in the message viewer
+- Logs: right-clicking several selected lines offers only to copy or view them
+- Message viewer: the text can be edited, and Restore puts back the original
+- Message viewer: Edit opens the text in the default text editor
+- Message viewer: each toolbar button has a tooltip
+- Message viewer: fixed button labels being cut off
+- Logs: ⌘S opens the save dialog for the open log
+- Desktop: ⌘S only takes a screenshot on the Devices page

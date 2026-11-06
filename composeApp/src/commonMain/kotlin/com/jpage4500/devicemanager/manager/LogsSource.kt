@@ -115,6 +115,12 @@ class LogsSource(private val deviceId: String) {
     private var job: Job? = null
     private var appsJob: Job? = null
 
+    /**
+     * the last line's `MM-dd HH:mm:ss.SSS`, so Resume after the stream ends carries on from there
+     * rather than replaying the 10 minutes before it — the Swing app's `lastLogTime`.
+     */
+    private var lastLogTime: String? = null
+
     /** narrow what [entries] shows. null shows everything. */
     fun setFilter(predicate: ((LogEntry) -> Boolean)?) {
         filter = predicate
@@ -195,7 +201,8 @@ class LogsSource(private val deviceId: String) {
 
     /** start reading, on [scope] so the window's lifetime owns the stream. */
     fun start(scope: CoroutineScope) {
-        if (job != null) return
+        // a stream that ended on its own leaves its job behind, and Resume has to get past it
+        if (job?.isActive == true) return
         // an adb server runs `logcat` and a Device Manager server pushes it over /ws/logs; a
         // connection with neither — the test devices — has no log to show, and an empty window with
         // no explanation is the worst way to say so
@@ -210,7 +217,8 @@ class LogsSource(private val deviceId: String) {
         _paused.value = false
         startAppNames(scope)
         job = scope.launch {
-            DeviceManager.logcat(deviceId).collect { batch ->
+            log.d("start: $deviceId since ${lastLogTime ?: "10 minutes ago"}")
+            DeviceManager.logcat(deviceId, lastLogTime).collect { batch ->
                 // merged rather than replaced: a map that arrives mid-batch is what the far end knew
                 // a moment ago, and a name already resolved is better than no name
                 if (batch.processes.isNotEmpty()) _apps.value = _apps.value + batch.processes
@@ -218,6 +226,8 @@ class LogsSource(private val deviceId: String) {
                 var changed = false
                 batch.lines.forEach { line ->
                     val entry = LogEntry.parse(line, nextId++)
+                    // the entry's own date drops the milliseconds, and -T wants them
+                    if (entry.date != null) lastLogTime = line.trim().take(LOG_TIME_LENGTH)
                     buffer.addLast(entry)
                     if (filter?.invoke(entry) != false) {
                         matched.addLast(entry)
@@ -309,6 +319,9 @@ class LogsSource(private val deviceId: String) {
         // which the parser handles either way
         internal const val CMD_PS = "ps -A -o PID,NAME 2>/dev/null || ps"
         private const val APPS_REFRESH_MS = 30_000L
+
+        // "11-06 11:56:32.123", the front of a threadtime line
+        private const val LOG_TIME_LENGTH = 18
 
         /**
          * `  2063 com.android.systemui` per line, header skipped.

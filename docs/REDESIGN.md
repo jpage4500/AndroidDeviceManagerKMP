@@ -134,8 +134,7 @@ picked. Scripts, Commands and Input use the same list for the devices they run o
 - **Fit**: `AppPref.DEVICES_ICON_SIZE` is 0 by default, and while it is, the grid picks the largest
   height (96–480 dp) at which every device fits without scrolling — again as devices come and go
   and as the window is resized. Dragging the status bar's slider saves that size and ends Fit; the
-  Fit button beside it starts it again. With one device selected, the status bar spells out its
-  facts.
+  Fit button beside it starts it again.
 - The grid shares the table's selection, click and key semantics, menu and drop target; nothing
   in it polls a device, so 45 tiles cost no more adb than 45 rows.
 - ⌘D (View › Devices) brings the Devices page up from any page.
@@ -166,7 +165,10 @@ picked. Scripts, Commands and Input use the same list for the devices they run o
   already on, by name. Save and turn on for a new filter. An App rule's ▾ lists the apps in the log.
 - Right-click a cell: Show only / Hide that value for the clicked column, New filter from this…,
   Copy value, Copy line (Time offers only the copies). Show only and Hide add a **dashed** pill that
-  applies to this tab and isn't saved; clicking it saves it.
+  applies to this tab and isn't saved; clicking it saves it. Right-clicking inside a selection of
+  several lines offers only Copy N lines and View N lines — the cell items are about one line.
+- ⌘C copies the selected lines, ⇧⌘V opens them in the message viewer (one line opens as its message;
+  several as whole lines, date and tag included). Both stand aside while a text field has focus.
 - Search, level, which filters are on and the quick filters are per tab; saved filters are shared.
   A new tab starts with the level and the filters last switched on in any tab, kept across launches
   (`AppPref.LOGS_LEVEL_FLOOR`, `LOGS_SELECTED_FILTERS`); search and quick filters start empty.
@@ -296,7 +298,7 @@ Types on (Pixel 9 ×) (S21 ×) +                 ┌ Saved ───────
 - [x] Selected rows are a green tint under their own text (every `DataTable`).
 - [x] Details panel — opened by the Details toggle beside List / Icons; follows the lead selection
   while open, scrolling back to the top for each device. Every property the Device Details window
-  had (that window is gone — a row's Device Details and the tray open the panel instead), each
+  had (that window is gone — a row's Device Details opens the panel instead), each
   copied by a click; storage bar; Restart and Disconnect (wireless) as icon buttons. No action
   tiles, since the selection bar above already has them all.
 - [x] The panel's screen preview — a one-shot `screencap` every 10s while the panel shows it, not the
@@ -307,15 +309,16 @@ Types on (Pixel 9 ×) (S21 ×) +                 ┌ Saved ───────
 - [x] No-devices onboarding — USB steps, Wi-Fi and another computer (both open Connect), adb server.
   The pairing QR stays in the Connect window rather than being drawn here as well.
 - [x] Status bar: version and heap, what's happening or History, refreshed N ago, then count (or
-  selected / shown).
+  selected / shown). Version and History highlight on hover; History is a filterable table with
+  each line's detail on double-click.
 - [x] ~~Tick boxes in each Name cell and a select-all in the header~~ — removed 10/30; the row's
   selected tint is the selection.
 - [x] A file dragged in rings the devices it would reach: the whole selection if several, else the
   row under the pointer.
 - [x] The table looks like EngageAdminKMP's — pale 38dp header, 12sp semibold titles, chevron sort,
   13sp rows, full-width stripes and row rules, no tiled background (every `DataTable`).
-- [x] Icon view — `DeviceGrid`, the List / Icons toggle, the status bar's size slider and the
-  selected device's facts in the status bar; ⌘D for the page.
+- [x] Icon view — `DeviceGrid`, the List / Icons toggle and the status bar's size slider; ⌘D for
+  the page.
 - [x] Icon view tiers, serial endings and the battery/storage panel; Fit until the slider is dragged.
 - [x] A selected tile colours the phone's frame (accent) and bezel (a tint of it), not the tile
   behind it; grey when the window isn't focused.

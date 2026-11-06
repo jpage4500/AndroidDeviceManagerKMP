@@ -2,9 +2,11 @@ package com.jpage4500.devicemanager.ui.screen
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.graphics.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.unit.*
 import com.jpage4500.devicemanager.data.*
@@ -21,30 +23,29 @@ import org.jetbrains.compose.resources.stringResource
  *
  * Ported from the Swing app's `MessageViewScreen`. Its four buttons, in its order:
  *
- * - **Restore** — back to the raw text, undoing the formatting
+ * - **Restore** — back to the text exactly as it opened, undoing the formatting and any edits
  * - **Wrap ON/OFF** — line wrapping; off by default, because a log payload is usually read by
  *   scanning down the left edge
  * - **Auto Format ON/OFF** — pretty-print the JSON in it on open, if there is any
- * - **Edit** — hand the text to whatever the OS opens `.txt` with
+ * - **Edit** — hand the text, as it stands now, to the OS's default editor for `.txt`
  *
- * Both toggles are remembered, so the next message opens the way the last one was left.
+ * The text itself is editable. Both toggles are remembered, so the next message opens the way the
+ * last one was left.
  */
 @Composable
 fun MessageScreen(raw: String, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     var wrap by remember { mutableStateOf(SettingsManager.getBoolean(AppPref.MESSAGE_WRAP)) }
     var autoFormat by remember { mutableStateOf(SettingsManager.getBoolean(AppPref.MESSAGE_AUTO_FORMAT)) }
-    // null means "show it as it came"; Restore puts it back to that
-    var formatted by remember(raw) { mutableStateOf<String?>(null) }
+    // what the box holds now — formatted, edited, or as it came. Restore puts [raw] back
+    var text by remember(raw) { mutableStateOf(raw) }
     val copyToClipboard = rememberClipboardCopy()
 
     // format on open when the setting is on and there is JSON to format; toggling the setting
-    // re-decides, which is what makes the button read as a mode rather than an action
+    // re-decides from the original, which is what makes the button read as a mode, not an action
     LaunchedEffect(raw, autoFormat) {
-        formatted = if (autoFormat && TextUtils.containsJson(raw)) TextUtils.formatJson(raw) else null
+        text = if (autoFormat && TextUtils.containsJson(raw)) TextUtils.formatJson(raw) else raw
     }
-
-    val text = formatted ?: raw
 
     Column(modifier.fillMaxSize().background(Colors.listBg)) {
         Row(
@@ -58,13 +59,15 @@ fun MessageScreen(raw: String, modifier: Modifier = Modifier) {
             ToolbarButton(
                 res = Res.drawable.restart,
                 label = stringResource(Res.string.message_restore),
-                onClick = { formatted = null },
-                enabled = formatted != null,
+                tooltip = stringResource(Res.string.message_restore_tip),
+                onClick = { text = raw },
+                enabled = text != raw,
                 tint = Colors.toolbarIcon,
             )
             ToolbarButton(
                 res = Res.drawable.wrap,
                 label = stringResource(if (wrap) Res.string.message_wrap_on else Res.string.message_wrap_off),
+                tooltip = stringResource(Res.string.message_wrap_tip),
                 onClick = {
                     wrap = !wrap
                     SettingsManager.setBoolean(AppPref.MESSAGE_WRAP, wrap)
@@ -76,6 +79,7 @@ fun MessageScreen(raw: String, modifier: Modifier = Modifier) {
                 label = stringResource(
                     if (autoFormat) Res.string.message_format_on else Res.string.message_format_off
                 ),
+                tooltip = stringResource(Res.string.message_format_tip),
                 onClick = {
                     autoFormat = !autoFormat
                     SettingsManager.setBoolean(AppPref.MESSAGE_AUTO_FORMAT, autoFormat)
@@ -85,6 +89,7 @@ fun MessageScreen(raw: String, modifier: Modifier = Modifier) {
             ToolbarButton(
                 res = Res.drawable.edit,
                 label = stringResource(Res.string.message_edit),
+                tooltip = stringResource(Res.string.message_edit_tip),
                 onClick = { scope.launch { openInEditor(text) } },
                 tint = Colors.toolbarIcon,
             )
@@ -93,6 +98,7 @@ fun MessageScreen(raw: String, modifier: Modifier = Modifier) {
             ToolbarButton(
                 res = Res.drawable.copy,
                 label = stringResource(Res.string.logs_copy_message),
+                tooltip = stringResource(Res.string.message_copy_tip),
                 onClick = { copyToClipboard(text) },
                 tint = Colors.toolbarIcon,
             )
@@ -110,12 +116,17 @@ fun MessageScreen(raw: String, modifier: Modifier = Modifier) {
                     .then(if (wrap) Modifier else Modifier.horizontalScroll(horizontal))
                     .padding(Dimens.gap),
             ) {
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = Colors.primaryText,
-                    softWrap = wrap,
+                // a text field has no softWrap; under a horizontal scroll it is measured with no
+                // width limit, which is what keeps unwrapped lines on one line
+                BasicTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = if (wrap) Modifier.fillMaxWidth() else Modifier,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        color = Colors.primaryText,
+                    ),
+                    cursorBrush = SolidColor(Colors.primaryText),
                 )
             }
             AppVerticalScrollbar(vertical, Modifier.align(Alignment.CenterEnd))
@@ -125,19 +136,18 @@ fun MessageScreen(raw: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * write the text out and let the OS open it.
+ * write the text out and open it in the OS's default editor.
  *
  * the Swing app writes to a temp file and calls `Desktop.edit`; this writes into the app's own
- * folder, which needs no new platform code and leaves the file somewhere findable.
+ * folder, which leaves the file somewhere findable, and opens it the same way.
  */
 private suspend fun openInEditor(text: String) {
     val name = "message-${DateUtils.formatDate("yyyyMMdd-HHmmss")}.txt"
     val ok = StorageManager.writeBytes(PATH_MESSAGES, name, text.encodeToByteArray())
-    if (!ok) {
-        StatusManager.post("Couldn't write $name", isError = true)
-        return
+    val path = if (ok) StorageManager.getAbsolutePath(PATH_MESSAGES, name) else null
+    if (path == null || !editLocalFile(path)) {
+        StatusManager.post("Couldn't open $name", isError = true)
     }
-    StorageManager.getAbsolutePath(PATH_MESSAGES, name)?.let(PlatformUtils::openUrl)
 }
 
 const val PATH_MESSAGES = "messages"

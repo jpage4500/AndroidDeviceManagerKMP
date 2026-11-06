@@ -38,6 +38,8 @@ actual suspend fun writeLocalFile(path: String, bytes: ByteArray): Boolean {
 
 actual fun openLocalFile(path: String): Boolean = false
 
+actual fun editLocalFile(path: String): Boolean = false
+
 actual fun revealLocalFile(path: String): Boolean = false
 
 actual val localDesktopOS: DesktopOS? = null

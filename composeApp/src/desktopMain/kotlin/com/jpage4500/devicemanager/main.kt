@@ -37,6 +37,9 @@ fun main() {
         // rather than by us, and this is the only supported way to make them follow the system
         // appearance. it follows the *OS*, not our theme
         runCatching { System.setProperty("apple.awt.application.appearance", "system") }
+        // the menu-bar icon as a template image: macOS keeps only its alpha and colours it to suit
+        // the bar, light or dark. read when the tray icon is created, so it's set before anything
+        runCatching { System.setProperty("apple.awt.enableTemplateImages", "true") }
         // Settings… in the app menu, with the ⌘, every mac app answers to; the File menu carries it
         // everywhere else
         runCatching { Desktop.getDesktop().setPreferencesHandler { PageManager.openSettings() } }
@@ -125,6 +128,15 @@ private fun ApplicationScope.DeviceWindow(appWindow: AppWindow) {
                 }
         }
 
+        // the tray acts from outside every window, so it asks for its window to come forward
+        LaunchedEffect(window) {
+            WindowManager.raise.filter { it == appWindow.id }.collect {
+                if (window.isMinimized) window.isMinimized = false
+                window.toFront()
+                window.requestFocus()
+            }
+        }
+
         LaunchedEffect(window) {
             window.minimumSize = java.awt.Dimension(
                 Dimens.minWindowWidth.value.toInt(),
@@ -160,6 +172,12 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
     // Files opens one tab: the keyboard cursor's device when it's one of them
     val filesFor = ids.firstOrNull { it == lead } ?: ids.firstOrNull()
     fun shortcut(key: Key) = KeyShortcut(key, meta = isMac(), ctrl = !isMac())
+    // ⌘S belongs to the page showing: a screenshot on Devices (and in a mirror window, of its own
+    // device), the log's save dialog on Logs, nothing anywhere else. A menu item holding a shortcut
+    // swallows it on every page, so each item only holds it while its page is up
+    val page = if (appWindow.content is WindowContent.DeviceList) PageManager.activePage else null
+    val onLogs = page == Page.LOGS
+    val screenshotKey = if (mirrored != null || page == Page.DEVICES) shortcut(Key.S) else null
 
     MenuBar {
         Menu(stringResource(Res.string.menu_file), mnemonic = 'F') {
@@ -175,6 +193,10 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
                 Item(stringResource(Res.string.menu_settings), shortcut = KeyShortcut(Key.Comma, ctrl = true)) {
                     PageManager.openSettings()
                 }
+            }
+            Separator()
+            Item(stringResource(Res.string.menu_save_log), enabled = onLogs, shortcut = if (onLogs) shortcut(Key.S) else null) {
+                PageManager.saveActiveLog()
             }
             Separator()
             Item(stringResource(Res.string.menu_close_window), shortcut = KeyShortcut(Key.W, meta = isMac(), ctrl = !isMac())) {
@@ -206,7 +228,7 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
             Item(stringResource(Res.string.menu_files), enabled = filesFor != null, shortcut = shortcut(Key.E)) {
                 filesFor?.let(PageManager::openFiles)
             }
-            Item(stringResource(Res.string.menu_screenshot), enabled = ids.isNotEmpty(), shortcut = shortcut(Key.S)) {
+            Item(stringResource(Res.string.menu_screenshot), enabled = ids.isNotEmpty(), shortcut = screenshotKey) {
                 scope.launch { targets.forEach { DeviceManager.saveScreenshot(it) } }
             }
             Item(stringResource(Res.string.menu_type_text), enabled = ids.isNotEmpty(), shortcut = shortcut(Key.I)) {

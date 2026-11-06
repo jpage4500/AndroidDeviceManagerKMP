@@ -31,6 +31,12 @@ expect suspend fun writeLocalFile(path: String, bytes: ByteArray): Boolean
 /** open a file on this machine in whatever the OS opens it with. false where there is no such thing. */
 expect fun openLocalFile(path: String): Boolean
 
+/**
+ * open a text file on this machine in the OS's editor for it — TextEdit or whatever owns `.log`
+ * there, never the folder it sits in. false where there is no such thing.
+ */
+expect fun editLocalFile(path: String): Boolean
+
 /** show a file on this machine selected in Finder or Explorer. false where there is no such thing. */
 expect fun revealLocalFile(path: String): Boolean
 

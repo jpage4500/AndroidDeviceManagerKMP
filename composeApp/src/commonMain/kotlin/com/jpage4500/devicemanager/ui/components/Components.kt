@@ -104,27 +104,33 @@ fun ToolbarButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     tint: Color = MaterialTheme.colorScheme.onSurface,
+    tooltip: String? = null,
 ) {
     val alpha = if (enabled) 1f else 0.35f
-    Column(
-        modifier
-            .width(Dimens.toolbarButtonWidth)
-            .clip(RoundedCornerShape(Dimens.corner))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        AppIcon(res, size = Dimens.toolbarIcon, tint = tint.copy(alpha = alpha), contentDescription = label)
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha * 0.8f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    val button = @Composable {
+        // a minimum width rather than a fixed one: a label like "Auto Format OFF" is wider than the
+        // icon above it, and the button grows to hold it rather than cutting it off
+        Column(
+            modifier
+                .widthIn(min = Dimens.toolbarButtonWidth)
+                .clip(RoundedCornerShape(Dimens.corner))
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(vertical = 4.dp, horizontal = Dimens.toolbarButtonPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            AppIcon(res, size = Dimens.toolbarIcon, tint = tint.copy(alpha = alpha), contentDescription = label)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha * 0.8f),
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
     }
+    if (tooltip == null) button() else CellTooltip(text = { tooltip }) { button() }
 }
 
 /** the vertical rule between toolbar groups. */

@@ -458,10 +458,15 @@ the log window can't tell apart:
 
 | Route | Lines | Process names for the App column |
 |---|---|---|
-| adb server | `logcat -v threadtime` over `exec:`, socket drained and flushed every 100ms — `adb/AdbLogcat.kt` | the log window runs `ps` every 30s |
+| adb server | `logcat -v threadtime -T <start>` over `exec:`, socket drained and flushed every 100ms — `adb/AdbLogcat.kt` | the log window runs `ps` every 30s |
 | direct to `adbd` | the same, on one stream of the held-open connection, flushed on the same 100ms | the same `ps` on a slow timer |
 | Device Manager server | pushed over `/ws/logs` every 500ms as **gzipped JSON** — `transport/RemoteLogcat.kt` | the server sends pid -> name down the same socket every 5s, so no `ps` runs at all |
 
+- **The adb routes go back at most 10 minutes.** Without `-T` logcat replays its whole ring buffer,
+  which on a Galaxy S21 reached most of a day back. `logcatArgs` starts at 10 minutes ago, or at
+  the last line already held when a stopped log is resumed if that is later — the Swing app's
+  `clampLogStartTime`. The time is this computer's clock, so a device in another time zone is off by
+  the difference. `/ws/logs` takes no start time; the server applies its own limit.
 - **Every batch is gzipped, always.** The plain JSON `logs` message the server's own client can also
   parse is dead code on the server side, so only the binary path is implemented. `util/gunzip` is
   what reads it: `GZIPInputStream` on desktop and android, zlib on iOS.

@@ -33,14 +33,26 @@ object InstallManager {
             return 0
         }
         var installed = 0
+        val lines = mutableListOf<String>()
         deviceIds.forEachIndexed { index, deviceId ->
             val name = DeviceManager.nameOf(deviceId)
             StatusManager.post("Installing ${file.name} on $name", progress = percent(index, deviceIds.size))
             installBytes(deviceId, bytes, file.name)
-                .onSuccess { installed++ }
-                .onFailure { StatusManager.post("$name: ${it.message}", isError = true) }
+                .onSuccess {
+                    installed++
+                    lines += "✅ $name"
+                }
+                .onFailure {
+                    lines += "❌ $name: ${it.message}"
+                    StatusManager.post("$name: ${it.message}", isError = true)
+                }
         }
-        StatusManager.post("Installed ${file.name} on $installed of ${deviceIds.size}", progress = 100)
+        StatusManager.post(
+            "Installed ${file.name} on $installed of ${deviceIds.size}",
+            progress = 100,
+            isError = installed < deviceIds.size,
+            detail = lines.joinToString("\n"),
+        )
         return installed
     }
 

@@ -146,7 +146,7 @@ class DirectDeviceTransport(
      * Batched on the same 100ms flush the adb-server route uses — a busy device prints thousands of
      * lines a second, and an emission each would be thousands of recompositions.
      */
-    override fun logcat(serial: String): Flow<LogBatch> = channelFlow {
+    override fun logcat(serial: String, since: String?): Flow<LogBatch> = channelFlow {
         val live = when (val opened = open()) {
             is AdbOutcome.Err -> {
                 log.w("logcat: $serial: ${opened.message}")
@@ -154,14 +154,15 @@ class DirectDeviceTransport(
             }
             is AdbOutcome.Ok -> opened.value
         }
-        val stream = when (val opened = live.open("exec:logcat -v threadtime")) {
+        val args = logcatArgs(since)
+        val stream = when (val opened = live.open("exec:logcat $args")) {
             is AdbOutcome.Err -> {
                 log.w("logcat: $serial: ${opened.message}")
                 return@channelFlow
             }
             is AdbOutcome.Ok -> opened.value
         }
-        log.d("logcat: $serial: started")
+        log.d("logcat: $serial: started, $args")
         try {
             val pending = mutableListOf<String>()
             // a line can be split across two chunks, so whatever follows the last newline is held

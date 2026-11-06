@@ -127,6 +127,27 @@ object WindowManager {
         return id
     }
 
+    // a window id the entry point should bring to the front. a flow rather than a call because only
+    // the window itself holds the OS handle that can do it
+    private val _raise = MutableSharedFlow<Long>(extraBufferCapacity = 1)
+    val raise: SharedFlow<Long> = _raise.asSharedFlow()
+
+    /**
+     * the device list in front: the one last in front if it was a device list, else the newest, else
+     * a new one. for things that act from outside every window — the tray — and so can't count on
+     * the window they change being the one the user is looking at.
+     */
+    fun bringToFront() {
+        val lists = _windows.value.filter { it.content is WindowContent.DeviceList }
+        val target = lists.firstOrNull { it.id == activeWindowId } ?: lists.lastOrNull()
+        if (target == null) {
+            openWindow(WindowContent.DeviceList)
+            return
+        }
+        activeWindowId = target.id
+        _raise.tryEmit(target.id)
+    }
+
     /** a mirror in a window of its own, beside the one it was opened from. */
     fun openMirror(deviceId: String, from: Long? = activeWindowId): Long =
         openOnce(WindowContent.Mirror(deviceId), from)

@@ -89,6 +89,9 @@ object DeviceManager {
 
     // one tracker and one detail fetch per connection, so a slow desk can't cancel a fast one's work
     private val trackJobs = mutableMapOf<String, Job>()
+
+    // connections whose first device list has arrived — see [setDevices]
+    private val announced = MutableStateFlow(emptySet<String>())
     private val detailJobs = mutableMapOf<String, Job>()
     private var refreshJob: Job? = null
     private var started = false
@@ -167,6 +170,7 @@ object DeviceManager {
         detailJobs.remove(id)?.cancel()
         _connections.value = _connections.value.filterNot { it.id == id }
         _devices.update { list -> list.filterNot { it.connectionId == id } }
+        announced.update { it - id }
         dropSelection { key -> key is String && Device.connectionOf(key) == id }
         transport.close()
     }
@@ -236,6 +240,7 @@ object DeviceManager {
      * [connections] any more.
      */
     private fun setDevices(transport: DeviceTransport, incoming: List<Device>) {
+        val before = _devices.value.filter { it.connectionId == transport.id }
         _devices.update { current ->
             // the long-form list already carries a model, so a row can be drawn before any getprop
             // has run — the details are filled in behind it. A transport that carries the details
@@ -244,6 +249,38 @@ object DeviceManager {
             val mine = if (transport.hasDeviceDetails) incoming else merge(current, transport.id, incoming)
             val byConnection = current.groupBy { it.connectionId } + (transport.id to mine)
             _connections.value.flatMap { byConnection[it.id].orEmpty() }
+        }
+        // the first list a connection delivers is one line, not one per device: 45 "connected"
+        // lines at startup would push everything else out of History
+        val first = transport.id !in announced.getAndUpdate { it + transport.id }
+        if (!first) {
+            announceChanges(before, incoming)
+        } else if (incoming.isNotEmpty()) {
+            val found = if (incoming.size == 1) "1 device found" else "${incoming.size} devices found"
+            // which computer only matters when there is more than one to tell apart
+            StatusManager.post(if (_connections.value.size > 1) "$found on ${transport.label}" else found)
+        }
+    }
+
+    /**
+     * say in the status bar — and so in its History — which devices came, went or dropped offline,
+     * as the Swing app does. Comes from the list itself, so a cable pulled is in History even when
+     * nobody was looking at the table.
+     */
+    private fun announceChanges(before: List<Device>, after: List<Device>) {
+        val old = before.associateBy { it.serial }
+        val new = after.associateBy { it.serial }
+        for (device in after) {
+            val was = old[device.serial]
+            when {
+                was == null || (!was.isOnline && device.isOnline) ->
+                    if (device.isOnline) StatusManager.post("${device.displayName} connected")
+                    else StatusManager.post("${device.displayName} ${device.state.label}")
+                was.isOnline && !device.isOnline -> StatusManager.post("${was.displayName} offline")
+            }
+        }
+        for (device in before) {
+            if (device.serial !in new) StatusManager.post("${device.displayName} disconnected")
         }
     }
 
@@ -322,8 +359,8 @@ object DeviceManager {
      * routed here rather than opened by the log window itself: with two desks attached, a stream
      * that found its own way to an adb server would happily read the other one's `emulator-5554`.
      */
-    fun logcat(deviceId: String): Flow<LogBatch> =
-        connectionFor(deviceId)?.logcat(Device.serialOf(deviceId)) ?: emptyFlow()
+    fun logcat(deviceId: String, since: String? = null): Flow<LogBatch> =
+        connectionFor(deviceId)?.logcat(Device.serialOf(deviceId), since) ?: emptyFlow()
 
     /** whether [logcat] will produce anything for this device. */
     fun canStreamLogs(deviceId: String): Boolean = connectionFor(deviceId)?.canStreamLogs == true
