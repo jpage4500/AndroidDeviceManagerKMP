@@ -211,7 +211,7 @@ fun LogsScreen(
      *
      * the trim is what moves the ground under a scrolled-up window, and the first half of not doing
      * that to someone is not doing it at all — [LogsSource.setHold] keeps the oldest lines for as
-     * long as Auto Scroll is off, up to the `LOGS_HOLD_LINES` budget past the buffer size. A budget
+     * long as Auto Scroll is off, up to the `LogsSource.HOLD_LINES` budget past the buffer size. A budget
      * rather than a promise, because a device printing thousands of lines a second would otherwise
      * take the heap with it; when it runs out the lines go again and the status bar says so.
      *

@@ -80,7 +80,6 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     FULL_REFRESH_MINS("full_refresh_mins", 60),             // ...and how often everything else is, 0 to never
     MAX_MIRROR_WINDOWS("max_mirror_windows", 8),            // how many mirrors can poll at once before the fleet suffers
     LOGS_MAX_LINES("logs_max_lines", 200_000),              // ring buffer per log tab — the Swing app's default
-    LOGS_HOLD_LINES("logs_hold_lines", 25000),              // ...and how far past it the buffer may grow while a window reads history
     LOGS_FONT_SIZE("logs_font_size", 13),                   // log table text size, ⌘+/⌘- adjusts it
     SIDEBAR_WIDTH("sidebar_width", 216),                    // desktop sidebar, in dp; under 150 it is the icon rail
     DEVICES_ICON_SIZE("devices_icon_size", 0),              // Devices icon view: glyph height in dp from the status bar slider; 0 = Fit, sized to show every device

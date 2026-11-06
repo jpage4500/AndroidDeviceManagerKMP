@@ -274,3 +274,5 @@
 - Settings: the tabs across the top use the same light colours as the device tabs
 - Desktop: fixed dialogs hiding behind the window when Keep windows on top is on
 - Settings: removed the Confirm destructive commands switch
+- Settings: the log buffer shows its default size instead of Not set
+- Settings: removed the Hold while scrolled up and Scroll the log sideways rows

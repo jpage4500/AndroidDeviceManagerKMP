@@ -510,7 +510,7 @@ object DeviceManager {
                     }
                 }
             }.awaitAll()
-            log.d("fetchDetails: ${transport.id}: ${online.size} devices in $timer")
+            log.v("fetchDetails: ${transport.id}: ${online.size} devices in $timer")
         }
     }
 
@@ -538,7 +538,7 @@ object DeviceManager {
                 customProperties = custom,
             )
         }
-        log.d("fetchFixed: ${device.id}: ${props.size} props in $timer")
+        log.v("fetchFixed: ${device.id}: ${props.size} props in $timer")
     }
 
     /** what goes stale: the battery, the disk, and whether the device has finished booting. */

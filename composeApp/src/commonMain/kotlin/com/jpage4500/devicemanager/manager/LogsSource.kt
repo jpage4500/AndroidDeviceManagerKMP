@@ -33,7 +33,7 @@ class LogsSource(private val deviceId: String) {
      * doesn't happen. **Bounded**, and 0 turns it off: a device printing thousands of lines a second
      * would otherwise take the heap with it, which is the whole reason the buffer is a ring.
      */
-    private val holdLines = SettingsManager.getInt(AppPref.LOGS_HOLD_LINES).coerceAtLeast(0)
+    private val holdLines = HOLD_LINES
     private val buffer = ArrayDeque<LogEntry>(minOf(maxLines, 10_000))
 
     /**
@@ -314,6 +314,9 @@ class LogsSource(private val deviceId: String) {
         // the range Settings › Logs accepts for the buffer — the Swing app's LogsTableModel bounds
         const val MIN_BUFFER = 10_000
         const val MAX_BUFFER = 9_999_999
+
+        // how far past the buffer it may grow while a window reads history
+        const val HOLD_LINES = 25_000
 
         // -o PID,NAME needs Android 8+; the bare `ps` fallback puts the name last on each line,
         // which the parser handles either way

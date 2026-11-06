@@ -307,7 +307,6 @@ private fun LogsTab() {
         range = LogsSource.MIN_BUFFER..LogsSource.MAX_BUFFER,
         desc = stringResource(Res.string.settings_buffer_range, LogsSource.MIN_BUFFER, LogsSource.MAX_BUFFER),
     )
-    TextSetting(Res.drawable.pause, Res.string.settings_log_hold, AppPref.LOGS_HOLD_LINES, InputType.NUMBER)
     SliderSetting(
         icon = Res.drawable.size,
         label = Res.string.settings_log_font,
@@ -315,8 +314,8 @@ private fun LogsTab() {
         range = 9..24,
         manualEntry = Res.string.settings_enter_pt,
         unit = Res.string.settings_unit_pt,
+        showDivider = false,
     )
-    SwitchSetting(Res.drawable.wrap, Res.string.settings_scroll_sideways, AppPref.LOGS_SCROLL_SIDEWAYS, showDivider = false)
 }
 
 @Composable
@@ -593,7 +592,8 @@ private fun TextSetting(
     var editing by remember { mutableStateOf(false) }
 
     val labelText = stringResource(label)
-    val value = SettingsManager.getStringOrEmpty(pref)
+    // a number always has a value — unset, it is the pref's default, which is what to show
+    val value = if (inputType == InputType.NUMBER) SettingsManager.getInt(pref).toString() else SettingsManager.getStringOrEmpty(pref)
     val shown = when {
         value.isEmpty() -> stringResource(Res.string.settings_not_set)
         // a token is long, and its value is not something to leave on screen

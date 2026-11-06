@@ -177,7 +177,6 @@ description: the log viewer's prefs, which the phone doesn't have a viewer for y
 | element | what it is |
 |---|---|
 | "Log buffer (lines)" | `TextSetting`, clamped to 10,000–9,999,999; 200,000 by default |
-| "Hold while scrolled up (lines)" | `TextSetting`, numbers only |
 | "Log font size" | `SliderSetting` |
 | "Scroll the log sideways" | `SwitchSetting` |
 

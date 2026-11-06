@@ -88,12 +88,12 @@ column — the same rule as the header menu's `toggleHidden`.
 | Row | Pref | Default | Swing |
 |---|---|---|---|
 | Log buffer (lines) | `LOGS_MAX_LINES` | **200,000**, 10,000–9,999,999 | `PREF_LOGS_MAX_LINES`, 200000 (10000–9999999) |
-| Hold while scrolled up (lines) | `LOGS_HOLD_LINES` | 25,000 | — |
 | Log font size | `LOGS_FONT_SIZE` | 13 pt | the system font size |
-| Scroll the log sideways | `LOGS_SCROLL_SIDEWAYS` | true | — |
 
 The buffer is 200,000 to match the Swing app (it was 50,000). `LogsSource` clamps to the same range
 (`MIN_BUFFER`/`MAX_BUFFER`) and reads it when a tab opens, so a change applies to tabs opened after it.
+The hold while scrolled up is `LogsSource.HOLD_LINES` (25,000), no longer a setting; scrolling
+sideways (`LOGS_SCROLL_SIDEWAYS`) is toggled from the log view's own toolbar, not here.
 **Not measured yet:** the buffer is per tab and every tab keeps capturing, which the Swing app never
 did — it showed one log at a time. Heap with several busy tabs at 200,000 is the number to take; if
 it hurts, the fix is a smaller buffer for background tabs, not a smaller one for the tab being read.

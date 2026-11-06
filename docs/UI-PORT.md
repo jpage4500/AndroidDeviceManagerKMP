@@ -781,7 +781,7 @@ remembered key, so this and `LazyColumn`'s own anchoring can't both move the sam
 drag or a fling is running: the user's own scroll outranks it.
 
 The other half is not trimming at all while someone is reading. `LogsSource.setHold` is on for as
-long as Auto Scroll is off, and while it is on the buffer may grow `LOGS_HOLD_LINES` past
+long as Auto Scroll is off, and while it is on the buffer may grow `LogsSource.HOLD_LINES` past
 `LOGS_MAX_LINES` (25,000 past 50,000 by default) rather than dropping its oldest line — so the lines
 being read stay where they are and the history under them doesn't dissolve. It is a **budget, not a
 promise**, and that is the point: a device printing thousands of lines a second would empty the heap
@@ -805,7 +805,7 @@ Manager server, takes the batches that server pushes over `/ws/logs` through `re
 way what arrives is a `LogBatch`, and the window can't tell which. Both **batch lines rather than
 emitting one at a time**: a busy device prints thousands a second, and an emission
 per line would recompose the table thousands of times a second. The buffer is a ring of
-`LOGS_MAX_LINES` (stretching by `LOGS_HOLD_LINES` while a window reads history — see above), not a
+`LOGS_MAX_LINES` (stretching by `LogsSource.HOLD_LINES` while a window reads history — see above), not a
 growing list: without a cap the app runs itself out of heap in minutes.
 
 Filtering happens on the way to the table, not in it, so turning a filter off shows what it was

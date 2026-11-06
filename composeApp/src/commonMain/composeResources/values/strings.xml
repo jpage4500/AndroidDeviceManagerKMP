@@ -371,7 +371,6 @@
     <string name="settings_full_refresh">Full refresh (mins)</string>
     <string name="settings_log_buffer">Log buffer (lines)</string>
     <string name="settings_log_font">Log font size (⌘+ / ⌘-)</string>
-    <string name="settings_log_hold">Hold while scrolled up (lines)</string>
     <string name="settings_logs">Logs</string>
     <string name="settings_mirror_ms">Mirror interval (ms)</string>
     <string name="settings_not_set">Not set</string>
@@ -426,7 +425,6 @@
     <string name="settings_columns_reset">Reset table layout</string>
     <string name="settings_columns_reset_msg">Columns go back to their default order, widths and visibility.</string>
     <string name="settings_buffer_range">Between %1$d and %2$d lines</string>
-    <string name="settings_scroll_sideways">Scroll the log sideways</string>
     <string name="settings_download_folder">Download folder</string>
     <string name="settings_screenshot_folder">Screenshot folder</string>
     <string name="settings_same_as_downloads">Same as downloads</string>
