@@ -6,7 +6,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.window.*
+import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.ui.theme.*
+import com.jpage4500.devicemanager.util.*
 import java.awt.Color as AwtColor
 
 actual val dialogsAreWindows = true
@@ -26,10 +28,14 @@ actual fun DialogContainer(
     size: DpSize?,
     content: @Composable () -> Unit,
 ) {
+    // on top whenever the app's windows are: an owned dialog that isn't sinks behind an always-on-top
+    // owner on macOS, where it can't be clicked or brought back
+    val alwaysOnTop by SettingsManager.getBoolAsState(AppPref.ALWAYS_ON_TOP)
     DialogWindow(
         onCloseRequest = onDismiss,
         state = rememberDialogState(size = size ?: DpSize.Unspecified),
         title = title,
+        alwaysOnTop = alwaysOnTop,
         // resizable, because one of these is now the app log viewer and a form the user can't
         // widen is a form with a scrollbar it didn't need
         resizable = true,

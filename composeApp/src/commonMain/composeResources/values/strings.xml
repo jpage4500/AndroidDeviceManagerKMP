@@ -366,7 +366,6 @@
     <string name="settings_adb_host">adb server host</string>
     <string name="settings_adb_port">adb server port</string>
     <string name="settings_app">App</string>
-    <string name="settings_confirm">Confirm destructive commands</string>
     <string name="settings_connection">Connection</string>
     <string name="settings_device_list">Device list</string>
     <string name="settings_full_refresh">Full refresh (mins)</string>

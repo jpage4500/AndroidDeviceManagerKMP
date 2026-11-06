@@ -122,21 +122,17 @@ fun DeviceSheet(deviceId: String, onDismiss: () -> Unit, onMirror: (String) -> U
                 enabled = online,
                 // only a wireless device can be dropped; a USB one comes straight back
                 showDivider = device?.isWireless == true,
+                // always asks, as the desktop's details panel does
                 onClick = {
-                    val run = { scope.launch { DeviceManager.reboot(deviceId) }; Unit }
-                    if (SettingsManager.getBoolean(AppPref.CONFIRM_DESTRUCTIVE)) {
-                        scope.launch {
-                            confirm = ConfirmRequest(
-                                title = restartTitle,
-                                message = getString(
-                                    Res.string.sheet_restart_msg,
-                                    device?.displayName ?: serial,
-                                ),
-                                onConfirm = run,
-                            )
-                        }
-                    } else {
-                        run()
+                    scope.launch {
+                        confirm = ConfirmRequest(
+                            title = restartTitle,
+                            message = getString(
+                                Res.string.sheet_restart_msg,
+                                device?.displayName ?: serial,
+                            ),
+                            onConfirm = { scope.launch { DeviceManager.reboot(deviceId) } },
+                        )
                     }
                 },
             )

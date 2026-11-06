@@ -158,7 +158,6 @@ a `BaseDialog` holding that tab's body — the same composable the desktop draws
 | element | what it is |
 |---|---|
 | "Theme" | `ChoiceSetting` → an `OptionsDialog` of Light / Dark / Same as the system |
-| "Confirm destructive commands" | `SwitchSetting` — what the device page's Restart reads before it asks |
 | PREFERENCES › "Reset all settings" | RESET, behind a `ConfirmationDialog` |
 
 ### settings ▸ devices
@@ -479,8 +478,8 @@ Details anyway.
   arrive, and an outline reads as not-yet where grey text read as broken. The rest are `SettingItem`
   rows under **Commands**, away from the thumb — named for what it becomes rather than what it holds
   today, since the Swing app's row menu has a dozen more to come.
-- **A destructive action still confirms** — `AppPref.CONFIRM_DESTRUCTIVE` is already the setting, and
-  Restart on the wrong row is exactly the mistake a phone makes easier.
+- **A destructive action always confirms** — there is no setting to turn it off, and Restart on the
+  wrong row is exactly the mistake a phone makes easier.
 - **The sheet is a `BaseDialog`** like every other dialog in the app, which is where its title band
   and its place in the dialog stack come from. It hand-rolled both over a bare `DialogContainer`
   until 09/08, and read as a different product because of it — the confirmation it raises now
@@ -1124,8 +1123,7 @@ Each step leaves the app usable and compiles on all three targets.
    Disconnect as `SettingItem` rows under Commands, between the two. Mirror and Screenshot are wired;
    Browse and Logs are dashed outlines. Rename is a pencil on the Name row and Copy serial is gone —
    every property row copies itself. Commands and Details each fold away, remembered in
-   `AppPref.INFO_COLLAPSED`; the gauges have no header and don't. Restart confirms when
-   `CONFIRM_DESTRUCTIVE` is on. A screenshot is shown and thrown away — the share sheet is still
+   `AppPref.INFO_COLLAPSED`; the gauges have no header and don't. Restart always confirms. A screenshot is shown and thrown away — the share sheet is still
    waiting on `shareImage`.
 3. **The lifecycle seam.** `isForeground`, reconnect on return, stop polling on leave. iOS needs it
    and everything after it assumes it.

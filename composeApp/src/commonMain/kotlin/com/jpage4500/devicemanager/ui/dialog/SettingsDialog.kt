@@ -124,14 +124,21 @@ private fun TabbedSettings(tabs: List<SettingsTab>, start: SettingsTab, onDismis
     }
 }
 
-/** the Swing tab strip: icon and label, the selected tab underlined, every tab an equal share. */
+/**
+ * the Swing tab strip: icon and label, the selected tab underlined, every tab an equal share. The
+ * grounds are the device tabs' — idle tabs on [Colors.tabIdle], the open one on the form's own colour
+ * — not the table header's grey, which read as a dark bar across the top of the window.
+ */
 @Composable
 private fun SettingsTabStrip(tabs: List<SettingsTab>, selected: SettingsTab, onSelect: (SettingsTab) -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Colors.headerBackground)) {
+    Row(Modifier.fillMaxWidth().background(Colors.tabIdle)) {
         tabs.forEach { tab ->
             val isSelected = tab == selected
             Column(
-                Modifier.weight(1f).plainClickable { onSelect(tab) },
+                Modifier
+                    .weight(1f)
+                    .background(if (isSelected) Colors.listBg else Color.Transparent)
+                    .plainClickable { onSelect(tab) },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Row(
@@ -231,8 +238,7 @@ private fun GeneralTab() {
         ),
     )
     // the background check only runs on the desktop — see UpdateManager.startBackgroundChecks
-    if (isDesktop) SwitchSetting(Res.drawable.update, Res.string.settings_check_updates, AppPref.CHECK_UPDATES)
-    SwitchSetting(Res.drawable.error, Res.string.settings_confirm, AppPref.CONFIRM_DESTRUCTIVE, showDivider = false)
+    if (isDesktop) SwitchSetting(Res.drawable.update, Res.string.settings_check_updates, AppPref.CHECK_UPDATES, showDivider = false)
 
     if (isDesktop) {
         Section(Res.string.settings_section_window)

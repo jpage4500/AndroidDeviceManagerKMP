@@ -14,7 +14,6 @@ which defaults, is the second half of this page.
 │━━━━━━━━━━━                                                                 │
 │  ◐ Theme                                               [ Light        ▾ ] │
 │  ↻ Check for updates                                                [●]   │
-│  ⚠ Confirm destructive commands                                     [●]   │
 │  WINDOW ───────────────────────────────────────────────────────────────── │
 │  ▣ Stay in the menu bar when closed                                 [ ]   │
 │  ★ Keep windows on top                                              [ ]   │
@@ -30,7 +29,8 @@ which defaults, is the second half of this page.
   whatever height it's given and has no size of its own to pack to. The Swing one was 540×480 with
   five tabs; seven need the width.
 - **The tab strip** is icon and label in equal shares, the selected one underlined, pinned while the
-  tab's form scrolls vertically. Each tab keeps its own scroll position.
+  tab's form scrolls vertically. Its grounds are the device tabs': `tabIdle` behind the strip, `listBg`
+  behind the selected tab. Each tab keeps its own scroll position.
 - **Each tab is a form** of the `ui/setting/` rows under `SectionHeader`s. A switch toggles in place;
   a choice of a few is an `AppDropdown` in place; a number opens `SliderDialog`, `StepperDialog` or
   `TextInputDialog` as a window beside Settings; a folder or a program opens the native chooser.
@@ -59,9 +59,8 @@ The *Swing* column is that app's pref and default, from
 |---|---|---|---|
 | Theme | `THEME` | Light | — |
 | Check for updates *(desktop)* | `CHECK_UPDATES` | true | `PREF_CHECK_UPDATES`, true |
-| Confirm destructive commands | `CONFIRM_DESTRUCTIVE` | true | — |
 | WINDOW › Stay in the menu bar when closed *(desktop)* | `MINIMIZE_TO_TRAY` | false | `PREF_EXIT_TO_TRAY`, false |
-| WINDOW › Keep windows on top *(desktop)* | `ALWAYS_ON_TOP` | false | `PREF_ALWAYS_ON_TOP`, false |
+| WINDOW › Keep windows on top *(desktop)* — dialogs too, or they sink behind their owner | `ALWAYS_ON_TOP` | false | `PREF_ALWAYS_ON_TOP`, false |
 | PREFERENCES › Reset all settings | — | — | Reset Preferences |
 
 **Check for updates** is `UpdateManager.startBackgroundChecks()`, started from desktop `initApp`. It

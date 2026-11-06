@@ -58,7 +58,6 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     DEBUG_MODE("debug_mode"),                               // log debug lines to file, and log http bodies
     MINIMIZE_TO_TRAY("minimize_to_tray"),                   // desktop: closing the last window leaves a tray icon
     ALWAYS_ON_TOP("always_on_top"),                         // desktop: keep windows above other apps
-    CONFIRM_DESTRUCTIVE("confirm_destructive", true),       // ask before a command that wipes or reboots
     SHOW_TOOLTIPS("show_tooltips", true),                   // tables: show a value that doesn't fit on hover
     FILES_SHOW_HIDDEN("files_show_hidden", false),          // Files: show names starting with a dot
     LOGS_SCROLL_SIDEWAYS("logs_scroll_sideways", true),     // log table: scroll sideways, or end the message column at the edge
