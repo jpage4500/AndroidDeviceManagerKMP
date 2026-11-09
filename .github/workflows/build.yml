@@ -3,9 +3,8 @@ name: Build
 # Compiles every target on a push or PR. There is no test suite, so compiling on all three is the
 # check — commonMain is most of the app, and desktop-only verification is how iOS breaks.
 #
-# This does NOT publish anything. The desktop release lives in build-desktop.yml; there is no
-# Play Store or TestFlight job yet because there is no signing config for either (see
-# docs/RELEASING.md).
+# This does NOT publish anything. Releases live in build-desktop.yml and build-android.yml; there
+# is no Play Store or TestFlight job (see docs/RELEASING.md).
 
 on:
   push:

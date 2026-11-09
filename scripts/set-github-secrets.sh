@@ -33,17 +33,23 @@ function getProperty {
 
 # every secret the workflows reference, in workflow order.
 #
-# short list on purpose: nothing here signs an android release or uploads to TestFlight yet, so
-# there are no keystore or App Store Connect secrets to set. DashboardWeatherKMP's copy of this
-# script has that longer list when it's time — see docs/RELEASING.md.
+# nothing here uploads to a store or TestFlight yet, so there are no Play or App Store Connect
+# secrets to set. DashboardWeatherKMP's copy of this script has that longer list when it's time.
 SECRETS=(
     # app build config — where LogManager uploads a log to (composeApp/build.gradle.kts)
     LOGGING_URL
     LOGGING_API
 
     # github releases: a PAT with contents:write on THIS repo (to push the version tag) and on
-    # jpage4500/AndroidDeviceManager2 (to create the release and sync the README)
+    # jpage4500/AndroidDeviceManager2 (to create the releases and sync the README)
     GH_TOKEN
+
+    # android release signing (build-android.yml) — the keystore shared across the KMP apps.
+    # KMP_KEYSTORE is the base64-encoded keystore; androidApp/build.gradle.kts decodes it
+    KMP_KEYSTORE
+    KMP_SIGNING_STORE_PASSWORD
+    KMP_SIGNING_KEY_ALIAS
+    KMP_SIGNING_KEY_PASSWORD
 )
 
 # ==========================================

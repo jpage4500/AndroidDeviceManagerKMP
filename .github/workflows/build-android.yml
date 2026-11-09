@@ -1,0 +1,57 @@
+name: Android
+
+# Builds the signed release APK and publishes it to the PUBLIC release repo as "<version>-android",
+# beside the desktop's "<version>" release. No Play Store.
+#
+# Flow: merge to main -> build-desktop.yml's tag-release job pushes "2.0.<commit count>" -> that tag
+# push starts this, which is one call to `scripts/build-android.sh ci` — the same script a local
+# `build-android.sh publish` runs. Riding the desktop's tag means both platforms release the same
+# version off the same commit, with no second tagging job.
+#
+# Needs GH_TOKEN (contents:write on the release repo) and the KMP_* signing secrets.
+# See docs/RELEASING.md.
+
+on:
+  push:
+    tags:
+      - '2.0.*'
+  # from main this publishes too (at Gradle's version); from any other branch it only builds
+  workflow_dispatch:
+
+concurrency:
+  group: android-release-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the version is the commit count, and gen_release_notes.sh reads the merge commit's PR
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      # the signing keys, LOGGING_* and GH_TOKEN all reach the script through gradle.properties
+      - name: Write secrets to gradle.properties
+        uses: ./.github/actions/write-secrets
+        with:
+          secrets_json: ${{ toJSON(secrets) }}
+
+      # view releases here: https://github.com/jpage4500/AndroidDeviceManager2/releases
+      - name: Build and publish
+        run: |
+          chmod +x scripts/build-android.sh scripts/gen_release_notes.sh
+          ./scripts/build-android.sh ci

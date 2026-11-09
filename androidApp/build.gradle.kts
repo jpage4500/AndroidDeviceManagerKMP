@@ -1,4 +1,5 @@
 import java.io.ByteArrayOutputStream
+import java.util.*
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -28,6 +29,21 @@ val commitCount = providers.of(GitCommitCountValueSource::class) {}.get().toIntO
 // launcher label — keep in sync with Branding.appName (commonMain)
 val brandAppName = "Device Manager"
 
+// release signing: an env variable, then ~/.gradle/gradle.properties (which Gradle reads as project
+// properties). the KMP_ keystore is the one shared across the KMP apps; every release has to be
+// signed with it or an installed copy can't update in place. see docs/RELEASING.md
+fun signingValue(key: String): String =
+    (System.getenv(key) ?: project.findProperty(key) as String?)?.trim().orEmpty()
+
+// the keystore arrives base64-encoded; decode it under build/ so a plain ./gradlew works without
+// the wrapper script. missing, the release build is simply left unsigned
+val releaseKeystore: File? = signingValue("KMP_KEYSTORE").takeIf { it.isNotBlank() }?.let { encoded ->
+    File(layout.buildDirectory.get().asFile, "tmp/adm-release.jks").apply {
+        parentFile.mkdirs()
+        writeBytes(Base64.getDecoder().decode(encoded))
+    }
+}
+
 android {
     namespace = "com.jpage4500.devicemanager.android"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -53,9 +69,23 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = signingValue("KMP_SIGNING_STORE_PASSWORD")
+                keyAlias = signingValue("KMP_SIGNING_KEY_ALIAS")
+                keyPassword = signingValue("KMP_SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseKeystore != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

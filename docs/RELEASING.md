@@ -1,7 +1,8 @@
 # Releasing
 
 The desktop app ships through **jDeploy**: native installers for macOS, Windows and Linux, published
-as a GitHub release. There is no store involved and nothing to sign.
+as a GitHub release. The Android app ships as a signed APK on the same repo's releases. There is no
+store involved for either.
 
 This repo is **private**. Releases and the public README go to a separate **public** repo:
 
@@ -9,8 +10,9 @@ This repo is **private**. Releases and the public README go to a separate **publ
 jpage4500/AndroidDeviceManager2
 ```
 
-Nothing but the README and the release assets lives there — no source. The name is set in four
-places and they must agree: `TARGET_REPO` in `.github/workflows/build-desktop.yml`,
+Nothing but the README and the release assets lives there — no source. The name is set in five
+places and they must agree: `RELEASE_REPO` in `scripts/lib/common.sh` (both build scripts),
+`TARGET_REPO` in `.github/workflows/build-desktop.yml` (the README sync),
 `jdeploy.publishTargets[].url` and `homepage` in `package.json`, and `LATEST_RELEASE_URL` in
 `manager/UpdateManager.kt`.
 
@@ -20,7 +22,10 @@ install ever be updated into it.
 
 ## The normal path: merge to main
 
-`.github/workflows/build-desktop.yml` does the whole thing in three jobs:
+The workflows are thin: each build job is one call to a script in `scripts/`, the same one you run
+by hand. Anything a release does lives in the script, so a local publish and a CI one can't drift.
+
+`.github/workflows/build-desktop.yml` runs three jobs:
 
 1. **sync-readme** — copies `README.md` and every local file it links to into the public repo.
    `README.md` is the user-facing page, so it must never link into `docs/` — that would publish a
@@ -29,23 +34,28 @@ install ever be updated into it.
    Deliberately not a dependency of the others: a docs sync failing shouldn't hold up a release.
 2. **tag-release** — computes `2.0.<git commit count>` and pushes it as a tag. The same scheme
    `composeApp/build.gradle.kts` uses, so the tag and `APP_VERSION` can't disagree.
-3. **build-and-deploy** — triggered *by that tag*. Builds the fat jar, hands it to jDeploy, attaches
-   the jar to the release, and prepends generated release notes to the body.
+3. **build-and-deploy** — triggered *by that tag*: `scripts/build-desktop.sh`.
 
-The tag is what makes jDeploy cut a versioned release. On a branch push it publishes a rolling
-prerelease at version `0.0.0-<branch>` instead.
+`.github/workflows/build-android.yml` is triggered by the **same tag**: `scripts/build-android.sh ci`.
+Both platforms release the same version off the same commit, and there's no second tagging job.
 
-Three things in that workflow exist because they were paid for once already:
+Things that exist because they were paid for once already:
 
-- **`tags: ['2.0.*']`, never `['*']`.** jDeploy creates a tag literally named `jdeploy` to hold
-  `package-info.json` — the file installed apps read to auto-update. A `*` filter re-triggers the
-  workflow on it and publishes a release at version "jdeploy", pointing `dist-tags.latest` at
-  nothing. There's a second guard on the job itself (`github.ref_name != 'jdeploy'`).
+- **`tags: ['2.0.*']`, never `['*']`.** jDeploy keeps its update metadata on a release literally
+  named `jdeploy`. A `*` filter matching a tag of that name would publish a release at version
+  "jdeploy". There's a second guard on the job itself (`github.ref_name != 'jdeploy'`).
 - **The checkout in `tag-release` uses the PAT, not `GITHUB_TOKEN`.** A push made with the default
-  token does not trigger workflows, so `build-and-deploy` would never run.
-- **`gh release edit --draft=false`.** jDeploy uploads tag releases through
-  `xresloader/upload-to-github-release`, which defaults `draft=true` and jDeploy never overrides it.
-  Without this the release is created hidden and its assets 404 for the launcher.
+  token does not trigger workflows, so neither build would ever run.
+- **No `shannah/jdeploy` action, and no `jdeploy publish`.** The CLI can't publish to GitHub at all
+  ("GitHub token is required for publishing to GitHub") — only the GUI and the Action can. So
+  `build-desktop.sh` does what the Action does for a separate target repo: `jdeploy@6
+  github-prepare-release` writes the installers and `package-info.json`, and `gh` creates the
+  release and refreshes the `jdeploy` release's `package-info.json`. Found first in CastToTVKMP.
+  It also sidesteps the Action's habit of leaving tag releases as hidden drafts.
+- **`jdeploy@6`, pinned.** A bare `npx jdeploy` runs a globally installed one if there is one, and
+  4.x ignores `publishTargets` and falls back to `npm publish`.
+- **Desktop `--latest`, Android `--latest=false`.** `UpdateManager` reads `releases/latest` on every
+  platform; it must always land on the desktop release, never `<version>-android`.
 
 ## Publishing by hand
 
@@ -53,20 +63,49 @@ For publishing off a branch, or for finding out why the CI job failed without pu
 
 ```sh
 ./scripts/build-desktop.sh --dry-run   # build + package locally, publish nothing
-./scripts/build-desktop.sh             # build + publish to the release repo
+./scripts/build-desktop.sh             # build + publish the desktop release
+
+./scripts/build-android.sh             # build the signed APK, publish nothing
+./scripts/build-android.sh install     # …and adb install + launch it (ANDROID_SERIAL picks a device)
+./scripts/build-android.sh publish     # build + publish the android release
 ```
 
-It validates `LOGGING_URL`, `LOGGING_API` and `GH_TOKEN` up front, builds
-`composeApp/build/libs/adm-all.jar`, syncs `package.json`'s version to what Gradle reports, then runs
-`jdeploy publish`.
+Both validate their keys up front and run on JDK 21. Off a tag, the version is Gradle's
+`2.0.<commit count>`. `scripts/lib/common.sh` holds what the two share: the key lookup, the
+version, and the release notes — `gen_release_notes.sh`'s notes for the last merge, less the lines
+prefixed for the other platform (`- Android:`/`- phone:`/`- iOS:` off the desktop's, `- Desktop:`
+/`- iOS:` off Android's).
 
 `npm version` rewrites `package.json` — don't commit that bump. The committed version stays `2.0.0`;
-CI and the script both set the real one at publish time.
+the script sets the real one at publish time.
 
-## The one secret
+### What each release holds
+
+| Release | Assets | Notes |
+|---|---|---|
+| `2.0.N` | jDeploy's installers + `adm-all.jar` | marked Latest |
+| `2.0.N-android` | `adm-2.0.N.apk` | never Latest |
+| `android` | `AndroidDeviceManager.apk`, replaced every release | a fixed link for the README: `…/releases/download/android/AndroidDeviceManager.apk` |
+| `jdeploy` | `package-info.json` | what installed desktop apps read to update; a prerelease |
+
+The `-android` and `android` tags exist only in the release repo — `gh` creates them there. One
+pushed to *this* repo would match `tags: ['2.0.*']` and start a desktop build.
+
+## Android signing
+
+Release builds sign with the keystore shared across the KMP apps — `KMP_KEYSTORE` (base64),
+`KMP_SIGNING_STORE_PASSWORD`, `KMP_SIGNING_KEY_ALIAS`, `KMP_SIGNING_KEY_PASSWORD`, read from the
+environment then `~/.gradle/gradle.properties`. `androidApp/build.gradle.kts` decodes the keystore
+under `build/tmp/`. Without them `assembleRelease` still builds, unsigned; the script refuses.
+
+Every release must be signed with the same key, or an installed copy can't update in place — so
+lose that keystore and every user uninstalls and reinstalls.
+
+## Secrets
 
 `GH_TOKEN` — a PAT with `contents: write` on **both** repos: this one, to push the version tag, and
-the release repo, to create the release and push the README.
+the release repo, to create the releases and push the README. Plus the four `KMP_*` signing keys
+above, for Android.
 
 ```sh
 ./scripts/set-github-secrets.sh --dry-run   # names and value lengths only, never values
@@ -174,8 +213,8 @@ desktop-only verification is how iOS breaks.
 release, in order. In short:
 
 - **The release repo and `GH_TOKEN`.** Neither exists yet, so the workflow above has never run.
-- **Android release.** No keystore, no signing config, no Play Store account wired up.
-  DashboardWeatherKMP's `build-android.yml` + `scripts/build-android.sh` are the model — they sign,
-  publish to a Play track and cut a GitHub release, and want five more secrets.
+- **Android in-app updater.** The APK is released, but the app only reports a newer version as a
+  link to the release page — nothing downloads or installs it. See
+  [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md). No Play Store.
 - **iOS release.** No signing team, no App Store Connect key, no TestFlight upload.
   DashboardWeatherKMP's `build-ios.yml` + `scripts/build-ios.sh` are the model.

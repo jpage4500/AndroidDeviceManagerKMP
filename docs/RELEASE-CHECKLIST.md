@@ -114,18 +114,12 @@ There is no jDeploy for Android, so this is code either way. EngageAdmin's
 `PlatformUpdate.android.kt` is most of it, minus the GitHub sign-in (public repo — plain unauthenticated
 API calls through the existing `NetworkManager`):
 
-1. **A release keystore.** Generate it once, back it up somewhere that isn't this laptop — a lost key
-   means every user uninstalls and reinstalls. Add a `signingConfigs.release` to
-   `androidApp/build.gradle.kts` that reads `ADM_SIGNING_*` keys through the same
-   env → `~/.gradle/gradle.properties` lookup `composeApp` uses, and leaves the build unsigned when
-   they're missing.
-2. **A release job** (`build-android.yml`, or a job in `build-desktop.yml` after the tag): build
-   `:androidApp:assembleRelease`, then
-   `gh release create <version>-android adm-<version>.apk --repo AndroidDeviceManager2 --latest=false`.
-   `--latest=false` matters: desktop's `UpdateManager` reads `releases/latest`, and jDeploy's own
-   release must stay the latest one. Create that tag **in the release repo only** — a
-   `<version>-android` tag pushed to *this* repo matches `tags: ['2.0.*']` and starts a desktop build.
-   Pass the keystore to CI as a base64 secret.
+1. ~~**A release keystore**~~ — done: release builds sign with the shared `KMP_*` keystore (see
+   [RELEASING.md](RELEASING.md#android-signing)). It is shared with the other KMP apps, so back it
+   up the way theirs is — a lost key means every user uninstalls and reinstalls.
+2. ~~**A release job**~~ — done: `build-android.yml` runs `scripts/build-android.sh ci` on the
+   version tag and publishes `<version>-android` with `--latest=false`, plus the fixed-link
+   `android` release.
 3. **The updater**: `REQUEST_INSTALL_PACKAGES` and a `FileProvider` (`res/xml/file_paths.xml` for the
    cache `updates/` dir) in `AndroidManifest.xml`; the android `actual` finds the newest
    `*-android` release, downloads the APK, checks GitHub's sha256 `digest` and the APK's package name

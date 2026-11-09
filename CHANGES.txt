@@ -319,3 +319,4 @@
 - Scripts: long lines in a script's source scroll sideways instead of wrapping
 - Scripts: Runs on starts at an All devices pill
 - Scripts: the list shows when each script last ran
+- Android: each release publishes a signed APK on the GitHub releases page
