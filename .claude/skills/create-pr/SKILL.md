@@ -51,7 +51,7 @@ Each line keeps the `CHANGES.txt` style: `- Area: what changed`, under 100 chara
   replaces it, keep only the outcome.
 - Don't invent behavior that isn't in the lines, and don't add rationale or file names.
 
-**Title:** the single most notable line from the body, copied word for word without the leading `- `.
+**Title:** the single most notable line from the body, copied word for word, leading `- ` included.
 
 **Body**, exactly this shape and nothing else:
 
