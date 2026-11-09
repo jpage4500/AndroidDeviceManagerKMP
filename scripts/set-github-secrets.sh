@@ -42,7 +42,7 @@ SECRETS=(
     LOGGING_API
 
     # github releases: a PAT with contents:write on THIS repo (to push the version tag) and on
-    # jpage4500/AndroidDeviceManagerRelease (to create the release and sync the README)
+    # jpage4500/AndroidDeviceManager2 (to create the release and sync the README)
     GH_TOKEN
 )
 

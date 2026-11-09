@@ -19,6 +19,7 @@ import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
+import kotlinx.coroutines.*
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -26,36 +27,78 @@ import org.jetbrains.compose.resources.stringResource
 // at or under this, a device counts towards the Low battery chip
 private const val LOW_BATTERY_PERCENT = 20
 
-/** the filter chips over the device table; each shows how many devices it would leave. */
-enum class DeviceChip(val label: StringResource) {
-    ALL(Res.string.chip_all),
-    USB(Res.string.chip_usb),
-    WIFI(Res.string.chip_wifi),
-    LOW_BATTERY(Res.string.chip_low_battery),
-    ATTENTION(Res.string.chip_attention);
+// at or over this much of its storage used, a device counts towards the Low storage chip
+private const val LOW_STORAGE_PERCENT = 90
 
-    fun matches(device: Device): Boolean = when (this) {
+// a device not heard from in this many refresh cycles counts towards the Not responding chip. One
+// late read is a slow device; three in a row on a 45-device rig is a hub port or a wedged adbd
+private const val STALE_CYCLES = 3
+
+// how often the stale cut-off moves on, so a device turns stale without anything else changing
+private const val STALE_TICK_MS = 5_000L
+
+/**
+ * the filter chips over the device table; each shows how many devices it would leave.
+ *
+ * past All, every chip counts a problem, so the row reads as the desk's health: on a good day it's
+ * All on its own. How a device is connected is a column to sort by, not a filter.
+ */
+enum class DeviceChip(val label: StringResource, val alert: Boolean = false) {
+    ALL(Res.string.chip_all),
+    ATTENTION(Res.string.chip_attention, alert = true),
+    NOT_CHARGING(Res.string.chip_not_charging),
+    LOW_BATTERY(Res.string.chip_low_battery),
+    LOW_STORAGE(Res.string.chip_low_storage),
+    STALE(Res.string.chip_stale);
+
+    /** [staleBeforeMs] is the cut-off for [STALE] — see [rememberStaleBeforeMs]. */
+    fun matches(device: Device, staleBeforeMs: Long): Boolean = when (this) {
         ALL -> true
-        USB -> !device.isWireless
-        WIFI -> device.isWireless
-        LOW_BATTERY -> device.isOnline && (device.batteryLevel ?: 100) <= LOW_BATTERY_PERCENT
         // offline, unauthorized, or still booting — anything that can't be used as it stands
         ATTENTION -> !device.isReady
+        // plugged in over usb but drawing no power: on a hub, a bad port or one sharing too much.
+        // only once the battery has been read — before that, NONE is the default, not an answer
+        NOT_CHARGING -> device.isOnline && !device.isWireless && device.batteryLevel != null &&
+            !device.powerStatus.isCharging
+        LOW_BATTERY -> device.isOnline && (device.batteryLevel ?: 100) <= LOW_BATTERY_PERCENT
+        LOW_STORAGE -> device.isOnline && (device.storageUsedPercent ?: 0) >= LOW_STORAGE_PERCENT
+        // listed as online, but the refresh has stopped getting answers from it
+        STALE -> device.isOnline && (device.lastUpdateMs ?: Long.MAX_VALUE) < staleBeforeMs
     }
+}
+
+/**
+ * the time before which a device's last answer makes it stale, moving on every few seconds.
+ *
+ * read from the details refresh interval, so a desk that refreshes every five minutes doesn't call
+ * every device stale after a minute.
+ */
+@Composable
+fun rememberStaleBeforeMs(): Long {
+    val refreshSecs by SettingsManager.getIntAsState(AppPref.DETAILS_REFRESH_SECS)
+    var now by remember { mutableStateOf(DateUtils.nowMs()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(STALE_TICK_MS)
+            now = DateUtils.nowMs()
+        }
+    }
+    return now - refreshSecs.coerceAtLeast(5) * 1000L * STALE_CYCLES
 }
 
 /**
  * the Devices page's title row: filter chips, search, List / Icons, the details panel's toggle,
  * refresh and Connect.
  *
- * a chip only shows while it has something to count, so an all-USB desk isn't offered an empty
- * Wi-Fi filter — except the one that's on, which stays so it can be turned off again.
+ * a chip only shows while it would narrow the list — none matching is nothing to filter to, and all
+ * of them matching is All again — except the one that's on, which stays so it can be turned off.
  */
 @Composable
 fun DeviceHeader(
     devices: List<Device>,
     chip: DeviceChip,
     onChip: (DeviceChip) -> Unit,
+    staleBeforeMs: Long,
     filter: TextFieldValue,
     onFilterChange: (TextFieldValue) -> Unit,
     filterFocus: FocusRequester,
@@ -80,10 +123,15 @@ fun DeviceHeader(
         )
         if (devices.isNotEmpty()) {
             DeviceChip.entries.forEach { entry ->
-                val count = devices.count(entry::matches)
-                if (entry == DeviceChip.ALL || count > 0 || entry == chip) {
+                val count = devices.count { entry.matches(it, staleBeforeMs) }
+                if (entry == DeviceChip.ALL || entry == chip || count in 1 until devices.size) {
                     FilterChip(
                         label = stringResource(entry.label, count),
+                        dot = when {
+                            entry == DeviceChip.ALL -> null
+                            entry.alert -> Colors.chipAlert
+                            else -> Colors.chipWarn
+                        },
                         on = entry == chip,
                         onClick = { onChip(if (entry == chip) DeviceChip.ALL else entry) },
                     )
@@ -102,9 +150,9 @@ fun DeviceHeader(
 }
 
 @Composable
-private fun FilterChip(label: String, on: Boolean, onClick: () -> Unit) {
+private fun FilterChip(label: String, dot: Color?, on: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(percent = 50)
-    Box(
+    Row(
         Modifier
             .height(Dimens.chipHeight)
             .clip(shape)
@@ -112,8 +160,10 @@ private fun FilterChip(label: String, on: Boolean, onClick: () -> Unit) {
             .border(Dimens.hairline, if (on) Colors.chipOn else Colors.divider, shape)
             .clickable(onClick = onClick)
             .padding(horizontal = Dimens.navGap),
-        contentAlignment = Alignment.Center,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.gap / 2),
     ) {
+        if (dot != null) Box(Modifier.size(Dimens.chipDot).background(dot, CircleShape))
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,

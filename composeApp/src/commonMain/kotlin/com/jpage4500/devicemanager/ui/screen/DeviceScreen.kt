@@ -93,7 +93,10 @@ fun DeviceScreen(
 
     // the search highlights rather than filters — a device with nothing matching stays in its place,
     // so the rows don't jump about as it's typed. The chips are what narrow the list
-    val visible = remember(devices, chip) { devices.filter { chip.matches(it) } }
+    val staleBeforeMs = rememberStaleBeforeMs()
+    // only Not responding moves with the clock; any other chip shouldn't re-filter on every tick
+    val staleKey = if (chip == DeviceChip.STALE) staleBeforeMs else 0L
+    val visible = remember(devices, chip, staleKey) { devices.filter { chip.matches(it, staleBeforeMs) } }
     val sorted = remember(visible, sort) { DeviceTableState.sorted(visible) }
 
     // the first device to arrive is selected, so the toolbar has something to act on straight away.
@@ -153,6 +156,7 @@ fun DeviceScreen(
             devices = devices,
             chip = chip,
             onChip = { chip = it },
+            staleBeforeMs = staleBeforeMs,
             filter = filter,
             onFilterChange = { filter = it },
             filterFocus = filterFocus,

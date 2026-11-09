@@ -44,7 +44,7 @@ abstract class GitCommitCountValueSource : ValueSource<String, ValueSourceParame
 }
 
 val commitCount = providers.of(GitCommitCountValueSource::class) {}.get()
-val appVersion = "1.0.$commitCount"
+val appVersion = "2.0.$commitCount"
 
 // true only for a build that actually ships: the jDeploy fat jar, an android release variant, or an
 // Xcode Release framework. everything else is a local run, which is what PlatformUtils.isDebugBuild

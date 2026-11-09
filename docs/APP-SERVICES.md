@@ -115,7 +115,7 @@ repo** — this one is private, and an API call against it would need a token no
 [RELEASING.md](RELEASING.md). `latest` skips drafts and prereleases, so the rolling `0.0.0-<branch>`
 build a branch push publishes never offers itself as an update.
 
-It only ever *reports*, and `isNewer` compares the `1.0.<commit count>` scheme segment by segment as
+It only ever *reports*, and `isNewer` compares the `2.0.<commit count>` scheme segment by segment as
 numbers — a string compare puts 1.0.100 before 1.0.99, and the third segment passes 99 quickly.
 Nothing downloads or installs: jDeploy's launcher updates the desktop app on its next start and there
 is no store channel for the phone builds, so the offer is a link to the release page.

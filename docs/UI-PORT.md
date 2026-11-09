@@ -67,7 +67,7 @@ bar in `DeviceHeader.kt`):
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│ Devices (All 12)(USB 5)(Wi-Fi 7)(Needs attention 2)   [Search] [⟳] [+ Connect] │  header
+│ Devices (All 12)(•Needs attention 2)(•Low battery 1)   [Search] [⟳] [+ Connect] │  header
 │ ┌────────────────────────────────────────────────────────────────────┐ │
 │ │ 2 selected  Mirror Screenshot Logs Files Install Type text …  Clear│ │  selection bar
 │ └────────────────────────────────────────────────────────────────────┘ │
@@ -80,10 +80,16 @@ bar in `DeviceHeader.kt`):
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Header** — the title, filter chips that each count what they'd leave (a chip only shows while it
-has something to count, except the one that's on), search (⌘F), refresh and Connect. The Swing
-toolbar is gone: Settings is in the sidebar, and everything that acts on a device is in the selection
-bar, the row's menu, or both.
+**Header** — the title, filter chips that each count what they'd leave, search (⌘F), refresh and
+Connect. The Swing toolbar is gone: Settings is in the sidebar, and everything that acts on a device
+is in the selection bar, the row's menu, or both.
+
+**Chips** count problems, so the row reads as the desk's health — on a good day it's All on its own.
+Past All: Needs attention (offline, unauthorized, booting; red dot), Not charging (USB, battery read,
+drawing no power — a bad hub port), Low battery (≤ 20%), Low storage (≥ 90% used) and Not responding
+(online but unheard from for three details-refresh cycles), each with an amber dot. A chip shows only
+while it would narrow the list — not at 0, and not when it matches every device — except the one
+that's on. How a device is connected is a column to sort by, not a chip.
 
 **Search** highlights, it doesn't filter — the same rule as the log. Every device stays where it is
 and the matching text in its cells, or on its tile in the icon view, is marked yellow; only the

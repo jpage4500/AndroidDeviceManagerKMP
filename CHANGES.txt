@@ -276,3 +276,12 @@
 - Settings: removed the Confirm destructive commands switch
 - Settings: the log buffer shows its default size instead of Not set
 - Settings: removed the Hold while scrolled up and Scroll the log sideways rows
+
+11/06
+- Version numbers start at 2.0, above the Swing app's 1.0 releases
+- Updates are looked for in the new AndroidDeviceManager2 release repo
+
+11/09
+- Devices: removed the USB and Wi-Fi filter chips
+- Devices: filter chips for devices not charging, low on storage or not responding
+- Devices: a filter chip only shows when it would narrow the list

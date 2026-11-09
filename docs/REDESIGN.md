@@ -105,8 +105,9 @@ picked. Scripts, Commands and Input use the same list for the devices they run o
 
 ### Devices
 
-- Header: title, filter chips with counts (All, USB, Wi-Fi, Low battery, Needs attention — a chip
-  only appears when it has a count), search (⌘F, or just start typing; Escape clears it), refresh,
+- Header: title, filter chips with counts (All, then the problems: Needs attention, Not charging,
+  Low battery, Low storage, Not responding — each with a red or amber dot, and shown only while it
+  would narrow the list), search (⌘F, or just start typing; Escape clears it), refresh,
   Connect. Search highlights the matching text in the list and on the icons rather than filtering.
 - Selection bar: a hint with nothing selected; with a selection, its count and Mirror, Screenshot,
   Record, Logs, Install, Type text, Terminal, Run script, Clear. Logs and Run script take the

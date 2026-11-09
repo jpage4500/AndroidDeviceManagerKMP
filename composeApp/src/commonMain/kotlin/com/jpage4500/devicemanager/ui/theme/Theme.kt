@@ -206,6 +206,7 @@ object Dimens {
     val pageHeaderHeight = 64.dp
     val controlHeight = 34.dp
     val chipHeight = 28.dp
+    val chipDot = 6.dp
     val searchWidth = 200.dp
     val selectionBarHeight = 48.dp
     val cardCorner = 10.dp
@@ -692,6 +693,11 @@ object Colors {
     // on #3DDC84 is 1.9:1
     val primaryButton = Color(0xFF3DDC84)
     val onPrimaryButton = Color(0xFF0B0D11)
+
+    // the dot on a Devices filter chip that counts a problem: red for a device that can't be used,
+    // amber for one that works but wants looking at
+    val chipAlert = Color(0xFFE5484D)
+    val chipWarn = Color(0xFFF5A524)
 
     // --- chrome, from the palette in force ---
     val accent: Color @Composable get() = LocalPalette.current.accent

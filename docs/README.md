@@ -10,6 +10,7 @@
 | [SHARE-SERVER.md](SHARE-SERVER.md) | Share Devices — the desktop serving its devices to the phone and to other desks over the Swing app's HTTP API, and why that server is hand-built on ktor's parts rather than ktor-server |
 | [MOBILE-UI.md](MOBILE-UI.md) | The **phone** app — the device list, the detail sheet, the three ways to connect a device, and what happens to a connection when the app is backgrounded |
 | [RELEASING.md](RELEASING.md) | How the desktop app ships — jDeploy, the public release repo, the CI workflows and the one secret they need |
+| [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) | What's still missing before the first public release — the decisions, the release repo, auto-update on desktop and Android — to delete once it's out |
 | [WINDOWS.md](WINDOWS.md) | More than one window on the desktop, and what "native look and feel" can and can't mean on this stack |
 
 These are working documents, not a manual. When something here stops describing the code, fix it or

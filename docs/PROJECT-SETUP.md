@@ -73,7 +73,7 @@ deprecated in 1.11 and fail the build, so every artifact is named explicitly in
 
 There is no test suite.
 
-Version is `1.0.<git commit count>` through gmazzo BuildConfig, the same scheme the Swing app uses.
+Version is `2.0.<git commit count>` through gmazzo BuildConfig — the Swing app's scheme with the major bumped, so this app always sorts above Swing's 1.0.x releases.
 
 ### Running the desktop app from IntelliJ
 
@@ -121,7 +121,7 @@ reads it.
 ## Releasing
 
 The desktop app ships through jDeploy to a separate **public** repo,
-`jpage4500/AndroidDeviceManagerRelease`. `.github/workflows/build-desktop.yml` does it on a merge to
+`jpage4500/AndroidDeviceManager2`. `.github/workflows/build-desktop.yml` does it on a merge to
 main; `scripts/build-desktop.sh` does the same thing by hand. `.github/workflows/build.yml` compiles
 all three targets on every push and PR and publishes nothing. See [RELEASING.md](RELEASING.md).
 

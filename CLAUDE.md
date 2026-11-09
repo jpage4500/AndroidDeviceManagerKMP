@@ -49,7 +49,7 @@ machine. From a terminal:
 A change to shared code should compile on **all three** before it's done — `commonMain` is most of
 the app, and desktop-only verification is how iOS breaks.
 
-Version is `1.0.<git commit count>` (gmazzo BuildConfig), the same scheme the Swing app uses.
+Version is `2.0.<git commit count>` (gmazzo BuildConfig) — the Swing app's scheme with the major bumped past its 1.0.x.
 
 ## Architecture
 

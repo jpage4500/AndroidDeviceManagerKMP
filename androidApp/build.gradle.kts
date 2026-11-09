@@ -37,7 +37,7 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = commitCount
-        versionName = "1.0.$commitCount"
+        versionName = "2.0.$commitCount"
         // the composeApp library ships no strings.xml, so this is the only source of the label
         resValue("string", "app_name", brandAppName)
 

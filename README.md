@@ -28,7 +28,7 @@ open iosApp/iosApp.xcodeproj             # ios — set your signing team on firs
 ## Releasing
 
 The desktop app ships as a native installer through [jDeploy](https://www.jdeploy.com), published to
-[AndroidDeviceManagerRelease](https://github.com/jpage4500/AndroidDeviceManagerRelease) on every
+[AndroidDeviceManager2](https://github.com/jpage4500/AndroidDeviceManager2) on every
 merge to main. [docs/RELEASING.md](docs/RELEASING.md) has the details.
 
 ## How it reaches devices

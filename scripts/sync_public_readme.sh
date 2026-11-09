@@ -3,7 +3,7 @@
 # Sync README to the public release repo
 #
 # The source lives in a private repo (jpage4500/AndroidDeviceManagerKMP); releases are
-# published from a separate PUBLIC one (jpage4500/AndroidDeviceManagerRelease — see
+# published from a separate PUBLIC one (jpage4500/AndroidDeviceManager2 — see
 # .github/workflows/build-desktop.yml). This copies README.md and every LOCAL file the
 # README references into that repo, then commits and pushes — but only if something
 # actually changed.

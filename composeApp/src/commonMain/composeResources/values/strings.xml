@@ -31,8 +31,9 @@
     <string name="chip_all">All %1$d</string>
     <string name="chip_attention">Needs attention %1$d</string>
     <string name="chip_low_battery">Low battery %1$d</string>
-    <string name="chip_usb">USB %1$d</string>
-    <string name="chip_wifi">Wi‑Fi %1$d</string>
+    <string name="chip_low_storage">Low storage %1$d</string>
+    <string name="chip_not_charging">Not charging %1$d</string>
+    <string name="chip_stale">Not responding %1$d</string>
     <string name="devices_search">Search</string>
     <string name="selection_clear">Clear</string>
     <string name="selection_count">%1$d selected</string>

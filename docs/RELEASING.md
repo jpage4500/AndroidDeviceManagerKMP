@@ -6,12 +6,17 @@ as a GitHub release. There is no store involved and nothing to sign.
 This repo is **private**. Releases and the public README go to a separate **public** repo:
 
 ```
-jpage4500/AndroidDeviceManagerRelease
+jpage4500/AndroidDeviceManager2
 ```
 
-Nothing but the README and the release assets lives there — no source. The name is set in three
+Nothing but the README and the release assets lives there — no source. The name is set in four
 places and they must agree: `TARGET_REPO` in `.github/workflows/build-desktop.yml`,
-`jdeploy.publishTargets[].url` in `package.json`, and `homepage` in `package.json`.
+`jdeploy.publishTargets[].url` and `homepage` in `package.json`, and `LATEST_RELEASE_URL` in
+`manager/UpdateManager.kt`.
+
+The version is `2.0.<git commit count>`, not the Swing app's `1.0.<count>`: the major is bumped so
+this app always sorts above Swing's releases (1.0.585 and counting), which is what lets a Swing
+install ever be updated into it.
 
 ## The normal path: merge to main
 
@@ -19,7 +24,7 @@ places and they must agree: `TARGET_REPO` in `.github/workflows/build-desktop.ym
 
 1. **sync-readme** — copies `README.md` and every local file it links to into the public repo.
    Deliberately not a dependency of the others: a docs sync failing shouldn't hold up a release.
-2. **tag-release** — computes `1.0.<git commit count>` and pushes it as a tag. The same scheme
+2. **tag-release** — computes `2.0.<git commit count>` and pushes it as a tag. The same scheme
    `composeApp/build.gradle.kts` uses, so the tag and `APP_VERSION` can't disagree.
 3. **build-and-deploy** — triggered *by that tag*. Builds the fat jar, hands it to jDeploy, attaches
    the jar to the release, and prepends generated release notes to the body.
@@ -29,7 +34,7 @@ prerelease at version `0.0.0-<branch>` instead.
 
 Three things in that workflow exist because they were paid for once already:
 
-- **`tags: ['1.0.*']`, never `['*']`.** jDeploy creates a tag literally named `jdeploy` to hold
+- **`tags: ['2.0.*']`, never `['*']`.** jDeploy creates a tag literally named `jdeploy` to hold
   `package-info.json` — the file installed apps read to auto-update. A `*` filter re-triggers the
   workflow on it and publishes a release at version "jdeploy", pointing `dist-tags.latest` at
   nothing. There's a second guard on the job itself (`github.ref_name != 'jdeploy'`).
@@ -52,7 +57,7 @@ It validates `LOGGING_URL`, `LOGGING_API` and `GH_TOKEN` up front, builds
 `composeApp/build/libs/adm-all.jar`, syncs `package.json`'s version to what Gradle reports, then runs
 `jdeploy publish`.
 
-`npm version` rewrites `package.json` — don't commit that bump. The committed version stays `1.0.0`;
+`npm version` rewrites `package.json` — don't commit that bump. The committed version stays `2.0.0`;
 CI and the script both set the real one at publish time.
 
 ## The one secret
@@ -162,10 +167,12 @@ desktop-only verification is how iOS breaks.
 
 ## Not set up
 
+[RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) has the full list of what's left before the first
+release, in order. In short:
+
+- **The release repo and `GH_TOKEN`.** Neither exists yet, so the workflow above has never run.
 - **Android release.** No keystore, no signing config, no Play Store account wired up.
   DashboardWeatherKMP's `build-android.yml` + `scripts/build-android.sh` are the model — they sign,
   publish to a Play track and cut a GitHub release, and want five more secrets.
 - **iOS release.** No signing team, no App Store Connect key, no TestFlight upload.
   DashboardWeatherKMP's `build-ios.yml` + `scripts/build-ios.sh` are the model.
-- **Icons** beyond the jDeploy `icon.png` — nothing for Android, iOS or the Compose desktop
-  distribution.
