@@ -339,6 +339,8 @@
     <string name="files_empty">This folder is empty</string>
     <string name="files_empty_msg">Drop files here to upload them.</string>
     <string name="files_error">Can't read that folder</string>
+    <string name="files_missing">Folder not found</string>
+    <string name="files_missing_msg">%1$s doesn't exist on %2$s.</string>
     <string name="files_go_to_title">Go to folder</string>
     <string name="files_new_folder">New Folder</string>
     <string name="files_open">Open</string>
@@ -352,6 +354,10 @@
     <string name="files_install">Install</string>
     <string name="files_hint">Select files to download, copy or delete them — or drag files here to upload them into this folder.</string>
     <string name="files_places">Places</string>
+    <string name="files_bookmarks">Bookmarks</string>
+    <string name="files_bookmark">Bookmark</string>
+    <string name="files_bookmark_folder">Bookmark this folder</string>
+    <string name="files_bookmark_remove">Remove Bookmark</string>
     <string name="files_place_internal">Internal storage</string>
     <string name="files_place_download">Download</string>
     <string name="files_place_camera">Camera</string>

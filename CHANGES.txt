@@ -299,3 +299,9 @@
 - Files: the table columns always fit the window instead of scrolling sideways
 - Files: ⌘F opens the Files page
 - Devices: fixed a phone number or custom field ending in __ADM_NEXT__
+- Files: opens on the Download folder when the device has one
+- Files: bookmark a folder to keep it under Places
+- Files: double-click a file to download it and open it
+- Files: download a whole folder
+- Files: a long path fills the path bar instead of stopping halfway
+- Files: a folder that doesn't exist says so instead of showing as empty

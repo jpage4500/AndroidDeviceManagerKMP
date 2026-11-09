@@ -35,6 +35,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     LOGS_SAVE_DIR("logs_save_dir"),                         // folder the last saved log went to
     FILES_COLUMN_WIDTHS("files_column_widths"),             // JSON map of FileColumn name -> px
     FILES_RECENT_PATHS("files_recent_paths"),               // newline-separated paths from "Go To…"
+    FILES_BOOKMARKS("files_bookmarks"),                     // newline-separated bookmarked folders, any device
     HIDDEN_COLUMNS("hidden_columns"),                       // comma-separated column ids the table hides — a DeviceColumn name or a CustomColumn id
     COLUMN_ORDER("column_order"),                           // comma-separated column ids, left to right
     COLUMN_WIDTHS("column_widths"),                         // JSON map of column id -> px width the user dragged to

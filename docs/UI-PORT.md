@@ -879,18 +879,31 @@ reason that component is generic. Directories always sort before files whichever
 no file manager does it any other way. Under the tab, a card joined to it (`Modifier.joinedCard`:
 outlined down the sides and round the bottom, never across the top, which is the tab strip's rule)
 holds two rows. First: Up, the path as clickable crumbs (the empty end of the bar types a path),
-copy path, filter this folder, a Hidden files switch (`AppPref.FILES_SHOW_HIDDEN`), refresh, New
-Folder, Upload…. Second, the selection bar: "N selected · size", then Download, Install (every APK
+copy path, filter this folder, a Hidden files switch (`AppPref.FILES_SHOW_HIDDEN`), a bookmark toggle
+for the open folder, refresh, New Folder, Upload…. Second, the selection bar: "N selected · size", then
+Download (a folder comes down whole, as a folder of the same name), Install (every APK
 in the selection, one after another), Rename (one item), Copy Path, Delete in red; with nothing
 selected, a hint that files dragged in upload here. Under the card, two cards side by side:
 **Places** — Internal storage, Download, Camera, Screenshots, Pictures, App data, Temp (adb), Device
-root — with the deepest one the open folder is inside marked and the device's storage bar under
-them; and the table — its columns always span the card, never scrolling sideways — with Modified as `Oct 27, 10:42 AM` (the year instead of the time for an
+root — with the deepest one the open folder is inside marked, then **Bookmarks** (`FileBookmarks`,
+`AppPref.FILES_BOOKMARKS`: paths, shared by every device; right-click one to remove it), and the
+device's storage bar under them; and the table — its columns always span the card, never scrolling sideways — with Modified as `Oct 27, 10:42 AM` (the year instead of the time for an
 older file), folders semibold, dot-files grey. A plain status line under both counts the items and
 the selection, then names the device. Dragging files over the table covers it with a dashed
 overlay naming the folder and the device. Dropped files go into the folder on screen — an APK too; Install is a button once it's there, and copies it to `/data/local/tmp` first,
 since `pm` can't read shared storage on recent Android. Rename is `mv` and New Folder `mkdir -p`,
 both through `DeviceManager.runCommand`.
+
+A Files tab opens on `/sdcard/Download` when the device has one (`[ -d … ]`, since a sync LIST of a
+missing folder answers with nothing rather than an error) and `/sdcard` when not; after that it
+keeps the folder it was left in. A folder that isn't there says **Folder not found** rather than empty: an empty
+listing is checked with the same `[ -d … ]`, so only an empty folder pays for the extra round trip.
+The path still moves there, so Up and the crumbs work, and when it's a bookmark (one made on another
+device, usually) the message offers Remove Bookmark. **Double-click** opens a folder, and pulls a file into the download
+folder and opens it with the OS's own viewer (`openLocalFile`) — a new copy each time, as Download
+makes. A folder is never downloaded by a double-click; Download (bar or right-click) does it:
+`find <dir> -type f` lists the tree in one round trip, then each file is pulled into
+`<downloads>/<name>` (or `<name> (2)` if that exists). An empty subfolder doesn't come across.
 
 **Scripts** (`ScriptsScreen`, desktop only) — the `.sh` (`.bat` on Windows) files in
 `~/.device_manager`, the folder the Swing app reads, named from the file with underscores as spaces.
