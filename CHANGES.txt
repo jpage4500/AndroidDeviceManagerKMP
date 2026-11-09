@@ -289,3 +289,5 @@
 - Files: fixed every file showing the wrong modified date
 - Devices: the filter chips scroll sideways instead of pushing Search and Connect off the edge
 - Devices: filter chips for each OS version or custom field value two or more devices share
+- Desktop: starts the adb server when it isn't already running
+- Mirror opens scrcpy by default instead of the built-in mirror

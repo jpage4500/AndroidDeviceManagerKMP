@@ -44,7 +44,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     THEME("theme", "LIGHT"),                                // ThemeMode name: light, dark, or follow the OS
     DOWNLOAD_FOLDER("download_folder"),                     // desktop: where pulled files go; null = ~/Downloads
     SCREENSHOT_FOLDER("screenshot_folder"),                 // desktop: where screenshots go; null = DOWNLOAD_FOLDER
-    MIRROR_WITH("mirror_with", "BUILT_IN"),                 // MirrorWith name: what the Mirror action opens
+    MIRROR_WITH("mirror_with", "SCRCPY"),                   // MirrorWith name: what the Mirror action opens
     SCRCPY_PATH("scrcpy_path"),                             // null = the scrcpy found on PATH
     SCRCPY_VIDEO_CODEC("scrcpy_video_codec", "h264"),       // --video-codec=
     SCRCPY_EXTRA_ARGS("scrcpy_extra_args"),                 // whitespace-separated flags after the ones below

@@ -117,7 +117,7 @@ writing into app storage.
 
 | Row | Pref | Default | Swing |
 |---|---|---|---|
-| Mirror opens | `MIRROR_WITH` | Built-in mirror | separate buttons |
+| Mirror opens | `MIRROR_WITH` | scrcpy | separate buttons |
 | scrcpy path | `SCRCPY_PATH` | unset → the scrcpy found on `PATH` | `PREF_SCRCPY_PATH`, found on PATH |
 | Version | — | `scrcpy --version`, or Not found | — |
 | OPTIONS › Show touches | `SCRCPY_SHOW_TOUCHES` | true | `--show-touches`, on |
@@ -176,7 +176,7 @@ Each waits on the feature it configures:
 - **Customize Toolbar**, `PREF_HIDDEN_TOOLBAR_ITEMS` — there is no toolbar; REDESIGN gave every
   action another home.
 - **Show background image**, `PREF_SHOW_BACKGROUND` — the background image went with the redesign.
-- **`PREF_ADB_PATH`** — Swing used it to start a server that wasn't running. This app never runs
-  `adb start-server` (see `AdbStream`).
+- **`PREF_ADB_PATH`** — Swing used it to start a server that wasn't running. This app does the same
+  with the `adb` found on the extended `PATH` (`AdbServerHost`, `HostPath`), so there is nothing to set.
 - **Log font name / style, `PREF_FONT_SIZE_OFFSET`** — one bundled mono font and one size pref.
 - **`PREF_DEVICE_AUTO_RESIZE`, `PREF_LOGS_AUTO_RESIZE`** — `DataTable` keeps the widths you drag.
