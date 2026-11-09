@@ -7,7 +7,7 @@ const val PATH_LOGS = "logs"
 
 // stamped in front of every logger tag, so the app's lines stand out in a shared console (logcat,
 // Xcode). anything displaying a log strips it back out again — keep the two in sync
-const val LOG_TAG_PREFIX = "ADM_"
+const val LOG_TAG_PREFIX = "DM+"
 const val FILE_LOG = "device-manager.log"
 const val FILE_BACKUP = "device-manager.log.old"
 private const val MAX_LOG_SIZE = 2 * 1024 * 1024 // 2 MB

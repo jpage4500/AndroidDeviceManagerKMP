@@ -16,6 +16,8 @@ enum class AdbError {
 
     /** the path is there, it just isn't a folder. */
     NOT_A_DIRECTORY,
+    /** the server took the command and said it didn't work — a wireless connect that was refused. */
+    CONNECT_FAILED,
     TIMEOUT,
     IO,
 }

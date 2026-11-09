@@ -32,7 +32,12 @@ object Utils {
         else -> "${duration.inWholeSeconds} secs"
     }
 
-    /** the same for a measured elapsed time, where the milliseconds matter: "500ms", "1m 30s". */
+    /**
+     * the same for a measured elapsed time, where the milliseconds matter: "500ms", "1m 30s".
+     *
+     * days are a tier of their own because a device's uptime reaches them and "148h 12m" is a number
+     * nobody reads as six days — the Swing app's `formatTime` makes the same cut.
+     */
     fun formatDuration(durationMs: Long): String {
         if (durationMs < 1000) return "${durationMs}ms"
 
@@ -50,7 +55,13 @@ object Utils {
 
         val hours = minutes / 60
         val remainingMinutes = minutes % 60
-        return if (remainingMinutes > 0) "${hours}h ${remainingMinutes}m" else "${hours}h"
+        if (hours < 24) {
+            return if (remainingMinutes > 0) "${hours}h ${remainingMinutes}m" else "${hours}h"
+        }
+
+        val days = hours / 24
+        val remainingHours = hours % 24
+        return if (remainingHours > 0) "${days}d ${remainingHours}h" else "${days}d"
     }
 
     /** the first URL in some text — a crash report, a shell command's output. */

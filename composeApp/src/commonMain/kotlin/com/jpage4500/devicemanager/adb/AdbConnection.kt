@@ -4,6 +4,26 @@ import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
 
 /**
+ * where an adb server is listening.
+ *
+ * carried as a value into every call rather than held as a global, because a phone can be reading
+ * two desks at once and each of them runs its own server — see
+ * [com.jpage4500.devicemanager.manager.DeviceManager]. 5037 has no authentication at all, so
+ * pointing this at another machine is a trusted-LAN move only; see docs/ADB-TRANSPORTS.md.
+ */
+data class AdbServer(val host: String = "127.0.0.1", val port: Int = 5037) {
+    /** no adb server can run inside an Android or iOS app, so loopback means different things. */
+    val isLoopback: Boolean get() = host == "127.0.0.1" || host == "localhost"
+
+    override fun toString(): String = "$host:$port"
+
+    companion object {
+        /** the desktop's own server, which is the only one the Swing app ever talks to. */
+        val LOCAL = AdbServer()
+    }
+}
+
+/**
  * one conversation with the adb **server** (port 5037), not with a device.
  *
  * adb speaks **two different framings** down the same socket and confusing them is the easiest way
@@ -73,24 +93,16 @@ class AdbConnection private constructor(private val stream: AdbStream) {
     companion object {
         private val log = LoggerConfig.createLogger("AdbConnection")
 
-        /**
-         * where the adb server is.
-         *
-         * a var rather than a constant because this is the one knob that lets a phone drive a
-         * desktop's whole USB fleet: point it at that machine and every call below works unchanged.
-         * 5037 has no authentication at all, so that is a trusted-LAN move only — see
-         * docs/ADB-TRANSPORTS.md.
-         */
-        var host: String = "127.0.0.1"
-        var port: Int = 5037
-
         /** connect to the server, or null when nothing is listening. */
-        suspend fun openOrNull(connectMs: Long = AdbStream.CONNECT_MS): AdbConnection? =
-            AdbStream.openOrNull(host, port, connectMs)?.let { AdbConnection(it) }
+        suspend fun openOrNull(
+            server: AdbServer,
+            connectMs: Long = AdbStream.CONNECT_MS,
+        ): AdbConnection? =
+            AdbStream.openOrNull(server.host, server.port, connectMs)?.let { AdbConnection(it) }
 
         /** connect and hand the socket to one device. */
-        suspend fun toDevice(serial: String): AdbOutcome<AdbConnection> {
-            val connection = openOrNull()
+        suspend fun toDevice(server: AdbServer, serial: String): AdbOutcome<AdbConnection> {
+            val connection = openOrNull(server)
                 ?: return AdbOutcome.Err(AdbError.NO_SERVER, "adb isn't running")
             return when (val outcome = connection.request("host:transport:$serial")) {
                 is AdbOutcome.Err -> {
@@ -102,8 +114,8 @@ class AdbConnection private constructor(private val stream: AdbStream) {
         }
 
         /** what the device can do, so the v2 sync commands are only used where they exist. */
-        suspend fun featuresOf(serial: String): Set<String> {
-            val connection = openOrNull() ?: return emptySet()
+        suspend fun featuresOf(server: AdbServer, serial: String): Set<String> {
+            val connection = openOrNull(server) ?: return emptySet()
             return connection.use {
                 when (it.request("host-serial:$serial:features")) {
                     is AdbOutcome.Err -> emptySet()
@@ -120,12 +132,18 @@ class AdbConnection private constructor(private val stream: AdbStream) {
  *
  * evicted whenever the tracker stops reporting a serial: a TCP serial like `192.168.1.5:5555` can be
  * reused by a different phone, and answering for the old one would pick the wrong commands.
+ *
+ * keyed on the **server** as well as the serial, because two desks can each have an
+ * `emulator-5554` and they are not the same device — the same reason a device's identity above this
+ * layer is its connection plus its serial.
  */
 object AdbFeatures {
     private val cache = mutableMapOf<String, Set<String>>()
 
-    suspend fun of(serial: String): Set<String> =
-        cache[serial] ?: AdbConnection.featuresOf(serial).also { cache[serial] = it }
+    suspend fun of(server: AdbServer, serial: String): Set<String> {
+        val key = keyOf(server, serial)
+        return cache[key] ?: AdbConnection.featuresOf(server, serial).also { cache[key] = it }
+    }
 
     /**
      * true when the device has `stat_v2`/`ls_v2`.
@@ -134,11 +152,17 @@ object AdbFeatures {
      * wants — is itself a symlink, so v1 reports it as a 21-byte file that can't be opened. v1's size
      * field is also a signed 32-bit int, which goes negative past 2GB.
      */
-    suspend fun syncV2(serial: String): Boolean = of(serial).let { "stat_v2" in it && "ls_v2" in it }
+    suspend fun syncV2(server: AdbServer, serial: String): Boolean =
+        of(server, serial).let { "stat_v2" in it && "ls_v2" in it }
 
-    suspend fun hasCmd(serial: String): Boolean = "cmd" in of(serial)
+    suspend fun hasCmd(server: AdbServer, serial: String): Boolean = "cmd" in of(server, serial)
 
-    fun retain(serials: Set<String>) {
-        cache.keys.retainAll(serials)
+    /** drop what [server] no longer reports, leaving every other server's answers alone. */
+    fun retain(server: AdbServer, serials: Set<String>) {
+        val prefix = "$server/"
+        val keep = serials.mapTo(mutableSetOf()) { keyOf(server, it) }
+        cache.keys.retainAll { !it.startsWith(prefix) || it in keep }
     }
+
+    private fun keyOf(server: AdbServer, serial: String) = "$server/$serial"
 }

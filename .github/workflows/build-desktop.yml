@@ -3,7 +3,7 @@ name: Desktop (jDeploy)
 # Builds the desktop fat jar and publishes native installers to the PUBLIC release repo via
 # jDeploy (https://www.jdeploy.com).
 #
-# Flow: merge to main -> job 2 tags "1.0.<commit count>" -> the tag push runs job 3, which builds
+# Flow: merge to main -> job 2 tags "2.0.<commit count>" -> the tag push runs job 3, which builds
 # and publishes. The tag is what makes jDeploy cut a versioned release; on a branch push it instead
 # publishes a rolling prerelease at version "0.0.0-<branch>".
 #
@@ -18,7 +18,7 @@ on:
     # package-info.json, and a 'tags: [*]' filter would re-trigger this workflow on it — publishing
     # a bogus release at version "jdeploy" and pointing dist-tags.latest at it
     tags:
-      - '1.0.*'
+      - '2.0.*'
   workflow_dispatch:
 
 concurrency:
@@ -29,7 +29,7 @@ concurrency:
 # declared at workflow scope because two jobs need it — a step writing it into $GITHUB_ENV is
 # job-scoped, so sync-readme couldn't see it
 env:
-  TARGET_REPO: jpage4500/AndroidDeviceManagerRelease
+  TARGET_REPO: jpage4500/AndroidDeviceManager2
 
 # needed to create tags and releases
 permissions:
@@ -70,10 +70,10 @@ jobs:
 
       - name: Get version and push tag
         run: |
-          # the same "1.0.<commit count>" scheme composeApp/build.gradle.kts uses — same commit,
+          # the same "2.0.<commit count>" scheme composeApp/build.gradle.kts uses — same commit,
           # same count, so the tag and APP_VERSION always agree
           COMMIT_COUNT=$(git rev-list --count HEAD)
-          VERSION="1.0.${COMMIT_COUNT}"
+          VERSION="2.0.${COMMIT_COUNT}"
 
           echo "Calculated version: $VERSION"
 

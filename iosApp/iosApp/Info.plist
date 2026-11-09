@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Compose kills the app at startup without this: it caps the frame rate at 60 on a 120Hz
+	     iPhone, so the mirrored screen would scroll at half the rate the display can draw -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
@@ -28,6 +32,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
+	<!-- scanning the QR code Device Manager shows on a computer is how a server is added without
+	     typing a sixteen character token on a phone keyboard -->
+	<key>NSCameraUsageDescription</key>
+	<string>Device Manager uses the camera to scan the connection QR code shown by Device Manager on your computer.</string>
 
 	<!-- everything this app does is on the LAN: an adb server, a Device Manager instance, or an
 	     adbd on another phone. iOS refuses all three without this, and the refusal is silent -->

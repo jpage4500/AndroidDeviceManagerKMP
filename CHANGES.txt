@@ -3,3 +3,288 @@
 - settings now persist between runs
 - logs are written to a file, and a crash is reported on next launch
 - publish desktop installers for macOS, Windows and Linux
+- new devices screen on desktop, with a keyboard-driven multi-select table
+- device battery, charging, free space, IMEI and phone number
+- drag to select rows, and drag column headers to reorder them
+- filter, rename, restart, disconnect and copy on the devices screen
+- connect to wireless devices, and a log viewer with saved filters
+- browse device files, and a settings screen
+- menu bar icon listing every device
+- install an APK, or drag one onto the device list
+- log viewer rebuilt to match the Swing app, with auto-scroll
+- log viewer: pinned message panel, process names, and font size shortcuts
+- log search highlights matches, and a message viewer window
+- type anywhere in the log viewer to search, esc to clear
+- click the app version to open its log file
+- add filter built from field, operator and value pickers
+- dialogs are real windows with title bars
+
+09/07
+- dragging a column header now moves the whole column
+- table cells show their full value on hover when it doesn't fit
+- larger table text, matching the Swing app
+- right-click menus offer only what the clicked column can do
+- log viewer holds your place in the list as old lines are dropped
+- cmd-up / cmd-down jump to the oldest and newest log lines
+- log rows stripe evenly again with a filter on
+- no background image behind the log table
+- every kind of window remembers its own size
+- log auto-scroll follows the tail again, and lets go when you scroll up
+- cmd-up/down jump to the ends of a table, option-up/down move a page
+- log viewer keeps its oldest lines while you scroll back through them
+
+09/08
+- connect, disconnect, restart, file download and install now work
+- phone: add a device from the list, or a Device Manager server
+- phone: tap a device for its details, a screenshot and a mirror
+- phone: the keyboard no longer covers the connect fields
+- phone: an open connect section is drawn as part of the row above it
+- enter 0.0.0.0 in either connect field to load test devices
+- phone: connecting to a computer leads with paste, and hides manual entry
+- phone: pair a new device by showing it a QR code
+- phone: reach settings from the device list
+- phone: scan the QR on a computer running Device Manager to connect to it
+- phone: device rows show the model, phone number and battery percent
+- phone: the title bar no longer sits under the status bar
+- battery rows line up, and show a bolt whenever a device is charging
+- reading a Device Manager server no longer runs adb commands on its devices
+- settings are a list of icon rows, each opening the control that fits it
+- pick a slider, a stepper or a typed value for any numeric setting
+- choose which route devices are read over, instead of it being inferred
+- phone: devices are grouped under the computer they're attached to
+- phone: disconnect or forget a computer from the info button on its row
+- settings is a menu now: pick a section, then the setting inside it
+- new About section: support, updates, debug mode and the app log
+- send a description with your logs, so support knows what to look for
+- desktop: every dialog is a real window you can drag out of the way
+- phone: connections close when you leave the app and reopen when you return
+- connect to several computers at once, and see all their devices in one list
+- the app icon now shows on Android, iOS and the desktop installer
+- taps and swipes reach a device mirrored through a computer again
+- drag the mirrored screen to swipe it, instead of tapping where you let go
+- phone: a device's page has the same title bar as every other dialog
+- phone: the four device actions are tiles, and the ones still to come say so
+- phone: rename from the name row, and restart or disconnect from the bottom
+- see your tap or swipe on the mirrored screen the moment you make it
+- phone: the mirror opens with the same title bar as a dialog, full screen
+- details, status and commands each fold away, and stay folded next time
+- tapping a device property highlights the row and says what it copied
+- hold the mirrored screen for a long press, and see it register as you hold
+- pressing Back, Home, Recents or Power names itself on the mirrored screen
+- the mirror's tap, swipe and hold marks are twice the size they were
+- mirroring a device through a computer streams frames instead of polling
+- the mirror's tap, swipe and hold marks stay up long enough to see
+- phone: a device's page and its screenshot fill the screen, like the mirror
+- see the logs of a device that's attached to another computer
+- connect straight to another device, with no computer involved
+- pick a nearby device off the network instead of typing its address
+
+09/09
+- Mirror: Back and Home are icons on a shorter bar
+- Mirror: Recents and Power are in a More menu at the end of that bar
+- Mirror: type on the mirrored device with the keyboard of the one in your hand
+- Mirror: pick High, Mid or Low quality for a screen streamed through a computer
+- Mirror: see how many frames a second are arriving
+- Mirror: the mirrored screen has a border around it
+- Mirror: the title bar matches the one on the device's page
+- phone: pair a device by QR with no computer involved at all
+- Mirror: pinch to zoom into the screen and drag with two fingers to move around
+- Mirror: on the desktop, ctrl or cmd with the scroll wheel zooms the screen
+- phone: each way of connecting opens full screen instead of unfolding
+- phone: both ways of connecting show without opening a row first
+- phone: the host, port and token for a computer are always on screen
+- phone: connecting to a computer says where to find the QR on that computer
+- phone: connecting to a device opens with the pairing QR already showing
+- pair and connect to a device with no computer involved at any point
+- phone: the device list has a divider between each of its sections
+- phone: a computer stands out from its devices on a shade of its own
+- iOS: fixed the app quitting as it launched on iPhone
+- connecting to a device closes the form and opens that device's page
+- phone: a device opens on its storage and battery, with its properties last
+- connecting to a computer closes the form and shows its devices
+- iOS: fixed the wide empty bands above and below every screen
+
+09/10
+- Mirror: a drag pans the zoomed screen instead of swiping the device
+
+10/28
+- Desktop: one window holds Devices, Files and Logs, switched from a sidebar
+- Desktop: drag the sidebar's edge to resize it, or collapse it to icons
+- Logs and Files: each device opens as a tab in the main window instead of a window of its own
+- Logs: a device's log keeps capturing while another tab is open
+- Settings: choose a light or dark theme, starting from light
+- Devices: filter chips count USB, Wi-Fi, low battery and devices that need attention
+- Devices: a bar over the table acts on every selected device at once
+- Devices: each row shows the model under the name, or Compact device rows in Settings
+- Devices: with nothing connected, the page shows how to connect a device
+- Devices: the toolbar's actions moved to the header, the sidebar and the selection bar
+- Tables: a lighter header and rows, with no background image behind them
+- Devices: a details panel beside the table shows one device's facts and actions
+- Devices: tick boxes on each row add it to the selection
+- Logs: filters that are on show as pills over the log, and several combine
+- Logs: level buttons show only warnings and above, errors only, and so on
+- Logs: right-click a tag or app to show only it or hide it
+- Logs: a background tab counts the errors that arrived while it wasn't open
+- Logs: each tab keeps its own filters, search and scroll position
+
+10/29
+- Logs and Files: the device tabs sit beside the page title, giving the log more room
+- Logs: fixed the filter field showing two funnel icons
+- Logs: a filter can match any of its rules instead of all of them
+- Logs: the filter editor counts the lines a filter matches as you type
+- Devices: a box in the table header selects every device shown
+- Devices: the status bar says how long ago the devices were last read
+- Devices: the details panel shows the device's screen
+- Files: a path bar of clickable folders
+- Files: filter the open folder by name
+- Files: a Places list down the side jumps to common folders
+- Files: show or hide hidden files
+- Files: rename a file or folder
+- Files: install an APK that is already on the device
+- Files: upload files into the open folder, by Upload… or by dragging them in
+- Scripts: a new page runs a script once on each device
+- Devices: Run script on the selection opens Scripts with those devices chosen
+- Connect: a table of every wireless device, with a tick box that connects or disconnects it
+- Connect: pair a new device with the code from its Wireless debugging screen
+- Connect: Pair with QR Code pairs and connects a device that scans it
+- Connect: Connect Remote Server lists the computers this app reads devices from
+- Devices: ⌘C opens Connect
+
+10/30
+- Devices: the status bar shows the version on the left and the device count on the right
+- Devices: fixed the search box showing two funnel icons
+- Devices: a file dragged in highlights the devices it will go to
+- Devices: dropping a file on a row sends it to that device when one or none are selected
+- Devices: fixed the table header drifting out of line with the rows when scrolled sideways
+- Devices: removed the tick boxes from each row and the table header
+- Logs: the status bar no longer says how many lines are being held
+- Settings: ⌘, opens Settings
+- Logs: search highlights matches and counts them, with arrows to step through them
+- Logs: Save as filter turns a search into a filter
+- Logs: Pause keeps reading the log and shows everything that arrived on Resume
+- Logs: a More menu holds Clear log, the compact columns, the message panel and text size
+- Logs: filter pills read as words and count a saved filter's rules
+- Files: the path and selection bar sit in a card joined to the open tab
+- Files: dropping files covers the table with where they'll go, folder and device
+- Files: install every APK in a selection at once
+- Files: folders are bold, hidden files are grey, and images and videos have their own icons
+- Files: dates read as "Oct 27, 10:42 AM", or with the year when it isn't this one
+- Logs: Add filter stays open while you tick several saved filters
+- Logs: the filter editor shows the filter in words and which filters it combines with
+- Logs: delete a saved filter from its editor
+- Logs: right-click a message to show or hide lines containing it
+- Logs: right-click copies the value of the column that was clicked
+- Logs: a tab's dot shows whether it's live, paused or offline
+- Logs: + picks several devices to capture at once
+- Logs and Files: tabs that don't fit go into a "more" menu that keeps their error counts
+- Logs: the controls sit in a card joined to the open tab, and the log in a card under it
+- Logs: warning and error lines have a tinted background
+- Logs: the status line shows the lines shown, filters on, devices capturing and lines per second
+- Logs: a Horizontal scrolling setting replaces hiding the App and Thread columns
+- Logs: cut-off text in the log is clipped instead of ending in an ellipsis
+- Logs: narrow Date and App columns keep the end of their text visible
+- Logs: the Thread column shows "-" for a process's main thread
+- Logs: the Tooltip and Auto-scroll switches moved to the status line
+- Logs: ⌘↓ jumps to the newest line and turns Auto-scroll back on
+- Tables: columns can be dragged narrower, down to one character
+- Tables: fixed some rows going blank in a very narrow column while others still showed
+- Logs: tabs no longer show a red count of new errors
+- Logs and Files: a tab's × is a plain cross that only shows its circle on hover
+- Desktop: ⌘L opens logs for the selected devices
+- Desktop: ⌘E opens the selected device in Files
+- Desktop: ⌘S takes a screenshot of the selected devices
+- Desktop: ⌘I opens Type text for the selected devices
+- Logs: the status line no longer repeats the device name or shows lines per second and devices capturing
+- Logs: the filter editor grows as rules are added, then scrolls
+- Logs: a saved filter can be deleted from the Add filter panel
+- Logs: an App rule can be picked from the apps in the log, or typed by name
+- Logs: the filter editor no longer has a Delete button
+- Logs: Save asks whether to save the selected lines, the visible lines or the whole log
+- Logs: Save asks where to put the file, then offers to open it or show it in Finder
+- Settings: the desktop window has a tab per area across the top, like the Swing app
+- Settings: the log buffer holds 200,000 lines by default
+- Settings: full refresh can be set as far out as 600 minutes
+- Settings: choose which device columns show, or reset the table layout
+- Desktop: looks for a new release once a day and says when there is one
+- Files: downloads and screenshots go to ~/Downloads, or a folder picked in Settings
+- Mirror: open devices in scrcpy instead of the built-in mirror
+- Logs: fixed a "+" disappearing from a filter value when the filter is saved
+- Logs: New filter from this on an App cell names the app instead of its process id
+- Input: a new page types text or presses keys on every chosen device at once
+- Commands: a new page runs an adb shell command on each chosen device, with a result per device
+- Commands: saved commands, recent ones and the Swing app's commands.txt are listed beside the field
+- Devices: Type text and Commands open their pages with the selection chosen
+- Desktop: the sidebar's pages scroll when the window is too short to show them all
+
+10/31
+- Desktop: toasts appear in the status bar instead of floating over the table
+- Logs: a new tab starts with the level and filters last chosen
+- Logs: picking a device to capture from closes the device list
+- Logs and Files: ⌘W closes the open tab before it closes the window
+- Desktop: ⌘D shows the Devices page
+- Devices: view the devices as icons, from a toggle beside the search box
+
+11/01
+- Devices: the details panel says when a device's screen is off instead of polling a black screen
+- Devices: the details panel shows the last screen seen at once while a fresh one loads
+- Devices: fixed the details panel jumping down when the screen preview appeared
+- Devices: the screen preview starts in the device's own shape, landscape included
+- Devices: a refresh button on the screen preview takes a new screenshot now
+- Devices: the Details button moved beside the List / Icons toggle
+- Devices: removed the action buttons from the details panel
+- Commands: fixed recent commands growing taller when hovered
+- Devices: the icon view sizes itself to fit every device until the size slider is moved
+- Devices: icon view tiles show more about each device the larger they are
+- Devices: the details panel's Restart and Disconnect are icon buttons with tooltips
+- Devices: the details panel lists every device property, replacing the Device Details window
+- Devices: click a property in the details panel to copy it
+- Devices: the details panel scrolls back to the top when another device is selected
+- Devices: search highlights matching text instead of hiding the devices that don't match
+- Devices: typing anywhere on the page searches, and Esc clears the search
+- Devices: a selected icon view tile colours the phone's frame instead of the tile's background
+- fixed a backslash showing before apostrophes in messages
+- Scripts, Commands and Input: always run on devices you pick, starting from the Devices selection
+- Logs, Files, Scripts, Commands and Input: one device checklist with Select all behind every +
+- Desktop: Share Devices serves this computer's devices to the phone app, paired by QR code
+- Files: fixed folders on a Swing app's server listing as files with no date
+- Dialogs: fixed Esc not closing a dialog with a table in it
+- Devices: the table's columns fit its width instead of scrolling sideways
+- Devices: the Model column is gone from two-line rows, which show it under the name
+
+11/06
+- Desktop: the menu-bar icon shows the device count
+- Desktop: the menu-bar menu lists each device with Mirror, Browse, Logs and Screenshot buttons
+- Logs: a new log starts 10 minutes back instead of at the oldest line the device holds
+- Logs: fixed Resume doing nothing after a device's log had stopped
+- Devices: selecting a device in the icon view no longer lists its details in the status bar
+- Status bar: the version and History highlight when the pointer is over them
+- Status bar: clicking the version opens the app's log in a text editor
+- Status bar: a running command fills the status behind its text as it progresses
+- History: filter the list, copy lines, and double-click one to see its details
+- History: devices connecting, disconnecting and going offline are listed
+- Logs: ⌘C copies every selected line
+- Logs: ⇧⌘V opens the selected lines in the message viewer
+- Logs: right-clicking several selected lines offers only to copy or view them
+- Message viewer: the text can be edited, and Restore puts back the original
+- Message viewer: Edit opens the text in the default text editor
+- Message viewer: each toolbar button has a tooltip
+- Message viewer: fixed button labels being cut off
+- Logs: ⌘S opens the save dialog for the open log
+- Desktop: ⌘S only takes a screenshot on the Devices page
+- Settings: the tabs across the top use the same light colours as the device tabs
+- Desktop: fixed dialogs hiding behind the window when Keep windows on top is on
+- Settings: removed the Confirm destructive commands switch
+- Settings: the log buffer shows its default size instead of Not set
+- Settings: removed the Hold while scrolled up and Scroll the log sideways rows
+
+11/06
+- Version numbers start at 2.0, above the Swing app's 1.0 releases
+- Updates are looked for in the new AndroidDeviceManager2 release repo
+
+11/09
+- Devices: removed the USB and Wi-Fi filter chips
+- Devices: filter chips for devices not charging, low on storage or not responding
+- Devices: a filter chip only shows when it would narrow the list
+- About: Demo Mode shows 40 made-up devices in place of real ones, on local builds only
+- Files: fixed every file showing the wrong modified date
+- Devices: the filter chips scroll sideways instead of pushing Search and Connect off the edge

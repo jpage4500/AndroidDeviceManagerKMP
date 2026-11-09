@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- solid fill behind the adaptive foreground: the mean colour of the artwork. Barely ever
+         seen — the foreground is inset to exactly the 72dp viewport, so this shows only when a
+         launcher parallaxes the layers apart. keep in sync with BG_COLOR in scripts/generate-icons.sh. -->
+    <color name="ic_launcher_background">#73A184</color>
+</resources>

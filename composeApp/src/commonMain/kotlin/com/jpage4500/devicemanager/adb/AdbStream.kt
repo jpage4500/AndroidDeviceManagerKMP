@@ -18,21 +18,20 @@ class AdbStream private constructor(
     private val socket: Socket,
     private val read: ByteReadChannel,
     private val write: ByteWriteChannel,
-) {
-    suspend fun write(bytes: ByteArray) {
+) : AdbByteStream {
+    override suspend fun write(bytes: ByteArray) {
         write.writeFully(bytes, 0, bytes.size)
     }
 
-    suspend fun flush() {
+    override suspend fun flush() {
         write.flush()
     }
 
-    /** exactly [length] bytes, or a failure — every framed read in the protocol wants this. */
-    suspend fun readFully(into: ByteArray, offset: Int = 0, length: Int = into.size) {
+    override suspend fun readFully(into: ByteArray, offset: Int, length: Int) {
         read.readFully(into, offset, length)
     }
 
-    suspend fun readFully(length: Int): ByteArray {
+    override suspend fun readFully(length: Int): ByteArray {
         val buffer = ByteArray(length)
         readFully(buffer, 0, length)
         return buffer

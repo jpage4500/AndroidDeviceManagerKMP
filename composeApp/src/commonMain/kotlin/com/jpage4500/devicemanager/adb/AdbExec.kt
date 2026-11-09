@@ -14,11 +14,12 @@ private val log = LoggerConfig.createLogger("AdbExec")
  * bytes alone.
  */
 suspend fun adbExec(
+    server: AdbServer,
     serial: String,
     command: String,
     readMs: Long = AdbStream.EXEC_MS,
 ): AdbOutcome<String> {
-    val opened = AdbConnection.toDevice(serial)
+    val opened = AdbConnection.toDevice(server, serial)
     val connection = when (opened) {
         is AdbOutcome.Err -> return opened
         is AdbOutcome.Ok -> opened.value
@@ -45,8 +46,8 @@ suspend fun adbExec(
  * the reply still has to be read: `exec:` doesn't finish until the far end closes, and dropping the
  * socket first can cut the command off before it has run.
  */
-suspend fun adbExecQuiet(serial: String, command: String): Boolean =
-    adbExec(serial, command) is AdbOutcome.Ok
+suspend fun adbExecQuiet(server: AdbServer, serial: String, command: String): Boolean =
+    adbExec(server, serial, command) is AdbOutcome.Ok
 
 /**
  * true when [command] exited 0.
@@ -54,14 +55,15 @@ suspend fun adbExecQuiet(serial: String, command: String): Boolean =
  * the exit status isn't carried by the `exec:` service itself, so it's echoed and read back — the
  * same trick a shell script would use.
  */
-suspend fun adbExecOk(serial: String, command: String): Boolean {
-    val output = adbExec(serial, "$command >/dev/null 2>&1; echo $?").valueOrNull() ?: return false
+suspend fun adbExecOk(server: AdbServer, serial: String, command: String): Boolean {
+    val output = adbExec(server, serial, "$command >/dev/null 2>&1; echo $?").valueOrNull()
+        ?: return false
     return output.trim() == "0"
 }
 
 /** everything `getprop` knows, as a map — the source of a device's model, OS and carrier. */
-suspend fun adbProperties(serial: String): AdbOutcome<Map<String, String>> =
-    adbExec(serial, "getprop").map { output -> parseGetProp(output) }
+suspend fun adbProperties(server: AdbServer, serial: String): AdbOutcome<Map<String, String>> =
+    adbExec(server, serial, "getprop").map { output -> parseGetProp(output) }
 
 /** `[ro.product.model]: [Pixel 9]` per line. */
 fun parseGetProp(output: String): Map<String, String> = output.lineSequence()
@@ -107,14 +109,14 @@ enum class RemoteKind(val directory: Boolean) {
  * a v1 `LIST` explains nothing: a forbidden folder, a plain file and a path that isn't there all
  * answer with no entries and a clean `DONE`, exactly like an empty folder.
  */
-suspend fun adbRemoteKind(serial: String, remote: String): RemoteKind {
+suspend fun adbRemoteKind(server: AdbServer, serial: String, remote: String): RemoteKind {
     val quoted = Utils.shellQuote(remote)
     // -e follows symlinks, so a dangling /sdcard reports missing rather than "there but unreadable"
     val script = "if [ ! -e $quoted ]; then echo missing; " +
         "elif [ ! -d $quoted ]; then echo file; " +
         "elif [ -r $quoted -a -x $quoted ]; then echo dir; " +
         "else echo denied; fi"
-    return when (adbExec(serial, script).valueOrNull()?.trim()) {
+    return when (adbExec(server, serial, script).valueOrNull()?.trim()) {
         "missing" -> RemoteKind.MISSING
         "file" -> RemoteKind.NOT_A_DIRECTORY
         "dir" -> RemoteKind.DIRECTORY

@@ -7,7 +7,7 @@
 #
 # jDeploy reads ./package.json and ./icon.png from the repo root (it offers no config key for
 # either) and publishes to the repo named in package.json > jdeploy.publishTargets[].url —
-# jpage4500/AndroidDeviceManagerRelease.
+# jpage4500/AndroidDeviceManager2.
 #
 # Normally you don't run this: merging to main tags the commit and
 # .github/workflows/build-desktop.yml does the same thing on CI. This is for publishing off a
@@ -98,7 +98,7 @@ else
     echo "Deploying via jDeploy..."
     npx --yes jdeploy publish
     echo "🎉 Build and deployment complete!"
-    echo "   https://github.com/jpage4500/AndroidDeviceManagerRelease/releases"
+    echo "   https://github.com/jpage4500/AndroidDeviceManager2/releases"
 fi
 
 printf '⏱  Total time: %dm %02ds\n' $((SECONDS/60)) $((SECONDS%60))

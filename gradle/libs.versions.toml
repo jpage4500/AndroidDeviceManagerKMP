@@ -20,6 +20,8 @@ kermit = "2.1.0"
 # build on minSdk 24 fails to dex ktor-client-core. 3.5.x is clean
 ktor = "3.5.2"
 slf4jSimple = "2.0.18"
+# Google's own TLS stack, bundled on android for exactly one method — see PairingTls.android.kt
+conscrypt = "2.7.0"
 buildconfig = "6.0.10"
 
 [libraries]
@@ -28,6 +30,15 @@ compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.re
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "composeMaterial3" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+# BackHandler ships apart from ui: it is the only way to answer the android back key and iOS's
+# predictive-back gesture from commonMain, and the alternative is an expect/actual over
+# androidx.activity.compose for three targets
+compose-ui-backhandler = { module = "org.jetbrains.compose.ui:ui-backhandler", version.ref = "composeMultiplatform" }
+
+# the QR scanner, android only. Play Services supplies the whole scanning UI and needs no camera
+# permission at all; the alternative is ML Kit's 2.5 MB bundled model plus a hand-written CameraX
+# preview and a runtime permission flow, for the same one screen
+play-services-code-scanner = { module = "com.google.android.gms:play-services-code-scanner", version = "16.1.0" }
 compose-ui-tooling-preview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
 
@@ -62,6 +73,13 @@ ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "kto
 ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+
+# the TLS keying-material exporter wireless-debugging pairing needs. Android's platform TLS *is*
+# Conscrypt and has this method, but it lives in `com.android.org.conscrypt`, and hidden-API
+# enforcement makes it throw NoSuchMethodException for an app targeting a modern SDK. Bundling it
+# puts the same class in `org.conscrypt` where it is ours to call — no reflection, no restriction.
+# ~2.6 MB per ABI, and 16 KB-page aligned
+conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscrypt" }
 
 # --- misc ---
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }

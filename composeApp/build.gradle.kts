@@ -44,7 +44,7 @@ abstract class GitCommitCountValueSource : ValueSource<String, ValueSourceParame
 }
 
 val commitCount = providers.of(GitCommitCountValueSource::class) {}.get()
-val appVersion = "1.0.$commitCount"
+val appVersion = "2.0.$commitCount"
 
 // true only for a build that actually ships: the jDeploy fat jar, an android release variant, or an
 // Xcode Release framework. everything else is a local run, which is what PlatformUtils.isDebugBuild
@@ -127,6 +127,14 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
             freeCompilerArgs.add("-Xexpect-actual-classes")
         }
+        // the same main class `compose.desktop.application` runs, repeated here for the KMP
+        // plugin's own `desktopRun` task — that's the one IntelliJ generates from the green arrow
+        // next to main(), and without a main class it fails at execution with "No main class
+        // specified and classpath is not an executable jar"
+        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+        mainRun {
+            mainClass.set("com.jpage4500.devicemanager.MainKt")
+        }
     }
 
     @Suppress("unused")
@@ -139,6 +147,7 @@ kotlin {
                 implementation(libs.compose.foundation)
                 implementation(libs.compose.material3)
                 implementation(libs.compose.ui)
+                implementation(libs.compose.ui.backhandler)
                 implementation(libs.compose.components.resources)
                 implementation(libs.compose.ui.tooling.preview)
                 implementation(libs.kotlinx.coroutines.core)
@@ -174,6 +183,21 @@ kotlin {
                 implementation(libs.androidx.activity.compose)
                 implementation(libs.androidx.core.ktx)
                 implementation(libs.kotlinx.coroutines.android)
+                implementation(libs.play.services.code.scanner)
+                // pairing only; see adb/pairing/PairingTls.android.kt for why the platform's own
+                // copy of the same code cannot be called
+                implementation(libs.conscrypt.android)
+            }
+        }
+
+        // the only tests in the project, and they exist for one reason: the SPAKE2 stack in
+        // `crypto/` is arithmetic that either matches BoringSSL byte for byte or fails a handshake
+        // with nothing to debug. Desktop-only because the code under test is pure `commonMain` — it
+        // would compile and pass identically on the other two, and running it three times proves
+        // nothing extra. `./gradlew :composeApp:desktopTest`
+        val desktopTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
             }
         }
 
@@ -231,8 +255,17 @@ compose.desktop {
             packageName = brandAppName
             packageVersion = appVersion
 
+            // written by scripts/generate-icons.sh — guarded so a checkout that hasn't run it
+            // still packages, just with jpackage's default icon
+            val macOSIcon = project.file("src/desktopMain/resources/icon.icns")
+            val windowsIcon = project.file("src/desktopMain/resources/icon.ico")
+            val linuxIcon = project.file("src/desktopMain/resources/icon.png")
+
             macOS {
                 bundleID = brandBundleId
+                if (macOSIcon.exists()) {
+                    iconFile.set(macOSIcon)
+                }
                 // the traffic lights and the AWT file dialogs are drawn by AppKit; this is what
                 // makes them follow the system appearance
                 infoPlist {
@@ -240,6 +273,18 @@ compose.desktop {
                         <key>NSHighResolutionCapable</key>
                         <true/>
                     """.trimIndent()
+                }
+            }
+
+            if (windowsIcon.exists()) {
+                windows {
+                    iconFile.set(windowsIcon)
+                }
+            }
+
+            if (linuxIcon.exists()) {
+                linux {
+                    iconFile.set(linuxIcon)
                 }
             }
         }

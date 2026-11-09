@@ -104,27 +104,33 @@ fun ToolbarButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     tint: Color = MaterialTheme.colorScheme.onSurface,
+    tooltip: String? = null,
 ) {
     val alpha = if (enabled) 1f else 0.35f
-    Column(
-        modifier
-            .width(Dimens.toolbarButtonWidth)
-            .clip(RoundedCornerShape(Dimens.corner))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        AppIcon(res, size = Dimens.toolbarIcon, tint = tint.copy(alpha = alpha), contentDescription = label)
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha * 0.8f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    val button = @Composable {
+        // a minimum width rather than a fixed one: a label like "Auto Format OFF" is wider than the
+        // icon above it, and the button grows to hold it rather than cutting it off
+        Column(
+            modifier
+                .widthIn(min = Dimens.toolbarButtonWidth)
+                .clip(RoundedCornerShape(Dimens.corner))
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(vertical = 4.dp, horizontal = Dimens.toolbarButtonPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            AppIcon(res, size = Dimens.toolbarIcon, tint = tint.copy(alpha = alpha), contentDescription = label)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha * 0.8f),
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
     }
+    if (tooltip == null) button() else CellTooltip(text = { tooltip }) { button() }
 }
 
 /** the vertical rule between toolbar groups. */
@@ -137,6 +143,9 @@ fun ToolbarSeparator() {
  * a battery as a bar rather than a number, because 45 of them are read at a glance.
  *
  * green down to 30%, amber to 15%, red below — the thresholds the Swing app's battery icons use.
+ *
+ * amber is `busy` rather than `unauthorized`: the latter is now the Swing app's "not ready" yellow,
+ * which is all but invisible as a 2px bar on white.
  */
 @Composable
 fun BatteryLevel(level: Int?, charging: Boolean, modifier: Modifier = Modifier) {
@@ -144,30 +153,70 @@ fun BatteryLevel(level: Int?, charging: Boolean, modifier: Modifier = Modifier) 
         TableText("", modifier)
         return
     }
-    val color = when {
-        level > 30 -> Colors.online
-        level > 15 -> Colors.unauthorized
-        else -> Colors.error
-    }
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(Dimens.batteryWidth, Dimens.batteryHeight)
-                .clip(RoundedCornerShape(2.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))
-                .padding(1.5.dp),
-        ) {
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(level.coerceIn(0, 100) / 100f)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(color)
-            )
-        }
+        BatteryBar(level)
         if (charging) {
             Spacer(Modifier.width(2.dp))
-            AppIcon(Res.drawable.charging, size = 10.dp, tint = Colors.unauthorized)
+            AppIcon(Res.drawable.charging, size = 10.dp, tint = Colors.busy)
         }
     }
+}
+
+/**
+ * the same battery, stacked, for a phone row.
+ *
+ * The number goes **above** the bar rather than beside it: a 28dp table row has no second line so
+ * the desktop reads the bar, but a 68dp touch row does, and at arm's length the digits are what
+ * anyone actually reads — the bar is the thing you glance at across forty-five of them.
+ */
+@Composable
+fun BatteryGauge(level: Int?, charging: Boolean, modifier: Modifier = Modifier) {
+    if (level == null) return
+    Column(
+        modifier.width(Dimens.batteryGaugeWidth),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "$level%",
+            style = MaterialTheme.typography.labelSmall,
+            color = batteryColor(level),
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(2.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BatteryBar(level)
+            Spacer(Modifier.width(2.dp))
+            // the slot is there whether or not the bolt is, so plugging a device in doesn't move
+            // its own bar — and every row's bar lines up with every other row's
+            Box(Modifier.size(Dimens.icon)) {
+                if (charging) AppIcon(Res.drawable.charging, tint = Colors.busy)
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatteryBar(level: Int) {
+    Box(
+        Modifier
+            .size(Dimens.batteryWidth, Dimens.batteryHeight)
+            .clip(RoundedCornerShape(2.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp))
+            .padding(1.5.dp),
+    ) {
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .fillMaxWidth(level.coerceIn(0, 100) / 100f)
+                .clip(RoundedCornerShape(1.dp))
+                .background(batteryColor(level))
+        )
+    }
+}
+
+fun batteryColor(level: Int): Color = when {
+    level > 30 -> Colors.online
+    level > 15 -> Colors.busy
+    else -> Colors.error
 }

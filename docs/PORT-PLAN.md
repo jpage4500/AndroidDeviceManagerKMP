@@ -47,27 +47,33 @@ Corrections carried over from jadb, each one already paid for:
 | `Device` model | `data/Device.kt` | From `data/Device.java`, minus the live handles — it is a value now |
 | Device state names | `data/DeviceState.kt` | The full `connection_state_name()` set, matched longest-first |
 | Transports | `transport/` | `AdbServerTransport` and `RemoteHttpTransport` behind one interface |
+| Saved servers | `data/SavedServer.kt`, `manager/ServerManager.kt` | The Device Manager instances the app knows, and the `adm://` connection string that fills one in |
+| Share Devices (the server half) | `manager/ShareServer.kt`, `desktopMain/server/` | The Swing `RemoteHttpServer`'s API on the desktop, with its dialog and QR code — see [SHARE-SERVER.md](SHARE-SERVER.md) |
 | Device list + refresh | `manager/DeviceManager.kt` | `host:track-devices-l` instead of the Swing app's timer |
 | Mirroring | `manager/MirrorSource.kt` | Tier II — `screencap` poll plus `input` events |
-| Multiple windows | `manager/WindowManager.kt` + `desktopMain/main.kt` | Ported from FileExplorerKMP |
+| Multiple windows | `manager/WindowManager.kt` + `desktopMain/main.kt` | Ported from FileExplorerKMP; Logs and Files are pages of the shell now, not windows — see [UI-PORT.md](UI-PORT.md#the-shell) |
 | UI | `ui/` | One device list and one mirror view; `compact` picks phone or desktop layout |
 | Settings, files, logs, http | `util/`, `manager/` | Ported from DashboardWeatherKMP — see [APP-SERVICES.md](APP-SERVICES.md) |
+| Device screen | `ui/screen/DeviceScreen.kt`, `ui/components/DataTable.kt` | The desktop's toolbar/table/status bar — see [UI-PORT.md](UI-PORT.md) |
+| Phone device list | `ui/screen/DeviceListScreen.kt` | Two lines a row, tap to open — see [MOBILE-UI.md](MOBILE-UI.md) |
+| Icons | `commonMain/composeResources/drawable/` | All 91 PNGs from the Swing app's `resources/images`, tinted at draw time |
 
-`RemoteHttpTransport` speaks the **existing** Swing app's API — `/api/devices`, `/api/execute`,
-`/api/properties`, `/api/files/list`, `/api/screenshot` with bearer auth. So the phone app can be
-pointed at today's app and work before any more of it is ported.
+`RemoteHttpTransport` speaks the Swing app's API — `/api/devices`, `/api/execute`,
+`/api/properties`, `/api/files/list`, `/api/screenshot` with bearer auth — and the desktop now
+serves the same API itself (Share Devices), so the phone reads either desktop the same way.
 
 ## Next, roughly in order
 
-The screen-by-screen detail is in [UI-PORT.md](UI-PORT.md) — this is the summary.
+The screen-by-screen detail is in [UI-PORT.md](UI-PORT.md) for the desktop and
+[MOBILE-UI.md](MOBILE-UI.md) for the phone — this is the summary.
 
-1. **The device screen.** The desktop's main screen is a sortable, resizable, configurable table and
-   this is a two-pane list. Compose has no table, so a reusable one gets written here and the file
-   explorer and log viewer both reuse it.
-2. **A connection picker.** Nothing sets a transport yet — it defaults to `127.0.0.1:5037`. The phone
-   builds need a screen to enter a host, a port and a token; `AppPref` already has the four prefs to
-   keep them in (`ADB_SERVER_HOST`, `ADB_SERVER_PORT`, `REMOTE_URL`, `REMOTE_TOKEN`) and nothing
-   reads them yet.
+1. **Device actions.** The right-click menu on a row: details, copy field, rename, custom fields,
+   reconnect, disconnect. All are `exec` calls that already work, and the table already raises the
+   context click.
+2. **A connection picker on the desktop.** The phone has one — `ConnectPanel` sets a transport
+   through `ServerManager`, over `REMOTE_URL`/`REMOTE_TOKEN` and a saved-server list, see
+   [MOBILE-UI.md](MOBILE-UI.md). The desktop still starts on `127.0.0.1:5037` with no way to point
+   it anywhere else but the settings screen.
 3. **File explorer.** `AdbSync` already lists, stats, pulls and pushes; nothing has a UI on it.
 4. **Log viewer.** `logcat` over `exec:`, plus the filter syntax in the Swing app's `LOGS.md`.
 5. **Native menus, drag and drop, file dialogs.** See [WINDOWS.md](WINDOWS.md).
@@ -83,8 +89,6 @@ The screen-by-screen detail is in [UI-PORT.md](UI-PORT.md) — this is the summa
   `ANDROID_HOME`, so shelling out to `adb` is unreliable by construction — the socket has no
   environment dependency at all. Where a real terminal or scrcpy is genuinely wanted, launch it
   explicitly rather than through a bundled script.
-- **`RemoteHttpServer` / `RemoteServerManager` (the server half).** This app is a client of that API
-  for now. Serving it is only worth writing if a KMP instance should host devices for another one.
 - **Swing-specific everything** — `BaseScreen`, the table models, cell renderers, row sorters,
   `PreferenceUtils`. Compose has its own answers and they aren't shaped the same. `PreferenceUtils`
   in particular is replaced by `SettingsManager` + `AppPref`, which came from DashboardWeatherKMP

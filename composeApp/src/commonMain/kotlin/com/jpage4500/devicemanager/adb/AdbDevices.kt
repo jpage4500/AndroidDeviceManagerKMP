@@ -19,8 +19,8 @@ private val log = LoggerConfig.createLogger("AdbDevices")
 object AdbDevices {
 
     /** one shot, for a caller that doesn't want to hold a subscription open. */
-    suspend fun list(): AdbOutcome<List<Device>> {
-        val connection = AdbConnection.openOrNull()
+    suspend fun list(server: AdbServer): AdbOutcome<List<Device>> {
+        val connection = AdbConnection.openOrNull(server)
             ?: return AdbOutcome.Err(AdbError.NO_SERVER, "adb isn't running")
         return connection.use {
             when (val outcome = it.request("host:devices-l")) {
@@ -43,9 +43,9 @@ object AdbDevices {
      * timeout on it. when the server goes away the flow emits an empty list and reconnects on the
      * [retryMs] timer — a desktop where adb was never started is the normal case, not an error.
      */
-    fun track(retryMs: Long = 3_000): Flow<List<Device>> = channelFlow {
+    fun track(server: AdbServer, retryMs: Long = 3_000): Flow<List<Device>> = channelFlow {
         while (currentCoroutineContext().isActive) {
-            val connection = AdbConnection.openOrNull()
+            val connection = AdbConnection.openOrNull(server)
             if (connection == null) {
                 send(emptyList())
                 delay(retryMs)
@@ -61,7 +61,7 @@ object AdbDevices {
                         // every frame is the whole list, so nothing has to be merged
                         while (currentCoroutineContext().isActive) {
                             val devices = parseDeviceList(connection.readFrame())
-                            AdbFeatures.retain(devices.map { it.serial }.toSet())
+                            AdbFeatures.retain(server, devices.map { it.serial }.toSet())
                             send(devices)
                         }
                     }
