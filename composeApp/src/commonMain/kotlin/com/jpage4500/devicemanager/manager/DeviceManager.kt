@@ -94,6 +94,15 @@ object DeviceManager {
     // connections whose first device list has arrived — see [setDevices]
     private val announced = MutableStateFlow(emptySet<String>())
     private val detailJobs = mutableMapOf<String, Job>()
+
+    /**
+     * each device's whole `getprop`, by device id, as the last fixed fetch read it.
+     *
+     * kept here rather than on [Device] so a row update doesn't compare ~800 entries 45 times over;
+     * what it buys is that a new property column, and the dialog that makes one, are answered
+     * without asking any device again.
+     */
+    private val properties = MutableStateFlow<Map<String, Map<String, String>>>(emptyMap())
     private var refreshJob: Job? = null
     private var started = false
 
@@ -129,6 +138,7 @@ object DeviceManager {
         started = true
         log.d("start")
         startRefreshTimer()
+        watchCustomColumns()
         // first, so the real connections below go straight to waiting and never flash up
         if (SettingsManager.getBoolean(AppPref.DEMO_MODE)) setDemoMode(true)
         applySettings()
@@ -512,6 +522,7 @@ object DeviceManager {
                 freeSpace = existing.freeSpace,
                 totalSpace = existing.totalSpace,
                 customProperties = existing.customProperties,
+                customValues = existing.customValues,
                 bootTimeMs = existing.bootTimeMs,
             )
         }
@@ -563,21 +574,36 @@ object DeviceManager {
         }
     }
 
-    /** what a device only has to be asked once. */
+    /** what a device only has to be asked once — plus the app versions the custom columns want. */
     private suspend fun fetchFixed(transport: DeviceTransport, device: Device) {
         val timer = Timer()
-        val output = transport.exec(device.serial, DeviceDetails.FIXED_BATCH).getOrNull()
+        val columns = DeviceTableState.customColumns.value
+        val packages = columns.filter { it.type == CustomColumnType.VERSION }.map { it.key }.distinct()
+        val output = transport.exec(device.serial, DeviceDetails.fixedBatch(packages)).getOrNull()
         if (output == null) {
             log.w("fetchFixed: ${device.id}: no answer")
             return
         }
-        val parts = DeviceDetails.splitBatch(output, DeviceDetails.FIXED_COUNT)
+        val parts = DeviceDetails.splitBatch(output, DeviceDetails.FIXED_COUNT + packages.size)
         val props = parseGetProp(parts[0])
         val nickname = DeviceDetails.parseNickname(parts[1])
         // a tablet or a TV has no iphonesubinfo service at all, which is not a failure
         val phone = DeviceDetails.parsePhone(parts[2]) ?: DeviceDetails.parsePhone(parts[3])
         val imei = DeviceDetails.parseImei(parts[4])
         val custom = DeviceDetails.parseCustomProps(parts[5])
+        val versions = packages.withIndex().associate { (i, pkg) ->
+            pkg to DeviceDetails.parseVersionName(parts[DeviceDetails.FIXED_COUNT + i])
+        }
+        val values = buildMap {
+            columns.forEach { column ->
+                val value = when (column.type) {
+                    CustomColumnType.VERSION -> versions[column.key]
+                    CustomColumnType.PROPERTY -> props[column.key]?.takeIf { it.isNotBlank() }
+                }
+                if (value != null) put(column.valueKey, value)
+            }
+        }
+        properties.update { it + (device.id to props) }
 
         update(device.id) { row ->
             row.withProperties(props).copy(
@@ -585,6 +611,7 @@ object DeviceManager {
                 phone = phone ?: row.phone,
                 imei = imei ?: row.imei,
                 customProperties = custom,
+                customValues = values,
             )
         }
         log.v("fetchFixed: ${device.id}: ${props.size} props in $timer")
@@ -747,6 +774,78 @@ object DeviceManager {
         _devices.update { list -> list.filterNot { it.id == deviceId } }
         dropSelection { it == deviceId }
     }
+
+    /**
+     * read a newly added custom column's values as soon as it's added, rather than at the next full
+     * refresh. Only what's new: a renamed column asks the same question, so it has its answer.
+     */
+    private fun watchCustomColumns() {
+        scope.launch {
+            var known: Set<String>? = null
+            DeviceTableState.customColumns.collect { columns ->
+                val before = known
+                known = columns.mapTo(HashSet()) { it.valueKey }
+                if (before == null) return@collect
+                columns.filter { it.valueKey !in before }.distinctBy { it.valueKey }.forEach { fillColumn(it) }
+            }
+        }
+    }
+
+    /**
+     * [column]'s value on every ready device, written into the rows.
+     *
+     * a property comes out of [properties] when the device's `getprop` has been read, which is
+     * nearly always; a version is one `dumpsys` per device, [FETCH_LIMIT] at a time. A connection
+     * that sends its own details (see [DeviceTransport.hasDeviceDetails]) is left out, as it is by
+     * [fetchDetails].
+     */
+    private suspend fun fillColumn(column: CustomColumn) {
+        val timer = Timer()
+        val targets = _devices.value.filter { it.isReady && connectionFor(it.id)?.hasDeviceDetails == false }
+        if (targets.isEmpty()) return
+        val gate = Semaphore(FETCH_LIMIT)
+        coroutineScope {
+            targets.map { device ->
+                async {
+                    gate.withPermit {
+                        val value = readColumn(device.id, column.type, column.key).getOrNull() ?: return@withPermit
+                        update(device.id) { row ->
+                            row.copy(
+                                customValues = if (value.isEmpty()) row.customValues - column.valueKey
+                                else row.customValues + (column.valueKey to value),
+                            )
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+        log.d("fillColumn: ${column.label}: ${targets.size} devices in $timer")
+    }
+
+    /**
+     * what a custom column of [type] and [key] would show for one device: the value, an empty
+     * string for an app that isn't installed or a property that isn't set, or a failure when the
+     * device didn't answer — three things the column dialog's preview says differently.
+     */
+    suspend fun readColumn(deviceId: String, type: CustomColumnType, key: String): Result<String> = when (type) {
+        CustomColumnType.PROPERTY -> properties.value[deviceId]?.let { Result.success(it[key].orEmpty().trim()) }
+            ?: exec(deviceId, DeviceDetails.propertyCommand(key)).map { it.trim() }
+
+        CustomColumnType.VERSION -> exec(deviceId, DeviceDetails.versionCommand(key))
+            .map { DeviceDetails.parseVersionName(it).orEmpty() }
+    }
+
+    /** every property key the device has, for the column dialog to suggest — from [properties] when it can. */
+    suspend fun propertyKeys(deviceId: String): List<String> {
+        val props = properties.value[deviceId]
+            ?: exec(deviceId, "getprop").getOrNull()?.let { parseGetProp(it) }
+            ?: return emptyList()
+        return props.keys.sorted()
+    }
+
+    /** every package installed on the device, for the column dialog to suggest. */
+    suspend fun packages(deviceId: String): List<String> =
+        DeviceDetails.parsePackages(exec(deviceId, DeviceDetails.CMD_PACKAGES).getOrNull())
 
     /** replace one row in place, leaving the rest of the list alone. */
     private fun update(deviceId: String, change: (Device) -> Device) {

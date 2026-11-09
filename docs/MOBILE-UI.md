@@ -166,7 +166,7 @@ a `BaseDialog` holding that tab's body — the same composable the desktop draws
 |---|---|
 | "Full refresh (mins)" | `SliderSetting`, 0–600; 0 reads "Never" |
 | "Refresh battery/disk (secs)" | `SliderSetting` → `SliderDialog` |
-| TABLE › "Compact device rows", "Show Tooltips" | `SwitchSetting`s; tooltips are desktop-only in effect |
+| TABLE › "Compact device rows" | `SwitchSetting` |
 | BUILT-IN MIRROR › "Mirror interval (ms)" | `SliderSetting` |
 | BUILT-IN MIRROR › "Mirror windows at once" | `StepperSetting`; windows are a desktop thing, the row shows here too |
 

@@ -39,6 +39,8 @@ data class Device(
     val freeSpace: Long? = null,
     val totalSpace: Long? = null,
     val customProperties: Map<String, String> = emptyMap(),
+    /** what each [CustomColumn] read off this device, keyed by [CustomColumn.valueKey]. */
+    val customValues: Map<String, String> = emptyMap(),
     /** host clock time this device booted, from `/proc/uptime`. */
     val bootTimeMs: Long? = null,
     /**

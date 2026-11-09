@@ -28,14 +28,15 @@
     <string name="tab_close">Close %1$s</string>
 
     <!-- devices page: header chips, the selection bar, and what shows with nothing connected -->
-    <string name="chip_all">All %1$d</string>
-    <string name="chip_attention">Needs attention %1$d</string>
-    <string name="chip_low_battery">Low battery %1$d</string>
-    <string name="chip_low_storage">Low storage %1$d</string>
-    <string name="chip_not_charging">Not charging %1$d</string>
-    <string name="chip_os">Android %1$s %2$d</string>
-    <string name="chip_stale">Not responding %1$d</string>
-    <string name="chip_value">%1$s %2$d</string>
+    <string name="chip_all">All</string>
+    <string name="chip_attention">Needs attention</string>
+    <string name="chip_low_battery">Low battery</string>
+    <string name="chip_low_storage">Low storage</string>
+    <string name="chip_not_charging">Not charging</string>
+    <string name="chip_os">Android %1$s</string>
+    <string name="chip_stale">Not responding</string>
+    <string name="chip_value">%1$s</string>
+    <string name="chip_column">%1$s %2$s</string>
     <string name="devices_search">Search</string>
     <string name="selection_clear">Clear</string>
     <string name="selection_count">%1$d selected</string>
@@ -387,7 +388,6 @@
     <string name="settings_reset_title">Reset all settings?</string>
     <string name="settings_send">SEND</string>
     <string name="settings_transport">Reading devices from</string>
-    <string name="settings_tooltips">Show Tooltips</string>
     <string name="settings_compact_rows">Compact device rows</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_dark">Dark</string>
@@ -426,6 +426,8 @@
     <string name="settings_columns">Columns</string>
     <string name="settings_columns_shown">%1$d of %2$d shown</string>
     <string name="settings_columns_reset">Reset table layout</string>
+    <string name="settings_columns_add">Add a custom column</string>
+    <string name="settings_columns_add_value">App version or property</string>
     <string name="settings_columns_reset_msg">Columns go back to their default order, widths and visibility.</string>
     <string name="settings_buffer_range">Between %1$d and %2$d lines</string>
     <string name="settings_download_folder">Download folder</string>
@@ -629,6 +631,31 @@
     <string name="size_all_to_fit">Size All to Fit</string>
     <string name="size_to_fit">Size to Fit</string>
     <string name="show_column">Show %1$s</string>
+    <string name="add_column">Add Column…</string>
+    <string name="edit_column">Edit %1$s…</string>
+    <string name="remove_column">Remove %1$s</string>
+
+    <!-- custom column dialog -->
+    <string name="custom_column_add_title">Add column</string>
+    <string name="custom_column_edit_title">Edit column</string>
+    <string name="custom_column_add">Add</string>
+    <string name="custom_column_show">Show</string>
+    <string name="custom_type_version">App version</string>
+    <string name="custom_type_property">System property</string>
+    <string name="custom_column_package">Package</string>
+    <string name="custom_column_property">Property</string>
+    <string name="custom_column_package_hint">com.example.app</string>
+    <string name="custom_column_property_hint">ro.build.fingerprint</string>
+    <string name="custom_column_header">Header</string>
+    <string name="custom_column_preview">Preview</string>
+    <string name="custom_column_suggestions">On %1$s</string>
+    <string name="custom_column_preview_none">Connect a device to see what this column will show</string>
+    <string name="custom_column_invalid_package">A package name looks like com.example.app</string>
+    <string name="custom_column_invalid_property">A property name is letters, digits, dots, dashes and underscores</string>
+    <string name="custom_value_not_installed">not installed</string>
+    <string name="custom_value_not_set">not set</string>
+    <string name="custom_value_no_answer">no answer</string>
+    <string name="custom_value_reading">reading…</string>
 
     <!-- mirror -->
     <string name="mirror_failed">Can't mirror this device</string>

@@ -141,6 +141,12 @@ object Dimens {
     val historyDialogWidth = 720.dp
     val historyTableHeight = 380.dp
     val historyFilterWidth = 200.dp
+    // the custom column dialog: wide enough for a long package name, and a fixed-height panel under
+    // it for the suggestions or the preview — a desktop dialog window packs to its content once, so
+    // a list that grew as it was typed into would be cut off
+    val customColumnDialogWidth = 460.dp
+    val customColumnPanelHeight = 150.dp
+    val customColumnRowHeight = 24.dp
     val shareLabelWidth = 110.dp
     // a dialog that is its own window is a form too, so it opens at the same width. the height caps
     // rather than fills: the window packs to whatever its form needs, and only a long one (the app

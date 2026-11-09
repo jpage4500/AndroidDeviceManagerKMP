@@ -108,7 +108,7 @@ picked. Scripts, Commands and Input use the same list for the devices they run o
 - Header: title, filter chips with counts (All, then the problems: Needs attention, Not charging,
   Low battery, Low storage, Not responding — each with a red or amber dot, and shown only while it
   would narrow the list; then a chip per OS version and per Custom 1 / Custom 2 value that two or
-  more devices share), search (⌘F, or just start typing; Escape clears it), refresh,
+  more devices share), search (start typing; Escape clears it), refresh,
   Connect. Search highlights the matching text in the list and on the icons rather than filtering.
 - Selection bar: a hint with nothing selected; with a selection, its count and Mirror, Screenshot,
   Record, Logs, Install, Type text, Terminal, Run script, Clear. Logs and Run script take the

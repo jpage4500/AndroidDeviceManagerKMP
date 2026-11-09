@@ -35,10 +35,11 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     LOGS_SAVE_DIR("logs_save_dir"),                         // folder the last saved log went to
     FILES_COLUMN_WIDTHS("files_column_widths"),             // JSON map of FileColumn name -> px
     FILES_RECENT_PATHS("files_recent_paths"),               // newline-separated paths from "Go To…"
-    HIDDEN_COLUMNS("hidden_columns"),                       // comma-separated DeviceColumn names the table hides
-    COLUMN_ORDER("column_order"),                           // comma-separated DeviceColumn names, left to right
-    COLUMN_WIDTHS("column_widths"),                         // JSON map of DeviceColumn name -> px width the user dragged to
-    DEVICE_SORT("device_sort"),                             // "<DeviceColumn name>,<asc|desc>"
+    HIDDEN_COLUMNS("hidden_columns"),                       // comma-separated column ids the table hides — a DeviceColumn name or a CustomColumn id
+    COLUMN_ORDER("column_order"),                           // comma-separated column ids, left to right
+    COLUMN_WIDTHS("column_widths"),                         // JSON map of column id -> px width the user dragged to
+    DEVICE_SORT("device_sort"),                             // "<column id>,<asc|desc>"
+    CUSTOM_COLUMNS("custom_columns"),                       // JSON list of CustomColumn the device table adds
     INSTALL_ID("install_id"),                               // random UUID identifying this install to log uploads
     INFO_COLLAPSED("info_collapsed"),                       // comma-separated InfoSection names the device details keeps shut
     THEME("theme", "LIGHT"),                                // ThemeMode name: light, dark, or follow the OS
@@ -59,7 +60,6 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     DEMO_MODE("demo_mode"),                                 // local builds only: show DemoTransport's invented devices
     MINIMIZE_TO_TRAY("minimize_to_tray"),                   // desktop: closing the last window leaves a tray icon
     ALWAYS_ON_TOP("always_on_top"),                         // desktop: keep windows above other apps
-    SHOW_TOOLTIPS("show_tooltips", true),                   // tables: show a value that doesn't fit on hover
     FILES_SHOW_HIDDEN("files_show_hidden", false),          // Files: show names starting with a dot
     LOGS_SCROLL_SIDEWAYS("logs_scroll_sideways", true),     // log table: scroll sideways, or end the message column at the edge
     DEVICES_COMPACT("devices_compact", false),              // device table: one line a row instead of name over model

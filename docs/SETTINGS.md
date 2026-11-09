@@ -74,14 +74,21 @@ checks in the morning. A newer release shows a toast with **Open**.
 | Full refresh (mins) | `FULL_REFRESH_MINS` | 60, 0–600, 0 = never | `PREF_REFRESH_TIME_MINS`, 60 (5–600) |
 | Refresh battery/disk (secs) | `DETAILS_REFRESH_SECS` | 60 | — |
 | TABLE › Columns *(desktop)* | `HIDDEN_COLUMNS` | `DeviceColumn.defaultHidden` | Manage Columns |
+| TABLE › Add a custom column *(desktop)* | `CUSTOM_COLUMNS` | none | `PREF_CUSTOM_APPS` |
 | TABLE › Reset table layout *(desktop)* | `COLUMN_ORDER`, `COLUMN_WIDTHS`, `HIDDEN_COLUMNS` | — | Manage Columns' reset |
 | TABLE › Compact device rows | `DEVICES_COMPACT` | false | — |
-| TABLE › Show Tooltips | `SHOW_TOOLTIPS` | true | — |
 | BUILT-IN MIRROR › Mirror interval (ms) | `MIRROR_INTERVAL_MS` | 250 | 250, hard-coded |
 | BUILT-IN MIRROR › Mirror windows at once | `MAX_MIRROR_WINDOWS` | 8 | — |
 
 Columns is a `MultiSelectOptionsDialog` through `DeviceTableState.setHidden`, which won't hide every
-column — the same rule as the header menu's `toggleHidden`.
+column — the same rule as the header menu's `toggleHidden`. It lists custom columns with the
+built-ins. Reset table layout keeps the custom columns (they go back to the end, shown); Settings ›
+Reset clears them along with every other pref, through `DeviceTableState.reload`.
+
+Add a custom column opens `CustomColumnDialog`, the same one a header's right-click opens — see
+[UI-PORT.md](UI-PORT.md#custom-columns). `CUSTOM_COLUMNS` is a JSON list of `CustomColumn`. The
+Swing app's `PREF_CUSTOM_APPS` lines aren't read: the two apps keep their prefs apart, and QUERY
+isn't supported.
 
 ### Logs
 
@@ -165,8 +172,8 @@ screenshots, see [MOBILE-UI.md](MOBILE-UI.md#demo-devices)), View Logs, and the 
 
 Each waits on the feature it configures:
 
-- **Custom columns** (`PREF_CUSTOM_APPS`, `LABEL:VER|PROP|QUERY:VALUE` lines) — `DeviceColumn` needs
-  dynamic columns first.
+- **QUERY custom columns** (a `content://` URI read with `content query`) — VER and PROP are ported
+  as App version and System property; QUERY hasn't been asked for.
 - **Stats history** (`PREF_STATS_RETENTION_DAYS`, 3 days, 1–30) — waits on the Stats screen.
 - **Use root** (`PREF_USE_ROOT`, false) — waits on the file explorer running `su -c`.
 - **Share my devices** (`PREF_SERVER_ENABLED`, port 8765, device name) — waits on hosting.

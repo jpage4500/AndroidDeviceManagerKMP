@@ -373,7 +373,22 @@ internal class DemoShell(private val fleet: List<DemoDevice>) {
             "  technology: Li-ion",
         ).joinToString("\n") to 0
         "power" -> "  mWakefulness=${if (device.screenOff) "Asleep" else "Awake"}" to 0
+        "package" -> packageDump(device, rest.getOrNull(1)) to 0
         else -> "" to 0
+    }
+
+    /**
+     * the lines of `dumpsys package <pkg>` a custom column reads. The fleet's own app is on a few
+     * different builds, so the version filter chips have something to show; a package the device
+     * doesn't have prints no `versionName=`, as a real one doesn't.
+     */
+    private fun packageDump(device: DemoDevice, pkg: String?): String {
+        if (pkg == null || pkg !in PACKAGES) return ""
+        val version = when (pkg) {
+            "com.acme.inventory" -> INVENTORY_BUILDS[device.index % INVENTORY_BUILDS.size]
+            else -> "${pkg.length % 9 + 1}.${pkg.hashCode().mod(20)}.${device.sdk.toIntOrNull()?.mod(5) ?: 0}"
+        }
+        return "Packages:\n  Package [$pkg] (demo):\n    versionCode=1 minSdk=26 targetSdk=35\n    versionName=$version"
     }
 
     private fun wm(device: DemoDevice, rest: List<String>): Pair<String, Int> = when (rest.firstOrNull()) {
@@ -482,6 +497,9 @@ internal class DemoShell(private val fleet: List<DemoDevice>) {
     private companion object {
         const val REBOOT_MS = 25_000L
         const val LOGCAT_DUMP_LINES = 40
+
+        // most of the fleet on the current build, a few behind — what an inventory column is for
+        val INVENTORY_BUILDS = listOf("3.5.0", "3.5.0", "3.4.1", "3.5.0", "3.4.1", "3.3.9", "3.5.0")
 
         val PACKAGES = listOf(
             "android", "com.acme.inventory", "com.android.chrome", "com.android.phone", "com.android.settings",

@@ -80,7 +80,7 @@ bar in `DeviceHeader.kt`):
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Header** — the title, filter chips that each count what they'd leave, search (⌘F), refresh and
+**Header** — the title, filter chips (names only, no counts), search (just start typing), refresh and
 Connect. The Swing toolbar is gone: Settings is in the sidebar, and everything that acts on a device
 is in the selection bar, the row's menu, or both.
 
@@ -91,9 +91,11 @@ drawing no power — a bad hub port), Low battery (≤ 20%), Low storage (≥ 90
 while it would narrow the list — not at 0, and not when it matches every device — except the one
 that's on. How a device is connected is a column to sort by, not a chip.
 
-After a rule, **group chips**: one per OS version ("Android 14 12", newest first) and one per Custom 1
-or Custom 2 value (behind a tag icon, A to Z) that more than one device shares and not every device
-does — `groupChips` in `DeviceHeader.kt`. They follow the same keep-the-one-that's-on rule, and the
+After a rule, **group chips**: one per OS version ("Android 14 12", newest first), one per Custom 1
+or Custom 2 value (behind a tag icon, A to Z), and one per value of each custom column on show
+("Inventory 3.4.1 6", behind a tag; app versions newest first, properties A to Z with numbers as
+numbers) that more than one device shares and not every device does — `groupChips` in
+`DeviceHeader.kt`. They follow the same keep-the-one-that's-on rule, and the
 row scrolls sideways when they outgrow it.
 
 **Search** highlights, it doesn't filter — the same rule as the log. Every device stays where it is
@@ -201,12 +203,19 @@ What the table does today:
   `AUTO_RESIZE_SUBSEQUENT_COLUMNS`. Dragging an edge takes from or gives to the columns after it,
   and every shown width is written back, so after a drag the stored widths are the shown ones until
   the window next changes size. The last column's edge doesn't drag: nothing follows it to pay.
+- **Column identity:** the device table's columns are `TableColumn` — a `DeviceColumn` enum constant
+  or a `CustomColumn` — and `DeviceTableState` keeps order, hidden set, widths and sort by
+  `TableColumn.id`. A built-in's id is its enum name, which is what those prefs held before custom
+  columns, so older layouts still load. Its `all` and `visible` lists are set in the same call as
+  the change behind them, not derived on another dispatcher: a header drag swaps once per pointer
+  event and maps each swap's indices through `visible`, so a list a step behind sent the next swap
+  to the wrong column. See **Custom columns** below.
 - **Model column** is left out of the device table while rows are two lines, since the model is
   already under the name; Compact rows bring it back (unless hidden). Header reorder indices are
   mapped back onto `DeviceTableState.visible` for that reason.
 - **Tooltips:** rest the pointer on a cell and it answers with the value in full — but only when the
-  value didn't fit, which is what makes them worth leaving on. Off with **Show Tooltips** in
-  Settings.
+  value didn't fit, which is what makes them worth leaving on. Always on in Devices and Files;
+  Logs has its own pinned panel and switch.
 - **Chrome:** alternating stripes, a selection that greys out when the window loses focus, and a real
   desktop `VerticalScrollbar`/`HorizontalScrollbar` behind an `expect` (a no-op on mobile, where the
   platform draws its own).
@@ -242,6 +251,33 @@ Two other details worth keeping:
 **Rubber-band selection** works over empty space. A press on a row consumes its own gesture, so only
 a drag that started on blank space bands — and it uses `awaitRealPress`, or dragging another window
 across this one would select every row it passed.
+
+### Custom columns
+
+The Swing app's `LABEL:TYPE:VALUE` custom columns, less QUERY, as a form rather than a text box. A
+column is a `CustomColumn` (`data/TableColumn.kt`): an **App version** (a package's `versionName`) or
+a **System property** (a `getprop` key), with a header.
+
+- **Where:** right-click any header › **Add Column…** (it goes in just after that header), or
+  Settings › Table › **Add a custom column** (it goes on the end). A custom column's header menu also
+  has **Edit …** and **Remove …**.
+- **The dialog** (`CustomColumnDialog`): a two-way toggle for the type, the package or property
+  field, a fixed-height panel, then the header. While something is being typed the panel lists the
+  matching packages or property keys on the first preview device (`pm list packages`, or the
+  `getprop` already read); otherwise it's the **preview** — what the column would say on up to five
+  devices (the selection's ready ones, else the first ready ones), read 400 ms after typing stops,
+  with *not installed* / *not set* / *no answer* told apart. The header follows the field (the last
+  part of the name that says something: `org.telegram.messenger.web` → Messenger) until someone types
+  their own. The panel is fixed-height because a desktop dialog window packs to its content once.
+- **Reading the values** (`DeviceManager`): the fixed details batch carries one
+  `dumpsys package <pkg> | grep -m1 versionName=` per App version column, so a version costs no round
+  trip of its own and is re-read on every full refresh. A property comes from that batch's
+  `getprop`, whose whole map `DeviceManager` keeps per device (off `Device`, so row updates don't
+  compare 800 entries) — a new property column fills from it without asking any device. A column
+  added or changed is read at once by `watchCustomColumns`; values land in `Device.customValues`,
+  keyed by type and key, so renaming a column reads nothing again. Connections that send their own
+  details (`hasDeviceDetails`) don't run the batch, so their devices show these columns empty.
+- **Sorting** goes through `NaturalKey`, so `11.10.0` sorts above `11.9.2`.
 
 ### A menu can be about the column it was opened on
 
@@ -303,7 +339,7 @@ and where you were going pops a bubble.
 
 `DataTable` takes one `tooltip(row, column, clipped)` lambda and wires it to every cell. **Null turns
 the whole thing off and costs nothing per cell** — no wrapper, no gesture node — which is what the
-**Show Tooltips** setting sets it to.
+log viewer passes. Devices and Files always pass one; there is no setting for it.
 
 The `clipped` argument is the interesting half, and it is the Swing table's `getTextIfTruncated`
 question: *only tell me the values that didn't fit*. `TableText` already knows — `onTextLayout`
@@ -312,6 +348,10 @@ reads once the pause elapses. Nothing observes that state while composing, so th
 layout recomposes nothing. A column whose cell **can't** show its value at any width ignores
 `clipped` and answers regardless: Battery is a bar with no number on it, and Booted shows when a
 device came up rather than how long it has been up.
+
+The header follows the cells: in a table with tooltips, a column title cut short by a narrow column answers with its whole
+name, and one that fits says nothing. Its `CellTooltip` consumes no pointer events, so the bar's
+click-to-sort and drag-to-reorder still get every press — and a press puts the bubble away.
 
 The bubble is placed where the pointer was when the pause elapsed and then stays put — a tooltip that
 follows the cursor is a tooltip you can't read — and its `Popup` is **not** focusable, or it would
@@ -845,7 +885,7 @@ in the selection, one after another), Rename (one item), Copy Path, Delete in re
 selected, a hint that files dragged in upload here. Under the card, two cards side by side:
 **Places** — Internal storage, Download, Camera, Screenshots, Pictures, App data, Temp (adb), Device
 root — with the deepest one the open folder is inside marked and the device's storage bar under
-them; and the table, with Modified as `Oct 27, 10:42 AM` (the year instead of the time for an
+them; and the table — its columns always span the card, never scrolling sideways — with Modified as `Oct 27, 10:42 AM` (the year instead of the time for an
 older file), folders semibold, dot-files grey. A plain status line under both counts the items and
 the selection, then names the device. Dragging files over the table covers it with a dashed
 overlay naming the folder and the device. Dropped files go into the folder on screen — an APK too; Install is a button once it's there, and copies it to `/data/local/tmp` first,

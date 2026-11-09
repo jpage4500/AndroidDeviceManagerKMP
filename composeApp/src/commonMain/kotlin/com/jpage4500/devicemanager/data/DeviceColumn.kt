@@ -3,7 +3,8 @@ package com.jpage4500.devicemanager.data
 import com.jpage4500.devicemanager.util.*
 
 /**
- * every column the device table can show, in the order the Swing app declares them.
+ * every built-in column the device table can show, in the order the Swing app declares them —
+ * a [CustomColumn] is the other kind of [TableColumn].
  *
  * ported from `table/DeviceTableModel.Columns`. [defaultWidth] is a starting point only — a width
  * the user drags is kept in [com.jpage4500.devicemanager.data.AppPref.COLUMN_WIDTHS].
@@ -12,10 +13,10 @@ import com.jpage4500.devicemanager.util.*
  * decided in the table, because a battery is a bar and a name is an icon plus text.
  */
 enum class DeviceColumn(
-    val label: String,
-    val defaultWidth: Int,
+    override val label: String,
+    override val defaultWidth: Int,
     val hideByDefault: Boolean = false,
-) {
+) : TableColumn {
     NAME("Name", 160),
     SERIAL("Serial", 200),
     MODEL("Model", 110),
@@ -30,8 +31,10 @@ enum class DeviceColumn(
     BOOTED("Booted", 90, hideByDefault = true),
     ;
 
+    override val id: String get() = name
+
     /** the text a cell shows, and what a sort compares when [sortKey] has nothing better. */
-    fun text(device: Device): String? = when (this) {
+    override fun text(device: Device): String? = when (this) {
         NAME -> device.displayName
         SERIAL -> device.serial
         MODEL -> device.model
@@ -54,7 +57,7 @@ enum class DeviceColumn(
      * so the columns holding a number sort on the number and everything else on its text, folded to
      * lowercase so a sort doesn't put every capital first.
      */
-    fun sortKey(device: Device): Comparable<*>? = when (this) {
+    override fun sortKey(device: Device): Comparable<*>? = when (this) {
         BATTERY -> device.batteryLevel
         FREE -> device.freeSpace
         OS -> device.sdk?.toIntOrNull() ?: device.os?.substringBefore('.')?.toIntOrNull()

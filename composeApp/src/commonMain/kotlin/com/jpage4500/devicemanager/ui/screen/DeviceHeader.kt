@@ -44,7 +44,7 @@ sealed interface DeviceFilter {
 }
 
 /**
- * the fixed filter chips over the device table; each shows how many devices it would leave.
+ * the fixed filter chips over the device table.
  *
  * past All, every one counts a problem, so the row reads as the desk's health: on a good day it's
  * All on its own. How a device is connected is a column to sort by, not a filter.
@@ -73,12 +73,35 @@ enum class DeviceChip(val label: StringResource, val alert: Boolean = false) : D
 }
 
 /** a field whose values sort devices into groups: what a [GroupChip] filters on. */
-enum class GroupField(val label: StringResource, private val read: (Device) -> String?) {
+sealed interface GroupField {
+    fun read(device: Device): String?
+
+    fun valueOf(device: Device): String? = read(device)?.trim()?.takeIf { it.isNotEmpty() }
+}
+
+/** the fields every install has. */
+enum class FixedGroupField(val label: StringResource, private val reader: (Device) -> String?) : GroupField {
     OS(Res.string.chip_os, { it.os }),
     CUSTOM_1(Res.string.chip_value, { it.customProperty(Device.CUST_PROP_1) }),
     CUSTOM_2(Res.string.chip_value, { it.customProperty(Device.CUST_PROP_2) });
 
-    fun valueOf(device: Device): String? = read(device)?.trim()?.takeIf { it.isNotEmpty() }
+    override fun read(device: Device): String? = reader(device)
+}
+
+/**
+ * a custom column's values — "Inventory 3.4.1", the few devices still on an old build.
+ *
+ * keyed by the column's [CustomColumn.valueKey] rather than the column itself, so renaming it
+ * doesn't turn off a chip that's on.
+ */
+data class ColumnGroupField(val valueKey: String, val label: String, val versions: Boolean) : GroupField {
+    constructor(column: CustomColumn) : this(column.valueKey, column.label, column.type == CustomColumnType.VERSION)
+
+    override fun read(device: Device): String? = device.customValues[valueKey]
+
+    override fun equals(other: Any?): Boolean = other is ColumnGroupField && valueKey == other.valueKey
+
+    override fun hashCode(): Int = valueKey.hashCode()
 }
 
 /** the devices whose [field] reads [value] — a chip made from what the devices themselves say. */
@@ -87,21 +110,26 @@ data class GroupChip(val field: GroupField, val value: String) : DeviceFilter {
 }
 
 /**
- * a chip for every value of a [GroupField] that more than one device shares, with its count.
+ * a chip for every value of a [GroupField] that more than one device shares, with its count — the
+ * fixed fields, then each custom column in table order.
  *
  * one device on its own is a row to look at rather than a group to filter to, and a value every
- * device shares would only be All again. OS versions run newest first, the custom fields A to Z.
+ * device shares would only be All again. OS and app versions run newest first, everything else A
+ * to Z — numbers in it as numbers.
  */
-fun groupChips(devices: List<Device>): List<Pair<GroupChip, Int>> =
-    GroupField.entries.flatMap { field ->
+fun groupChips(devices: List<Device>, columns: List<CustomColumn>): List<Pair<GroupChip, Int>> {
+    val fields: List<GroupField> = FixedGroupField.entries + columns.map { ColumnGroupField(it) }.distinct()
+    return fields.flatMap { field ->
         val counts = devices.mapNotNull(field::valueOf).groupingBy { it }.eachCount()
             .filter { (_, count) -> count in 2 until devices.size }
-        val values = when (field) {
-            GroupField.OS -> counts.keys.sortedWith(compareByDescending<String> { versionKey(it) }.thenBy { it })
-            else -> counts.keys.sortedBy { it.lowercase() }
+        val values = when {
+            field == FixedGroupField.OS -> counts.keys.sortedWith(compareByDescending<String> { versionKey(it) }.thenBy { it })
+            field is ColumnGroupField && field.versions -> counts.keys.sortedByDescending { NaturalKey(it) }
+            else -> counts.keys.sortedBy { NaturalKey(it) }
         }
         values.map { GroupChip(field, it) to counts.getValue(it) }
     }
+}
 
 // "13" before "9", and "8.1" after "8": each part as a number, padded so they compare as text
 private fun versionKey(version: String): String =
@@ -179,7 +207,7 @@ fun DeviceHeader(
                         else -> Colors.chipWarn
                     }
                     FilterChip(
-                        label = stringResource(entry.label, count),
+                        label = stringResource(entry.label),
                         leading = dot?.let { { Box(Modifier.size(Dimens.chipDot).background(it, CircleShape)) } },
                         on = entry == chip,
                         onClick = { onChip(if (entry == chip) DeviceChip.ALL else entry) },
@@ -188,19 +216,26 @@ fun DeviceHeader(
             }
             // the groups the devices fall into, after the problems — plus the one that's on, kept
             // even once nothing matches it so it can be turned off
-            val found = remember(devices) { groupChips(devices) }
+            // only the custom columns on show: a hidden one is something nobody's looking at
+            val shownColumns by DeviceTableState.visible.collectAsState()
+            val columns = remember(shownColumns) { shownColumns.filterIsInstance<CustomColumn>() }
+            val found = remember(devices, columns) { groupChips(devices, columns) }
             val groups = if (chip is GroupChip && found.none { it.first == chip }) {
                 found + (chip to devices.count { chip.matches(it, staleBeforeMs) })
             } else found
             if (devices.isNotEmpty() && groups.isNotEmpty()) {
                 Box(Modifier.width(Dimens.hairline).height(Dimens.headerSeparator).background(Colors.divider))
-                groups.forEach { (group, count) ->
+                groups.forEach { (group, _) ->
                     val tagTint = if (group == chip) Colors.chipOnText else Colors.secondaryText
+                    val field = group.field
                     FilterChip(
-                        label = stringResource(group.field.label, group.value, count),
+                        label = when (field) {
+                            is FixedGroupField -> stringResource(field.label, group.value)
+                            is ColumnGroupField -> stringResource(Res.string.chip_column, field.label, group.value)
+                        },
                         // a custom field holds whatever was typed into it, so the tag says where
                         // the value came from
-                        leading = if (group.field == GroupField.OS) null else ({
+                        leading = if (field == FixedGroupField.OS) null else ({
                             PathIcon(GlyphPaths.TAG, size = Dimens.chipIcon, tint = tagTint)
                         }),
                         on = group == chip,

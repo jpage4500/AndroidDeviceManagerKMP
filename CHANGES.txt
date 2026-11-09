@@ -291,3 +291,11 @@
 - Devices: filter chips for each OS version or custom field value two or more devices share
 - Desktop: starts the adb server when it isn't already running
 - Mirror opens scrcpy by default instead of the built-in mirror
+- Devices: add columns showing an app's version or a system property
+- Devices: filter chips for each custom column value two or more devices share
+- Devices: removed the device count from the filter chips
+- Tables: a column title cut short shows its full name in a tooltip
+- Settings: removed Show Tooltips
+- Files: the table columns always fit the window instead of scrolling sideways
+- Files: ⌘F opens the Files page
+- Devices: fixed a phone number or custom field ending in __ADM_NEXT__

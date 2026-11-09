@@ -225,7 +225,7 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
             Item(stringResource(Res.string.menu_logs), enabled = ids.isNotEmpty(), shortcut = shortcut(Key.L)) {
                 PageManager.openLogs(ids)
             }
-            Item(stringResource(Res.string.menu_files), enabled = filesFor != null, shortcut = shortcut(Key.E)) {
+            Item(stringResource(Res.string.menu_files), enabled = filesFor != null, shortcut = shortcut(Key.F)) {
                 filesFor?.let(PageManager::openFiles)
             }
             Item(stringResource(Res.string.menu_screenshot), enabled = ids.isNotEmpty(), shortcut = screenshotKey) {

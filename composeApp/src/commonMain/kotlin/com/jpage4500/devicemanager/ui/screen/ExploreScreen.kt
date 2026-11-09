@@ -54,7 +54,6 @@ fun ExploreScreen(
     val widths by FileTableState.widths.collectAsState()
     val showHidden by SettingsManager.getBoolAsState(AppPref.FILES_SHOW_HIDDEN)
     val copyToClipboard = rememberClipboardCopy()
-    val showTooltips by SettingsManager.getBoolAsState(AppPref.SHOW_TOOLTIPS)
     val cellTooltip: (DeviceFile, FileColumn, Boolean) -> String? = { file, column, clipped ->
         column.text(file)?.takeIf { clipped }
     }
@@ -203,6 +202,9 @@ fun ExploreScreen(
                         rowKey = { it.path },
                         header = { it.label },
                         rowHeight = Dimens.tableRowHeight,
+                        // the columns always span the pane: a file list wider than its window hides
+                        // Size and Modified off to the right, behind a scroll nobody thinks to try
+                        fitColumns = true,
                         typeAheadText = { it.name },
                         onSelectionChange = { selection = it },
                         onSort = { browser.sortBy(it) },
@@ -210,7 +212,7 @@ fun ExploreScreen(
                         onActivate = ::openFolder,
                         // a path is the value most likely not to fit here, and the only thing worth
                         // saying about a cell that does fit is nothing
-                        tooltip = cellTooltip.takeIf { showTooltips },
+                        tooltip = cellTooltip,
                         rowMenu = { file, _ ->
                             if (file.isDirectory) {
                                 Item(stringResource(Res.string.files_open)) { openFolder(file) }
