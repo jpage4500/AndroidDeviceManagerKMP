@@ -207,6 +207,7 @@ object Dimens {
     val controlHeight = 34.dp
     val chipHeight = 28.dp
     val chipDot = 6.dp
+    val chipIcon = 12.dp
     val searchWidth = 200.dp
     val selectionBarHeight = 48.dp
     val cardCorner = 10.dp

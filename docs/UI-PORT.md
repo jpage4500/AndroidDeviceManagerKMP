@@ -91,6 +91,11 @@ drawing no power — a bad hub port), Low battery (≤ 20%), Low storage (≥ 90
 while it would narrow the list — not at 0, and not when it matches every device — except the one
 that's on. How a device is connected is a column to sort by, not a chip.
 
+After a rule, **group chips**: one per OS version ("Android 14 12", newest first) and one per Custom 1
+or Custom 2 value (behind a tag icon, A to Z) that more than one device shares and not every device
+does — `groupChips` in `DeviceHeader.kt`. They follow the same keep-the-one-that's-on rule, and the
+row scrolls sideways when they outgrow it.
+
 **Search** highlights, it doesn't filter — the same rule as the log. Every device stays where it is
 and the matching text in its cells, or on its tile in the icon view, is marked yellow; only the
 chips take devices away, so the rows don't reshuffle under the pointer as a name is typed. Typing

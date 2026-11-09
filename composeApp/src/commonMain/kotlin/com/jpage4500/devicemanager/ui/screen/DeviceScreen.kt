@@ -64,7 +64,7 @@ fun DeviceScreen(
     var historyOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var dropping by remember { mutableStateOf(false) }
-    var chip by remember { mutableStateOf(DeviceChip.ALL) }
+    var chip by remember { mutableStateOf<DeviceFilter>(DeviceChip.ALL) }
     val compact by SettingsManager.getBoolAsState(AppPref.DEVICES_COMPACT)
     // two-line rows already show the model under the name, so a Model column would say it twice
     val tableColumns = remember(columns, compact) {
