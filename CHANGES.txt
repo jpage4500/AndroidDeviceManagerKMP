@@ -305,3 +305,17 @@
 - Files: download a whole folder
 - Files: a long path fills the path bar instead of stopping halfway
 - Files: a folder that doesn't exist says so instead of showing as empty
+- Files: ⌘⌫ asks to delete the selected files
+- Files: a folder the shell can't read says No permission instead of showing as empty
+- Files: a folder the shell can't open shows a read-only folder icon
+- Files: removed Temp and Device root from Places
+- Scripts: Open in editor opens a text editor instead of running the script
+- Scripts: choose the editor in Settings
+- Scripts: copy a script's source from the preview
+- Scripts: a script runs once with the serial of every device it runs on
+- Scripts: a script that asks a question shows a prompt to answer it
+- Scripts: a script runs with the shell named on its first line
+- Scripts: drag the divider between a script's source and its results
+- Scripts: long lines in a script's source scroll sideways instead of wrapping
+- Scripts: Runs on starts at an All devices pill
+- Scripts: the list shows when each script last ran

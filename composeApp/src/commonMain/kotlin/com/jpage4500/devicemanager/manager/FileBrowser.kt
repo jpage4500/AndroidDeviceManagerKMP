@@ -63,6 +63,11 @@ class FileBrowser(private val deviceId: String) {
     /** the open folder isn't on the device — a bookmark made on another one, or a mistyped path. */
     val missing: StateFlow<Boolean> = _missing.asStateFlow()
 
+    private val _denied = MutableStateFlow(false)
+
+    /** the open folder is there but the shell can't list it — `/data/data`, say, without root. */
+    val denied: StateFlow<Boolean> = _denied.asStateFlow()
+
     private val _query = MutableStateFlow("")
 
     /** "Filter this folder" — kept here, with the folder, so a tab switch doesn't lose it. */
@@ -72,6 +77,9 @@ class FileBrowser(private val deviceId: String) {
     val sort: StateFlow<Pair<FileColumn, Boolean>> = _sort.asStateFlow()
 
     private var job: Job? = null
+
+    /** who the device's shell runs as — null until [start] has asked, or if it couldn't. */
+    private var shell: ShellId? = null
 
     // whether the first folder has been picked — a browser kept by a Files tab comes back to where
     // it was, not to Download again
@@ -87,8 +95,16 @@ class FileBrowser(private val deviceId: String) {
         job?.cancel()
         job = scope.launch {
             _loading.value = true
-            // a sync LIST of a missing folder answers with nothing rather than an error, so ask
-            val probe = DeviceManager.exec(deviceId, "[ -d $DOWNLOAD_PATH ] && echo yes").getOrNull()
+            // a sync LIST of a missing folder answers with nothing rather than an error, so ask —
+            // and who the shell is in the same round trip, for [listable]
+            val probe = DeviceManager.exec(
+                deviceId,
+                "[ -d $DOWNLOAD_PATH ] && echo yes; echo \"$ID_PREFIX$(id -u) $(id -G)\"",
+            ).getOrNull()
+            shell = probe?.lineSequence()?.firstOrNull { it.startsWith(ID_PREFIX) }?.let { line ->
+                val ids = line.removePrefix(ID_PREFIX).trim().split(' ').mapNotNull { it.toIntOrNull() }
+                ids.firstOrNull()?.let { ShellId(it, ids.drop(1).toSet()) }
+            }
             load(if (probe?.contains("yes") == true) DOWNLOAD_PATH else START_PATH)
         }
     }
@@ -106,15 +122,18 @@ class FileBrowser(private val deviceId: String) {
             .onSuccess {
                 // "." and ".." come back as ordinary entries; nothing wants to see them
                 val listed = it.filterNot { file -> file.name == "." || file.name == ".." }
-                // a sync LIST of a folder that isn't there answers with nothing, the same as an
-                // empty one — so only an empty answer costs the extra round trip to tell them apart
-                _missing.value = listed.isEmpty() && !exists(target)
+                // a sync LIST of a folder that isn't there, or one the shell can't read, answers
+                // with nothing, the same as an empty one — so only an empty answer costs the extra
+                // round trip to tell them apart
+                val check = if (listed.isEmpty()) check(target) else FolderCheck.READABLE
+                _missing.value = check == FolderCheck.MISSING
+                _denied.value = check == FolderCheck.DENIED
                 // a filter typed for one folder means nothing in the next
                 if (target != _path.value) _query.value = ""
                 // moved to even when missing, so Up and the crumbs lead somewhere real
                 _path.value = target
                 _files.value = listed
-                log.d("load: $target: ${listed.size} files${if (_missing.value) ", missing" else ""}")
+                log.d("load: $target: ${listed.size} files${if (check != FolderCheck.READABLE) ", $check" else ""}")
             }
             .onFailure {
                 _error.value = it.message
@@ -123,10 +142,45 @@ class FileBrowser(private val deviceId: String) {
         _loading.value = false
     }
 
-    private suspend fun exists(path: String): Boolean =
-        DeviceManager.exec(deviceId, "[ -d ${Utils.shellQuote(path)} ] && echo yes").getOrNull()
-            // no answer at all isn't proof it's missing; say empty rather than wrong
-            ?.contains("yes") ?: true
+    /**
+     * whether the shell may list [dir], from its mode bits and owner — false only when they say no.
+     * SELinux can still refuse a folder they allow; opening it then says No permission. Anything
+     * that isn't a folder, or whose owner the listing didn't carry (no `stat_v2`), counts as yes.
+     */
+    fun listable(dir: DeviceFile): Boolean {
+        val id = shell ?: return true
+        if (!dir.isDirectory || !dir.ownerKnown || id.uid == 0) return true
+        val bits = when {
+            dir.uid == id.uid -> dir.mode shr 6
+            dir.gid in id.groups -> dir.mode shr 3
+            else -> dir.mode
+        }
+        // listing a folder takes both read and search
+        return bits and 0b101 == 0b101
+    }
+
+    private data class ShellId(val uid: Int, val groups: Set<Int>)
+
+    private enum class FolderCheck { READABLE, MISSING, DENIED }
+
+    /**
+     * whether a folder that listed as empty is there, and readable. `ls` rather than `[ -r ]`: the
+     * mode bits can allow a read SELinux then refuses, and `ls` is refused the same way the listing was.
+     */
+    private suspend fun check(path: String): FolderCheck {
+        val quoted = Utils.shellQuote(path)
+        val answer = DeviceManager.exec(
+            deviceId,
+            "if [ -d $quoted ]; then ls $quoted >/dev/null 2>&1 && echo yes || echo denied; else echo no; fi",
+        ).getOrNull()
+        return when {
+            answer == null -> FolderCheck.READABLE // no answer isn't proof of anything; say empty rather than wrong
+            answer.contains("denied") -> FolderCheck.DENIED
+            answer.contains("yes") -> FolderCheck.READABLE
+            answer.contains("no") -> FolderCheck.MISSING
+            else -> FolderCheck.READABLE
+        }
+    }
 
     fun up(scope: CoroutineScope) {
         val parent = _path.value.trimEnd('/').substringBeforeLast('/', "")
@@ -303,6 +357,9 @@ class FileBrowser(private val deviceId: String) {
         /** where a browser opens: what's been downloaded on the phone is what gets pulled off it. */
         const val DOWNLOAD_PATH = "/sdcard/Download"
         const val PATH_DOWNLOADS = "downloads"
+
+        /** marks the `id` line in [start]'s probe. */
+        private const val ID_PREFIX = "id:"
 
         /** somewhere every Android version lets the shell write and `pm` read. */
         private const val SCRATCH = "/data/local/tmp"

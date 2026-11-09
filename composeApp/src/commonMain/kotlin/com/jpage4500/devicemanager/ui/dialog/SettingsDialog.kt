@@ -247,6 +247,17 @@ private fun GeneralTab() {
         SwitchSetting(Res.drawable.star, Res.string.settings_on_top, AppPref.ALWAYS_ON_TOP, showDivider = false)
     }
 
+    if (ScriptHost.supported) {
+        Section(Res.string.settings_section_scripts)
+        TextSetting(
+            icon = Res.drawable.script,
+            label = Res.string.settings_script_editor,
+            pref = AppPref.SCRIPT_EDITOR,
+            placeholder = stringResource(Res.string.settings_script_editor_hint),
+            showDivider = false,
+        )
+    }
+
     Section(Res.string.settings_section_preferences)
     ResetSetting()
 }

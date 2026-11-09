@@ -10,6 +10,7 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.*
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
@@ -51,6 +52,7 @@ fun ExploreScreen(
     val loading by browser.loading.collectAsState()
     val error by browser.error.collectAsState()
     val missing by browser.missing.collectAsState()
+    val denied by browser.denied.collectAsState()
     val sort by browser.sort.collectAsState()
     val query by browser.query.collectAsState()
     val widths by FileTableState.widths.collectAsState()
@@ -210,7 +212,7 @@ fun ExploreScreen(
                     // anything dropped here goes into the folder on screen — an APK included;
                     // installing one is a button once it's there
                     .fileDropTarget(
-                        enabled = error == null,
+                        enabled = error == null && !denied,
                         onDragChanged = { dropping = it },
                         onDrop = ::upload,
                     )
@@ -229,9 +231,23 @@ fun ExploreScreen(
                             )
                         }) else null,
                     )
+                    denied -> EmptyState(
+                        stringResource(Res.string.files_denied),
+                        stringResource(Res.string.files_denied_msg, path, deviceName),
+                    )
                     sorted.isEmpty() && !loading ->
                         EmptyState(stringResource(Res.string.files_empty), stringResource(Res.string.files_empty_msg))
                     else -> DataTable(
+                        // ⌘⌫ (Ctrl+Backspace) or Delete asks to delete the selection, as Finder does.
+                        // caught here as it bubbles up: the table lets command keys it doesn't claim
+                        // through, and Delete has no character for its type-ahead
+                        modifier = Modifier.onKeyEvent { event ->
+                            val meta = event.isMetaPressed || event.isCtrlPressed
+                            val asks = event.type == KeyEventType.KeyDown && selected.isNotEmpty() &&
+                                ((event.key == Key.Backspace && meta) || event.key == Key.Delete)
+                            if (asks) delete(selected)
+                            asks
+                        },
                         rows = sorted,
                         columns = FileColumn.entries,
                         widths = FileColumn.entries.associateWith { widths[it] ?: it.defaultWidth.dp },
@@ -278,7 +294,7 @@ fun ExploreScreen(
                             Item(stringResource(Res.string.files_delete)) { delete(listOf(file)) }
                         },
                     ) { file, column ->
-                        FileCell(file, column)
+                        FileCell(file, column, listable = browser.listable(file))
                     }
                 }
                 if (loading) {
@@ -306,7 +322,7 @@ private val VIDEOS = setOf("mp4", "mkv", "webm", "3gp", "mov")
 
 /** the name cell carries the icon; everything else is text. */
 @Composable
-private fun FileCell(file: DeviceFile, column: FileColumn) {
+private fun FileCell(file: DeviceFile, column: FileColumn, listable: Boolean) {
     if (column != FileColumn.NAME) {
         TableText(column.text(file))
         return
@@ -315,6 +331,7 @@ private fun FileCell(file: DeviceFile, column: FileColumn) {
         AppIcon(
             res = when {
                 file.isSymlink && file.isDirectory -> Res.drawable.folder_link
+                file.isDirectory && !listable -> Res.drawable.folder_readonly
                 file.isDirectory -> Res.drawable.folder
                 file.isSymlink -> Res.drawable.file_link
                 file.isApk -> Res.drawable.file_apk
@@ -326,6 +343,7 @@ private fun FileCell(file: DeviceFile, column: FileColumn) {
             },
             size = Dimens.icon,
             tint = when {
+                file.isDirectory && !listable -> Colors.secondaryText
                 file.isDirectory -> Colors.accent
                 file.isApk -> Colors.tabAccent
                 else -> Colors.secondaryText
@@ -463,8 +481,6 @@ private val PLACES = listOf(
     Place(Res.string.files_place_screenshots, Res.drawable.screenshot, "/sdcard/Pictures/Screenshots"),
     Place(Res.string.files_place_pictures, Res.drawable.folder, "/sdcard/Pictures"),
     Place(Res.string.files_place_app_data, Res.drawable.android, "/sdcard/Android/data"),
-    Place(Res.string.files_place_temp, Res.drawable.terminal, "/data/local/tmp"),
-    Place(Res.string.files_place_root, Res.drawable.root, "/"),
 )
 
 /**

@@ -42,3 +42,27 @@ fun VerticalSplitter(
         VerticalDivider(color = Colors.divider)
     }
 }
+
+/**
+ * the draggable divider between a pane and the one under it — [VerticalSplitter] turned on its side.
+ *
+ * Reports each drag as a change in px for the caller to apply to whatever it sizes by (a fraction,
+ * here), and [onDragStopped] once the drag ends — the moment to persist, rather than every frame.
+ */
+@Composable
+fun HorizontalSplitter(onDrag: (Float) -> Unit, onDragStopped: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .height(Dimens.splitterHandle)
+            .fillMaxWidth()
+            .rowResizeCursor()
+            .draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState(onDrag),
+                onDragStopped = { onDragStopped() },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        HorizontalDivider(color = Colors.divider)
+    }
+}

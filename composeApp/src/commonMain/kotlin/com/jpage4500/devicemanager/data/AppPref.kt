@@ -50,6 +50,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     SCRCPY_PATH("scrcpy_path"),                             // null = the scrcpy found on PATH
     SCRCPY_VIDEO_CODEC("scrcpy_video_codec", "h264"),       // --video-codec=
     SCRCPY_EXTRA_ARGS("scrcpy_extra_args"),                 // whitespace-separated flags after the ones below
+    SCRIPT_EDITOR("script_editor"),                         // desktop: the app Open in editor uses for a script; null = the OS text editor
     DEVICES_VIEW("devices_view", "LIST"),                   // DeviceView name: the Devices page as a table or as icons
     SHARE_NAME("share_name"),                               // desktop: what Share Devices calls this computer; null = its own name
     SHARE_TOKEN("share_token"),                             // desktop: Share Devices' auth token, kept so a phone that scanned it stays paired
@@ -83,6 +84,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     MAX_MIRROR_WINDOWS("max_mirror_windows", 8),            // how many mirrors can poll at once before the fleet suffers
     LOGS_MAX_LINES("logs_max_lines", 200_000),              // ring buffer per log tab — the Swing app's default
     LOGS_FONT_SIZE("logs_font_size", 13),                   // log table text size, ⌘+/⌘- adjusts it
+    SCRIPT_SOURCE_PCT("script_source_pct", 35),             // Scripts page: the source's share of source + results, dragged
     SIDEBAR_WIDTH("sidebar_width", 216),                    // desktop sidebar, in dp; under 150 it is the icon rail
     DEVICES_ICON_SIZE("devices_icon_size", 0),              // Devices icon view: glyph height in dp from the status bar slider; 0 = Fit, sized to show every device
     SHARE_PORT("share_port", 8765),                         // desktop: Share Devices' port — the Swing app's default

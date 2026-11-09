@@ -28,6 +28,7 @@ import org.jetbrains.compose.resources.stringResource
  * @param devices null when nothing has run yet, which shows [emptyTitle] and [emptyDetail]
  * @param title the header's text; "Results" unless the page has something better, like the command
  * @param onRetry the failed devices, to run again — offered once the run has finished
+ * @param onSend a line typed for the shown row while it runs — its stdin; null hides the field
  */
 @Composable
 fun RunResults(
@@ -39,6 +40,7 @@ fun RunResults(
     emptyDetail: String,
     modifier: Modifier,
     title: String = stringResource(Res.string.run_results),
+    onSend: ((deviceId: String, text: String) -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(Dimens.cardCorner)
     Column(modifier.clip(shape).border(Dimens.hairline, Colors.sidebarBorder, shape).background(Colors.listBg)) {
@@ -73,15 +75,17 @@ fun RunResults(
             EmptyState(emptyTitle, emptyDetail)
             return@Column
         }
+        // one row is the whole run: its output is what there is to see, without a click
+        val shownId = outputFor ?: devices.singleOrNull()?.deviceId
         ResultHeader()
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             itemsIndexed(devices, key = { _, it -> it.deviceId }) { index, device ->
-                ResultRow(device, striped = index % 2 == 1, selected = device.deviceId == outputFor) { onOutputFor(device.deviceId) }
+                ResultRow(device, striped = index % 2 == 1, selected = device.deviceId == shownId) { onOutputFor(device.deviceId) }
             }
         }
         HorizontalDivider(color = Colors.tableRule)
-        val shown = devices.firstOrNull { it.deviceId == outputFor }
-        Output(shown, Modifier.weight(1f).fillMaxWidth())
+        val shown = devices.firstOrNull { it.deviceId == shownId }
+        Output(shown, onSend, Modifier.weight(1f).fillMaxWidth())
     }
 }
 
@@ -150,7 +154,7 @@ private fun ResultRow(device: DeviceRun, striped: Boolean, selected: Boolean, on
 }
 
 @Composable
-private fun Output(device: DeviceRun?, modifier: Modifier) {
+private fun Output(device: DeviceRun?, onSend: ((String, String) -> Unit)?, modifier: Modifier) {
     Column(modifier.background(Colors.toolbarBg)) {
         Text(
             if (device == null) stringResource(Res.string.run_pick_result) else stringResource(Res.string.run_output, device.name),
@@ -161,22 +165,44 @@ private fun Output(device: DeviceRun?, modifier: Modifier) {
         )
         if (device == null) return@Column
         val lines = device.output
-        if (lines.isEmpty()) {
-            Text(stringResource(Res.string.run_no_output), style = MaterialTheme.typography.bodySmall,
-                color = Colors.secondaryText, modifier = Modifier.padding(horizontal = Dimens.rowPadding))
-            return@Column
-        }
-        val list = rememberLazyListState()
-        // follows the tail while the script is still printing
-        LaunchedEffect(lines) { list.scrollToItem(lines.lastIndex) }
-        SelectionContainer {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = Dimens.rowPadding), state = list) {
-                items(lines) { line ->
-                    Text(line, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = Colors.primaryText)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (lines.isEmpty()) {
+                Text(stringResource(Res.string.run_no_output), style = MaterialTheme.typography.bodySmall,
+                    color = Colors.secondaryText, modifier = Modifier.padding(horizontal = Dimens.rowPadding))
+            } else {
+                val list = rememberLazyListState()
+                // follows the tail while the script is still printing
+                LaunchedEffect(lines) { list.scrollToItem(lines.lastIndex) }
+                SelectionContainer {
+                    LazyColumn(Modifier.fillMaxSize().padding(horizontal = Dimens.rowPadding), state = list) {
+                        items(lines) { line ->
+                            Text(line, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, color = Colors.primaryText)
+                        }
+                    }
                 }
             }
         }
+        if (onSend != null && device.state == RunState.RUNNING) {
+            ReplyField(Modifier.fillMaxWidth().padding(Dimens.gap)) { onSend(device.deviceId, it) }
+        }
     }
+}
+
+/** a line for a running script's stdin: Enter sends it, empty or not — an empty one is a bare Enter. */
+@Composable
+private fun ReplyField(modifier: Modifier, onSend: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    AppTextField(
+        value = text,
+        onValueChange = { text = it },
+        modifier = modifier,
+        hint = stringResource(Res.string.run_reply_hint),
+        onSubmit = {
+            onSend(text)
+            text = ""
+        },
+        textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+    )
 }
 
 /** 850ms, 12.4s, 3m 04s — how long a run took, to the precision that matters at that length. */

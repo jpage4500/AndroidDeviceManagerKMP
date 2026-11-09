@@ -61,6 +61,7 @@ The *Swing* column is that app's pref and default, from
 | Check for updates *(desktop)* | `CHECK_UPDATES` | true | `PREF_CHECK_UPDATES`, true |
 | WINDOW › Stay in the menu bar when closed *(desktop)* | `MINIMIZE_TO_TRAY` | false | `PREF_EXIT_TO_TRAY`, false |
 | WINDOW › Keep windows on top *(desktop)* — dialogs too, or they sink behind their owner | `ALWAYS_ON_TOP` | false | `PREF_ALWAYS_ON_TOP`, false |
+| SCRIPTS › Script editor *(desktop)* — an app name on a Mac (`open -a`), a program elsewhere | `SCRIPT_EDITOR` | none: `open -t`, the OS text editor | — |
 | PREFERENCES › Reset all settings | — | — | Reset Preferences |
 
 **Check for updates** is `UpdateManager.startBackgroundChecks()`, started from desktop `initApp`. It
