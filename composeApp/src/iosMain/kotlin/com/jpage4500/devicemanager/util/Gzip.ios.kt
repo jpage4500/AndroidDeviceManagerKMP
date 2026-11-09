@@ -97,3 +97,32 @@ private const val WINDOW_BITS = 15 + 32
 
 /** how much is inflated at a time; a batch of log lines is a few KB compressed. */
 private const val CHUNK = 32 * 1024
+
+/** zlib's one-shot `compress2`, at its fastest level — the output only ever lives as long as a frame. */
+@OptIn(ExperimentalForeignApi::class)
+actual fun zlibDeflate(bytes: ByteArray): ByteArray {
+    val bound = compressBound(bytes.size.convert()).toInt()
+    val out = ByteArray(bound)
+    val written = memScoped {
+        val length = alloc<uLongVar>()
+        length.value = bound.convert()
+        val status = bytes.usePinned { input ->
+            out.usePinned { output ->
+                compress2(
+                    output.addressOf(0).reinterpret(),
+                    length.ptr,
+                    input.addressOf(0).reinterpret(),
+                    bytes.size.convert(),
+                    Z_BEST_SPEED,
+                )
+            }
+        }
+        if (status != Z_OK) {
+            log.w("zlibDeflate: compress2 answered $status")
+            -1
+        } else {
+            length.value.toInt()
+        }
+    }
+    return if (written < 0) ByteArray(0) else out.copyOf(written)
+}

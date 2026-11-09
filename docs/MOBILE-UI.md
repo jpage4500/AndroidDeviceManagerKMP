@@ -202,8 +202,9 @@ screen: `AboutDialog` — `ui/dialog/AboutDialog.kt`
 | "Support / Feedback" | `SupportDialog`: say what happened, and the app log goes with it |
 | "Check for updates" | `CheckUpdatesDialog` |
 | "Debug Mode" | `SettingSwitchItem` — raises what the log file keeps from Info to Debug |
+| "Demo Mode" | `SettingSwitchItem`, **local builds only** — the 40 demo devices in place of real ones (see [Demo devices](#demo-devices)) |
 | "View Logs" | `LogFileDialog` |
-| version line | `Android Device Manager  ·  v1.0.n  ·  build date`, at the foot |
+| version line | `Android Device Manager  ·  v2.0.n  ·  build date`, at the foot |
 
 ### over any of them
 
@@ -258,7 +259,7 @@ which one a row came from.
 Two things had to change first, and both are the load-bearing part of the design:
 
 - **A connection is identified by where it goes**, as a URI: `adb://10.0.0.4:5037`,
-  `server://imac.local:8765`, `test://0.0.0.0`. Derived rather than minted, so the same desk reached
+  `server://imac.local:8765`, `demo://devices`. Derived rather than minted, so the same desk reached
   twice is one connection — which is also what stops a saved server and a remote URL in Settings
   showing every device twice. `DeviceTransport.id`.
 - **A device is identified by its connection *and* its serial**, written `<connection id>/<serial>`
@@ -280,7 +281,7 @@ same as being forgotten.
 own way to an adb server would happily read the other desk's `emulator-5554`. Both real routes
 implement it — an adb server runs `logcat` over `exec:`, a Device Manager server pushes it over
 `/ws/logs` — and `canStreamLogs` is what a log window checks before it opens on a device it can't
-follow, which now means only the test devices.
+follow — every connection can now, the demo devices included.
 
 What this leaves ready is the route that isn't written yet: a **direct `adbd` transport** is one more
 `DeviceTransport` with an id of its own, added with `DeviceManager.addConnection`, and every screen
@@ -967,21 +968,43 @@ there, and there was no way in. See below.
 it ever matters, is a device already on legacy `adb tcpip 5555` with plain RSA auth — route 1's
 direct case, and what [scrcpy-mobile](https://github.com/wsvn53/scrcpy-mobile) ships with.
 
-### Test devices
+### Demo devices
 
-`0.0.0.0` in either Connect field loads `FakeTransport` — an invented bench of six devices covering
-the states a row has to draw differently: USB and wireless, online, offline, unauthorised, and one
-still booting.
+**Settings › About › Demo Mode**, shown only on a local build (`PlatformUtils.isDebugBuild()`),
+shows `transport/demo/DemoTransport` — forty invented devices — **in place of** every real
+connection, for screenshots and for working on a screen with nothing plugged in. The real ones aren't
+closed: `DeviceManager.setDemoMode` detaches them into a `parked` list, still open and untracked,
+and anything connected while it's on (a saved server, Settings' adb server) waits there too; turning
+it off re-attaches them as they were. `WirelessManager.setDemo` does the same for Connect's list of
+wireless devices — in Demo Mode it starts empty, holds only the demo ones and saves nothing, so
+neither list leaks into the other. `DeviceManager.setDemoMode` refuses on a release build whatever the
+saved setting says, so a pref carried over from a dev build can't put them in a shipped app. It
+replaced the old `0.0.0.0`-in-the-Connect-field trick and its six-device `FakeTransport`.
 
-A route rather than a debug menu, and deliberately so: a fake fleet is another way of reaching
-devices, so it goes behind `DeviceTransport` like the real ones and every screen gets it without
-knowing. It answers the **real** `DeviceDetails` batches with plausible `df`, `dumpsys battery`,
-`getprop` and Parcel-dump output, so the parsers run for real and a row fills in the way it does on a
-bench — a fake transport that answers with an error only exercises the failure paths. What it cannot
-fake is a screen: `screencap` returns a PNG and inventing one means writing an encoder, so mirror and
-screenshot fail here with a message that says why.
+A connection rather than a branch, and deliberately so: the fleet goes behind `DeviceTransport` like
+the real routes, with the id `demo://devices`, so every screen works on it without knowing — and
+that id is what tells a demo `emulator-5554` from a real one in the same table. Inside it:
 
-Intercepted in `DeviceManager.connect`, so the desktop's own Connect dialog reaches it too.
+- `DemoFleet` — the forty, from a fixed seed: phones, three tablets, an emulator and five on Wi-Fi,
+  most named `Rack A-01`… for a hub and port, and one of every state a row draws differently —
+  offline, unauthorised, booting, not charging, low battery, low storage, screen off, and two that
+  stop answering after 15 s so the Not responding chip has something to count.
+- `DemoShell` — a small `sh` that answers the app's **real** commands: the `DeviceDetails` batches
+  (so the parsers run for real), `ps`, `pm install`, `rm`/`mkdir`/`mv`, `echo … > file`, `$?`, pipes
+  into `grep`/`head`/`tail`/`wc`. Anything else prints `inaccessible or not found` with status 127,
+  as a phone does. Nicknames and custom fields written to it read back.
+- `DemoFiles` — each device's file system in memory, seeded with a camera roll, screenshots and
+  downloads, and changed for real by Files: uploads, deletes, renames and new folders stick until
+  Demo Mode is turned off.
+- `DemoLog` — ten minutes of `-v threadtime` history and then a live trickle: a made-up inventory
+  app syncing over HTTP, system chatter, warnings, JSON bodies for the message viewer, and the
+  occasional crash with its stack trace.
+- `DemoScreen` — a drawn screen (home, settings list, chat, or a card grid), encoded by
+  `util/PngEncoder` over the `zlibDeflate` `expect`, so screenshots, the mirror and the details
+  preview all have a picture. Shapes only — no font — so no one mistakes it for a real app.
+
+What can't work: scrcpy and Scripts both run a program on this computer against adb, and there is no
+adb behind these devices.
 
 ## Connections and the app lifecycle
 
@@ -1115,8 +1138,7 @@ Each step leaves the app usable and compiles on all three targets.
    `manager/ServerManager.kt` over a new `AppPref.SAVED_SERVERS` — drawn in the device list as
    `ui/screen/ServerGroup.kt`, a computer with its devices inside it — and
    `RemoteHttpTransport.info()` on `/api/info` as the thing Connect actually calls. The two QR rows
-   are drawn disabled, so the panel is the real shape rather than a stub. `0.0.0.0` in either field
-   loads `transport/FakeTransport.kt`.
+   are drawn disabled, so the panel is the real shape rather than a stub.
 2. ~~**The device sheet.**~~ **Done.** `ui/screen/DeviceSheet.kt`: `DeviceStatus` and
    `DeviceDetails` inside a `BaseDialog`, the 2×2 grid of action tiles above them, and Restart /
    Disconnect as `SettingItem` rows under Commands, between the two. Mirror and Screenshot are wired;

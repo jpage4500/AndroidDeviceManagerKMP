@@ -680,6 +680,8 @@
     <string name="about_update_failed">Couldn't check for updates: %1$s</string>
     <string name="about_open">Open</string>
     <string name="about_debug">Debug Mode</string>
+    <string name="about_demo">Demo Mode</string>
+    <string name="about_demo_desc">Shows 40 made-up devices in place of real ones, for screenshots. Local builds only.</string>
     <string name="about_view_logs">View Logs</string>
     <string name="about_no_logs">Nothing logged yet.</string>
     <string name="about_open_file">Open File</string>

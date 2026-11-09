@@ -56,6 +56,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     // -- boolean settings --
     // -------------------------------------------------------------
     DEBUG_MODE("debug_mode"),                               // log debug lines to file, and log http bodies
+    DEMO_MODE("demo_mode"),                                 // local builds only: show DemoTransport's invented devices
     MINIMIZE_TO_TRAY("minimize_to_tray"),                   // desktop: closing the last window leaves a tray icon
     ALWAYS_ON_TOP("always_on_top"),                         // desktop: keep windows above other apps
     SHOW_TOOLTIPS("show_tooltips", true),                   // tables: show a value that doesn't fit on hover

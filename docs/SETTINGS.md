@@ -158,7 +158,8 @@ Each field applies through `DeviceManager.applySettings()` when its dialog is co
 ### About
 
 `AboutBody`, shared with `AboutDialog`: Support / Feedback, Check for updates, Debug Mode (Swing's
-Log Level, as a switch — Info or Debug), View Logs, and the version line.
+Log Level, as a switch — Info or Debug), Demo Mode (local builds only — forty invented devices for
+screenshots, see [MOBILE-UI.md](MOBILE-UI.md#demo-devices)), View Logs, and the version line.
 
 ## Not ported yet
 

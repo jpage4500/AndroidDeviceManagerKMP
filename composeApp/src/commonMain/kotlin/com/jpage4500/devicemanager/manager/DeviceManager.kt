@@ -3,6 +3,7 @@ package com.jpage4500.devicemanager.manager
 import com.jpage4500.devicemanager.adb.*
 import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.transport.*
+import com.jpage4500.devicemanager.transport.demo.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
@@ -96,6 +97,11 @@ object DeviceManager {
     private var refreshJob: Job? = null
     private var started = false
 
+    // Demo Mode: on, the demo devices are the only connection, and every real one waits in
+    // [parked] — open, untracked — until it's turned off. See [setDemoMode]
+    private var demoMode = false
+    private val parked = mutableListOf<DeviceTransport>()
+
     /**
      * the transport the settings describe.
      *
@@ -123,6 +129,8 @@ object DeviceManager {
         started = true
         log.d("start")
         startRefreshTimer()
+        // first, so the real connections below go straight to waiting and never flash up
+        if (SettingsManager.getBoolean(AppPref.DEMO_MODE)) setDemoMode(true)
         applySettings()
         // a saved Device Manager instance is a connection in its own right, so the ones that were
         // connected when the app last closed come back the same way the settings one does
@@ -152,9 +160,15 @@ object DeviceManager {
      * showing every device twice.
      */
     fun addConnection(transport: DeviceTransport) {
-        if (_connections.value.any { it.id == transport.id }) {
+        if (_connections.value.any { it.id == transport.id } || parked.any { it.id == transport.id }) {
             log.d("addConnection: ${transport.id} is already attached")
             transport.close()
+            return
+        }
+        // Demo Mode shows the demo devices alone; anything connected meanwhile waits its turn
+        if (demoMode && transport.id != DemoTransport.ID) {
+            log.i("addConnection: ${transport.id} held until Demo Mode is off")
+            parked += transport
             return
         }
         log.i("addConnection: ${transport.id}")
@@ -162,17 +176,52 @@ object DeviceManager {
         track(transport)
     }
 
+    /**
+     * add or drop Demo Mode's invented devices — see [DemoTransport].
+     *
+     * refused outside a local build, whatever the setting says: the switch only shows on one, and a
+     * setting carried over from a dev build must not put forty fake phones in a released app.
+     */
+    fun setDemoMode(on: Boolean) {
+        val next = on && PlatformUtils.isDebugBuild()
+        if (next == demoMode) return
+        log.i("setDemoMode: $next")
+        demoMode = next
+        WirelessManager.setDemo(next)
+        if (next) {
+            // the real connections step aside rather than close, so turning it off brings back
+            // exactly what was there — the same desks, the same direct devices, no re-dialling
+            _connections.value.forEach { detach(it.id)?.let { transport -> parked += transport } }
+            addConnection(DemoTransport())
+        } else {
+            removeConnection(DemoTransport.ID)
+            val waiting = parked.toList()
+            parked.clear()
+            waiting.forEach { addConnection(it) }
+        }
+    }
+
     /** stop reading one connection, and drop the rows that came from it. */
     fun removeConnection(id: String) {
-        val transport = _connections.value.firstOrNull { it.id == id } ?: return
-        log.i("removeConnection: $id")
+        parked.firstOrNull { it.id == id }?.let { held ->
+            parked.remove(held)
+            held.close()
+            return
+        }
+        detach(id)?.close()
+    }
+
+    /** stop reading [id] and drop its rows, handing the transport back still open. */
+    private fun detach(id: String): DeviceTransport? {
+        val transport = _connections.value.firstOrNull { it.id == id } ?: return null
+        log.i("detach: $id")
         trackJobs.remove(id)?.cancel()
         detailJobs.remove(id)?.cancel()
         _connections.value = _connections.value.filterNot { it.id == id }
         _devices.update { list -> list.filterNot { it.connectionId == id } }
         announced.update { it - id }
         dropSelection { key -> key is String && Device.connectionOf(key) == id }
-        transport.close()
+        return transport
     }
 
     /** the connection a device id names, or null when it has been disconnected since. */
@@ -664,12 +713,6 @@ object DeviceManager {
      * instance manages its own devices and has no endpoint for it.
      */
     suspend fun connect(host: String, port: Int): Result<String> {
-        // 0.0.0.0 loads the invented fleet instead — see FakeTransport for why it is a route rather
-        // than a debug menu. intercepted here so both Connect fields reach it
-        if (host == FakeTransport.HOST) {
-            addConnection(FakeTransport())
-            return Result.success("showing test devices")
-        }
         val transport = dialler()
             ?: return Result.failure(IllegalStateException("no adb server to connect through"))
         log.i("connect: $host:$port through ${transport.id}")

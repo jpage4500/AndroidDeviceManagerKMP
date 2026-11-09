@@ -1,5 +1,33 @@
 # docs
 
+The repo's own `README.md` is the public, user-facing page — it's copied to the release repo along
+with every file it links to, so it never links in here. This is the developer entry point.
+
+## Building
+
+Needs **JDK 21** (Gradle 8.14 can't run on Java 25).
+
+```sh
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home
+
+./gradlew :composeApp:run                # desktop
+./gradlew :androidApp:assembleDebug      # android APK
+open iosApp/iosApp.xcodeproj             # ios — set your signing team on first open
+```
+
+The desktop ships through jDeploy to
+[AndroidDeviceManager2](https://github.com/jpage4500/AndroidDeviceManager2) on every merge to main
+— see [RELEASING.md](RELEASING.md).
+
+## How it reaches devices
+
+Through an **adb server** on port 5037 — the same route the Swing app takes, and the only one that
+reaches USB-attached devices. A phone can point at a desktop's adb server over the LAN, or at a
+running Device Manager's HTTP API. [ADB-TRANSPORTS.md](ADB-TRANSPORTS.md) explains why, and what it
+would take to talk to `adbd` directly instead.
+
+## The docs
+
 | File | What's in it |
 |---|---|
 | [ADB-TRANSPORTS.md](ADB-TRANSPORTS.md) | **Read this first.** The research this project was started from: the two adb protocols, why USB pins the desktop to the adb server, and the three routes a phone can take to a device |

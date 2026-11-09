@@ -121,8 +121,14 @@ fun DeviceHeader(
             color = Colors.primaryText,
             modifier = Modifier.padding(end = Dimens.gap),
         )
-        if (devices.isNotEmpty()) {
-            DeviceChip.entries.forEach { entry ->
+        // the chips take what the controls on the right leave and scroll inside it, so a narrow
+        // window or a bad day's worth of chips never pushes Search and Connect off the edge
+        Row(
+            Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.gap),
+        ) {
+            if (devices.isNotEmpty()) DeviceChip.entries.forEach { entry ->
                 val count = devices.count { entry.matches(it, staleBeforeMs) }
                 if (entry == DeviceChip.ALL || entry == chip || count in 1 until devices.size) {
                     FilterChip(
@@ -138,7 +144,6 @@ fun DeviceHeader(
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
         if (devices.isNotEmpty()) {
             SearchBox(filter, onFilterChange, filterFocus, onFilterFocused)
             DeviceViewToggle(view, onView)

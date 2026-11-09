@@ -19,6 +19,10 @@ object WirelessManager {
     private val _recent = MutableStateFlow(load())
     val recent: StateFlow<List<WirelessDevice>> = _recent.asStateFlow()
 
+    // Demo Mode: the list is the demo devices' alone and lives in memory, so neither list leaks
+    // into the other — see [setDemo]
+    private var demo = false
+
     // per connection, the serials online the last time its list arrived, so a device coming back is
     // stamped with a new "last connected" and one that simply stayed connected isn't re-saved on
     // every push
@@ -117,11 +121,23 @@ object WirelessManager {
         }
     }
 
+    /**
+     * Demo Mode on or off: on starts an empty list that only the demo devices fill and nothing
+     * saves, off reads the saved one back — so a screenshot of Connect shows no real address, and
+     * the invented ones never end up in the real list.
+     */
+    fun setDemo(on: Boolean) {
+        if (on == demo) return
+        demo = on
+        online.clear()
+        _recent.value = if (on) emptyList() else load()
+    }
+
     private fun save(list: List<WirelessDevice>) {
         // newest last, oldest dropped
         val trimmed = list.takeLast(WirelessDevice.MAX_RECENT)
         _recent.value = trimmed
-        SettingsManager.setString(AppPref.RECENT_WIRELESS, JsonUtils.toJson(trimmed))
+        if (!demo) SettingsManager.setString(AppPref.RECENT_WIRELESS, JsonUtils.toJson(trimmed))
     }
 
     private fun load(): List<WirelessDevice> =

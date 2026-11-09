@@ -285,3 +285,6 @@
 - Devices: removed the USB and Wi-Fi filter chips
 - Devices: filter chips for devices not charging, low on storage or not responding
 - Devices: a filter chip only shows when it would narrow the list
+- About: Demo Mode shows 40 made-up devices in place of real ones, on local builds only
+- Files: fixed every file showing the wrong modified date
+- Devices: the filter chips scroll sideways instead of pushing Search and Connect off the edge

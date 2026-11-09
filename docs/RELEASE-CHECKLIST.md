@@ -144,13 +144,11 @@ client" on iPhone is for — have the remote-control use case written up.
 
 ## 6. Public-facing content
 
-1. **Write a user README.** The current `README.md` is the developer one — how to build, links into
-   `docs/` — and `sync_public_readme.sh` copies *every local file the README links to* into the
-   public repo. Synced as-is, it would publish `docs/RELEASING.md` and `docs/ADB-TRANSPORTS.md` out
-   of a private repo. Either rewrite `README.md` for users (what it does, screenshots, install link,
-   requirements: adb on the PATH or in Settings) and move the build notes to `docs/`, or point the
-   sync script at a separate `PUBLIC-README.md`.
-2. Screenshots for that README, taken from a release build.
+1. ~~Write a user README~~ — done: `README.md` is now the user page the sync publishes; the
+   developer notes moved to `docs/README.md`.
+2. ~~Screenshots~~ — six desktop ones in `resources/screenshots/`, all linked from the README.
+   Every image the README links is published, so check one for real phone numbers, IMEIs and file
+   names before it goes in.
 3. A line on the Swing repo's README pointing to the new app, once §1a is decided.
 
 ## 7. Before tagging the first release

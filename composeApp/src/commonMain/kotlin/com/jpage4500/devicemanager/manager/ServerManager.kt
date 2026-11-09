@@ -44,13 +44,6 @@ object ServerManager {
      * once it answers does the connection join the list.
      */
     suspend fun connect(server: SavedServer): Result<ServerInfo> {
-        // 0.0.0.0 loads the invented fleet instead of dialling anything — the same hook
-        // DeviceManager.connect has, repeated here because this is now the only address field on a
-        // phone. See FakeTransport
-        if (server.host == FakeTransport.HOST) {
-            DeviceManager.addConnection(FakeTransport())
-            return Result.success(ServerInfo(serverName = "test devices"))
-        }
         log.i("connect: ${server.key}")
         val transport = RemoteHttpTransport(server.baseUrl, server.token)
         val result = transport.info()

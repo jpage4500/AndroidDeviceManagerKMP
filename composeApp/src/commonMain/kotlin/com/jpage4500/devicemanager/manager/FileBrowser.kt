@@ -16,7 +16,7 @@ enum class FileColumn(val label: String, val defaultWidth: Int) {
     fun text(file: DeviceFile): String? = when (this) {
         NAME -> file.name
         SIZE -> if (file.isDirectory) "—" else Utils.bytesToDisplayString(file.size)
-        DATE -> file.modifiedMs.takeIf { it > 0 }?.let { modified(it * MILLIS) }
+        DATE -> file.modifiedMs.takeIf { it > 0 }?.let { modified(it) }
     }
 
     /** `Oct 27, 10:42 AM` this year; `Jan 1, 2009` for anything older, where the time says nothing. */
@@ -30,11 +30,6 @@ enum class FileColumn(val label: String, val defaultWidth: Int) {
         NAME -> file.name.lowercase()
         SIZE -> file.size
         DATE -> file.modifiedMs
-    }
-
-    companion object {
-        // adb reports mtime in seconds
-        private const val MILLIS = 1000L
     }
 }
 

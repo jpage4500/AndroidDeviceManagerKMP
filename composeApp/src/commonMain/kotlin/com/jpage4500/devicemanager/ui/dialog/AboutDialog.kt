@@ -58,6 +58,20 @@ fun AboutBody() {
             checked = debug,
             onCheckedChange = { SettingsManager.setBoolean(AppPref.DEBUG_MODE, it) },
         )
+        // forty invented devices for screenshots — never on a build that ships
+        if (PlatformUtils.isDebugBuild()) {
+            val demo by SettingsManager.getBoolAsState(AppPref.DEMO_MODE)
+            SettingSwitchItem(
+                icon = Res.drawable.android,
+                labelRes = Res.string.about_demo,
+                descRes = Res.string.about_demo_desc,
+                checked = demo,
+                onCheckedChange = {
+                    SettingsManager.setBoolean(AppPref.DEMO_MODE, it)
+                    DeviceManager.setDemoMode(it)
+                },
+            )
+        }
         SettingItem(
             icon = Res.drawable.file_logs,
             labelRes = Res.string.about_view_logs,

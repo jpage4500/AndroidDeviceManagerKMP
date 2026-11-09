@@ -1,20 +1,23 @@
 #!/bin/bash
 ################################################################################
-# Sync README to the public release repo
+# Sync the public README to the public release repo
 #
 # The source lives in a private repo (jpage4500/AndroidDeviceManagerKMP); releases are
 # published from a separate PUBLIC one (jpage4500/AndroidDeviceManager2 — see
-# .github/workflows/build-desktop.yml). This copies README.md and every LOCAL file the
-# README references into that repo, then commits and pushes — but only if something
-# actually changed.
+# .github/workflows/build-desktop.yml). This copies README.md and every LOCAL file it
+# references into that repo, then commits and pushes, but only if something actually changed.
+#
+# README.md is written for users of the app, not for this repo's developers — every local
+# link in it is published, so a link into docs/ would publish a private doc. Developer notes
+# live in docs/README.md.
 #
 # Only files the README links to are copied, deliberately: a blanket copy of a
 # directory would sooner or later publish something out of a private repo that
 # was never meant to be public. scripts/public/ is the one exception, and it is
 # copied whole precisely because that is what the folder is for.
 #
-# NOTE: the public README is overwritten on every run — edit this repo's copy,
-#       never the public one.
+# NOTE: the public README is overwritten on every run — edit README.md here,
+#       never the public copy.
 # NOTE: an image dropped from the README is not deleted from the public repo.
 #
 # usage: sync_public_readme.sh <owner/repo>
@@ -36,13 +39,19 @@ fi
 cd "$(dirname "$0")"
 cd ..
 
+SOURCE_README=README.md
+if [[ ! -f "$SOURCE_README" ]]; then
+    echo >&2 "ERROR: $SOURCE_README not found"
+    exit 1
+fi
+
 ################################################################################
-# collect README.md + every local file it references
+# collect the public README + every local file it references
 ################################################################################
 
 # matches both markdown "](path)" and html 'src="path"', then drops anything
 # remote (shields.io badges, release links) and in-page anchors
-ASSETS=$(grep -oE '(src="|\]\()[^"()[:space:]]+' README.md |
+ASSETS=$(grep -oE '(src="|\]\()[^"()[:space:]]+' "$SOURCE_README" |
     sed -E 's/^(src="|\]\()//' |
     grep -vE '^(https?:|#|mailto:)' |
     sort -u || true)
@@ -82,7 +91,7 @@ done
 
 ASSETS=$(printf '%s\n%s\n' "$ASSETS" "$PUBLIC_FILES" | grep -v '^$' | sort -u || true)
 
-echo "copying README.md, the files it links to${PUBLIC_NOTE}:"
+echo "copying $SOURCE_README, the files it links to${PUBLIC_NOTE}:"
 if [[ -n "$ASSETS" ]]; then
     echo "$ASSETS" | sed 's/^/  /'
 else
@@ -131,7 +140,7 @@ git clone --quiet "$REMOTE" "$WORK/target"
 BRANCH=$(git -C "$WORK/target" branch --show-current)
 BRANCH=${BRANCH:-main}
 
-cp README.md "$WORK/target/README.md"
+cp "$SOURCE_README" "$WORK/target/README.md"
 for FILE in $ASSETS; do
     mkdir -p "$WORK/target/$(dirname "$FILE")"
     cp "$FILE" "$WORK/target/$FILE"

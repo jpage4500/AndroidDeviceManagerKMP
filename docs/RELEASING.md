@@ -23,6 +23,9 @@ install ever be updated into it.
 `.github/workflows/build-desktop.yml` does the whole thing in three jobs:
 
 1. **sync-readme** — copies `README.md` and every local file it links to into the public repo.
+   `README.md` is the user-facing page, so it must never link into `docs/` — that would publish a
+   private doc. Developer notes live in [docs/README.md](README.md). The job fails, on purpose, while an image the README shows
+   is missing — screenshots go in `resources/screenshots/`.
    Deliberately not a dependency of the others: a docs sync failing shouldn't hold up a release.
 2. **tag-release** — computes `2.0.<git commit count>` and pushes it as a tag. The same scheme
    `composeApp/build.gradle.kts` uses, so the tag and `APP_VERSION` can't disagree.
