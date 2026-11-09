@@ -52,6 +52,7 @@ fun DeviceScreen(
     val columns by DeviceTableState.visible.collectAsState()
     val widths by DeviceTableState.widths.collectAsState()
     val hidden by DeviceTableState.hidden.collectAsState()
+    val allColumns by DeviceTableState.all.collectAsState()
     val sort by DeviceTableState.sort.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -61,10 +62,11 @@ fun DeviceScreen(
     val search = filter.text.trim()
     var searchFocused by remember { mutableStateOf(false) }
     var input by remember { mutableStateOf<InputRequest?>(null) }
+    var columnEdit by remember { mutableStateOf<ColumnEdit?>(null) }
     var historyOpen by remember { mutableStateOf(false) }
     var settingsOpen by remember { mutableStateOf(false) }
     var dropping by remember { mutableStateOf(false) }
-    var chip by remember { mutableStateOf(DeviceChip.ALL) }
+    var chip by remember { mutableStateOf<DeviceFilter>(DeviceChip.ALL) }
     val compact by SettingsManager.getBoolAsState(AppPref.DEVICES_COMPACT)
     // two-line rows already show the model under the name, so a Model column would say it twice
     val tableColumns = remember(columns, compact) {
@@ -83,11 +85,8 @@ fun DeviceScreen(
     val density = LocalDensity.current
     val filterFocus = remember { FocusRequester() }
     val copyToClipboard = rememberClipboardCopy()
-    val showTooltips by SettingsManager.getBoolAsState(AppPref.SHOW_TOOLTIPS)
     val upLabel = stringResource(Res.string.device_up)
-    // hoisted rather than written at the call site, so the setting can remove it with `takeIf` —
-    // DataTable reads a null tooltip as "no tooltips" and stops wrapping cells at all
-    val cellTooltip: (Device, DeviceColumn, Boolean) -> String? = { row, column, clipped ->
+    val cellTooltip: (Device, TableColumn, Boolean) -> String? = { row, column, clipped ->
         deviceTooltip(row, column, clipped, upLabel)
     }
 
@@ -133,7 +132,6 @@ fun DeviceScreen(
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val meta = event.isMetaPressed || event.isCtrlPressed
                 when {
-                    event.key == Key.F && meta -> runCatching { filterFocus.requestFocus() }
                     // Esc clears the search first; only an empty one lets it through to clear the
                     // selection
                     event.key == Key.Escape && filter.text.isNotEmpty() -> filter = TextFieldValue()
@@ -244,7 +242,7 @@ fun DeviceScreen(
                             columns = tableColumns,
                             widths = widths.withDefaults(tableColumns),
                             fitColumns = true,
-                            sortedBy = sort.column,
+                            sortedBy = tableColumns.firstOrNull { it.id == sort.columnId },
                             sortAscending = sort.ascending,
                             selection = selection,
                             rowKey = { it.id },
@@ -257,16 +255,20 @@ fun DeviceScreen(
                             onSort = { DeviceTableState.sortBy(it) },
                             onResize = { column, width -> DeviceTableState.resize(column, width) },
                             // indices into what the header draws, which can be short the Model column — mapped back
-                            // onto the visible list the state reorders
+                            // onto the visible list the state reorders. Read from the state rather than from
+                            // this composition's lists: a drag swaps once per pointer event, faster than a
+                            // recomposition, and a list a step behind sent the next swap to the wrong column
                             onReorder = { from, to ->
-                                val moved = tableColumns.getOrNull(from)
-                                val target = tableColumns.getOrNull(to)
+                                val shown = DeviceTableState.visible.value
+                                val drawn = if (compact) shown else shown.filterNot { it == DeviceColumn.MODEL }
+                                val moved = drawn.getOrNull(from)
+                                val target = drawn.getOrNull(to)
                                 if (moved != null && target != null) {
-                                    DeviceTableState.moveColumn(columns.indexOf(moved), columns.indexOf(target))
+                                    DeviceTableState.moveColumn(shown.indexOf(moved), shown.indexOf(target))
                                 }
                             },
                             onActivate = { row -> MirrorLauncher.mirror(row.id) },
-                            tooltip = cellTooltip.takeIf { showTooltips },
+                            tooltip = cellTooltip,
                             rowMenu = { row, column ->
                                 DeviceMenu(
                                     device = row,
@@ -279,7 +281,10 @@ fun DeviceScreen(
                             headerMenu = { column ->
                                 ColumnMenu(
                                     column = column,
+                                    columns = allColumns,
                                     hidden = hidden,
+                                    onAdd = { columnEdit = ColumnEdit(original = null, after = column) },
+                                    onEdit = { columnEdit = ColumnEdit(original = it, after = null) },
                                     onSizeToFit = { target ->
                                         DeviceTableState.sizeToFit(target, widestIn(sorted, target, measurer, density))
                                     },
@@ -341,13 +346,26 @@ fun DeviceScreen(
     }
 
     InputDialog(input) { input = null }
+    columnEdit?.let { edit ->
+        CustomColumnDialog(
+            original = edit.original,
+            onDismiss = { columnEdit = null },
+            onSave = { column ->
+                if (edit.original == null) DeviceTableState.addCustom(column, after = edit.after)
+                else DeviceTableState.updateCustom(column)
+            },
+        )
+    }
     StatusHistoryDialog(open = historyOpen, onDismiss = { historyOpen = false })
     if (settingsOpen) SettingsDialog(onDismiss = { settingsOpen = false })
 }
 
+/** what the custom column dialog is open on: a column to edit, or a new one to go after [after]. */
+private data class ColumnEdit(val original: CustomColumn?, val after: TableColumn?)
+
 /** widths the user hasn't touched fall back to the column's own default. */
-private fun Map<DeviceColumn, Dp>.withDefaults(columns: List<DeviceColumn>): Map<DeviceColumn, Dp> =
-    columns.associateWith { this[it] ?: it.defaultWidth.dp }
+private fun Map<String, Dp>.withDefaults(columns: List<TableColumn>): Map<TableColumn, Dp> =
+    columns.associateWith { this[it.id] ?: it.defaultWidth.dp }
 
 /**
  * one cell.
@@ -358,7 +376,7 @@ private fun Map<DeviceColumn, Dp>.withDefaults(columns: List<DeviceColumn>): Map
 @Composable
 private fun DeviceCell(
     device: Device,
-    column: DeviceColumn,
+    column: TableColumn,
     busy: Boolean,
     compact: Boolean,
 ) {
@@ -436,7 +454,7 @@ fun Device.stateColor(busy: Boolean): Color = when {
 @Composable
 private fun AppMenuScope.DeviceMenu(
     device: Device,
-    column: DeviceColumn?,
+    column: TableColumn?,
     onCopy: (String) -> Unit,
     onEdit: (InputRequest) -> Unit,
     onAction: (suspend () -> Unit) -> Unit,
@@ -525,7 +543,7 @@ private fun AppMenuScope.DeviceMenu(
  */
 private fun deviceTooltip(
     device: Device,
-    column: DeviceColumn,
+    column: TableColumn,
     clipped: Boolean,
     upLabel: String,
 ): String? = when (column) {
@@ -548,7 +566,7 @@ private fun deviceTooltip(
  */
 private fun widestIn(
     rows: List<Device>,
-    column: DeviceColumn,
+    column: TableColumn,
     measurer: TextMeasurer,
     density: Density,
 ): Dp {
@@ -568,12 +586,18 @@ private fun <T> Result<T>.toast() {
     onFailure { ToastManager.showToast(it.message ?: "Command failed", success = false) }
 }
 
-/** the right-click menu on a column header: hide this one, put a hidden one back, or reset. */
+/**
+ * the right-click menu on a column header: size, hide this one, put a hidden one back, add a custom
+ * column after this one — or edit or remove this one, when it's custom — or reset.
+ */
 @Composable
 private fun AppMenuScope.ColumnMenu(
-    column: DeviceColumn,
-    hidden: Set<DeviceColumn>,
-    onSizeToFit: (DeviceColumn) -> Unit,
+    column: TableColumn,
+    columns: List<TableColumn>,
+    hidden: Set<String>,
+    onAdd: () -> Unit,
+    onEdit: (CustomColumn) -> Unit,
+    onSizeToFit: (TableColumn) -> Unit,
     onSizeAllToFit: () -> Unit,
 ) {
     Item(stringResource(Res.string.size_to_fit)) { onSizeToFit(column) }
@@ -586,12 +610,18 @@ private fun AppMenuScope.ColumnMenu(
     if (hidden.isNotEmpty()) {
         Separator()
         // every hidden column, so one can be put back without a settings dialog
-        DeviceColumn.entries.filter { it in hidden }.forEach { hiddenColumn ->
+        columns.filter { it.id in hidden }.forEach { hiddenColumn ->
             Item(
                 text = stringResource(Res.string.show_column, hiddenColumn.label),
                 onClick = { DeviceTableState.toggleHidden(hiddenColumn) },
             )
         }
+    }
+    Separator()
+    Item(stringResource(Res.string.add_column)) { onAdd() }
+    if (column is CustomColumn) {
+        Item(stringResource(Res.string.edit_column, column.label)) { onEdit(column) }
+        Item(stringResource(Res.string.remove_column, column.label)) { DeviceTableState.removeCustom(column) }
     }
     Separator()
     Item(

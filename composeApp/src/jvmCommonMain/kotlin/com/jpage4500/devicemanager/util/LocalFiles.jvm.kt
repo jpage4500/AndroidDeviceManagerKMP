@@ -14,5 +14,6 @@ actual fun localFileInfo(path: String): LocalFile? {
 }
 
 actual suspend fun writeLocalFile(path: String, bytes: ByteArray): Boolean = withContext(ioDispatcher) {
-    runCatching { File(path).writeBytes(bytes) }.isSuccess
+    // a downloaded folder writes into subfolders that don't exist yet
+    runCatching { File(path).apply { parentFile?.mkdirs() }.writeBytes(bytes) }.isSuccess
 }

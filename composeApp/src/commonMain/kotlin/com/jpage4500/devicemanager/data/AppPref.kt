@@ -35,19 +35,22 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     LOGS_SAVE_DIR("logs_save_dir"),                         // folder the last saved log went to
     FILES_COLUMN_WIDTHS("files_column_widths"),             // JSON map of FileColumn name -> px
     FILES_RECENT_PATHS("files_recent_paths"),               // newline-separated paths from "Go To…"
-    HIDDEN_COLUMNS("hidden_columns"),                       // comma-separated DeviceColumn names the table hides
-    COLUMN_ORDER("column_order"),                           // comma-separated DeviceColumn names, left to right
-    COLUMN_WIDTHS("column_widths"),                         // JSON map of DeviceColumn name -> px width the user dragged to
-    DEVICE_SORT("device_sort"),                             // "<DeviceColumn name>,<asc|desc>"
+    FILES_BOOKMARKS("files_bookmarks"),                     // newline-separated bookmarked folders, any device
+    HIDDEN_COLUMNS("hidden_columns"),                       // comma-separated column ids the table hides — a DeviceColumn name or a CustomColumn id
+    COLUMN_ORDER("column_order"),                           // comma-separated column ids, left to right
+    COLUMN_WIDTHS("column_widths"),                         // JSON map of column id -> px width the user dragged to
+    DEVICE_SORT("device_sort"),                             // "<column id>,<asc|desc>"
+    CUSTOM_COLUMNS("custom_columns"),                       // JSON list of CustomColumn the device table adds
     INSTALL_ID("install_id"),                               // random UUID identifying this install to log uploads
     INFO_COLLAPSED("info_collapsed"),                       // comma-separated InfoSection names the device details keeps shut
     THEME("theme", "LIGHT"),                                // ThemeMode name: light, dark, or follow the OS
     DOWNLOAD_FOLDER("download_folder"),                     // desktop: where pulled files go; null = ~/Downloads
     SCREENSHOT_FOLDER("screenshot_folder"),                 // desktop: where screenshots go; null = DOWNLOAD_FOLDER
-    MIRROR_WITH("mirror_with", "BUILT_IN"),                 // MirrorWith name: what the Mirror action opens
+    MIRROR_WITH("mirror_with", "SCRCPY"),                   // MirrorWith name: what the Mirror action opens
     SCRCPY_PATH("scrcpy_path"),                             // null = the scrcpy found on PATH
     SCRCPY_VIDEO_CODEC("scrcpy_video_codec", "h264"),       // --video-codec=
     SCRCPY_EXTRA_ARGS("scrcpy_extra_args"),                 // whitespace-separated flags after the ones below
+    SCRIPT_EDITOR("script_editor"),                         // desktop: the app Open in editor uses for a script; null = the OS text editor
     DEVICES_VIEW("devices_view", "LIST"),                   // DeviceView name: the Devices page as a table or as icons
     SHARE_NAME("share_name"),                               // desktop: what Share Devices calls this computer; null = its own name
     SHARE_TOKEN("share_token"),                             // desktop: Share Devices' auth token, kept so a phone that scanned it stays paired
@@ -59,7 +62,6 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     DEMO_MODE("demo_mode"),                                 // local builds only: show DemoTransport's invented devices
     MINIMIZE_TO_TRAY("minimize_to_tray"),                   // desktop: closing the last window leaves a tray icon
     ALWAYS_ON_TOP("always_on_top"),                         // desktop: keep windows above other apps
-    SHOW_TOOLTIPS("show_tooltips", true),                   // tables: show a value that doesn't fit on hover
     FILES_SHOW_HIDDEN("files_show_hidden", false),          // Files: show names starting with a dot
     LOGS_SCROLL_SIDEWAYS("logs_scroll_sideways", true),     // log table: scroll sideways, or end the message column at the edge
     DEVICES_COMPACT("devices_compact", false),              // device table: one line a row instead of name over model
@@ -82,6 +84,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     MAX_MIRROR_WINDOWS("max_mirror_windows", 8),            // how many mirrors can poll at once before the fleet suffers
     LOGS_MAX_LINES("logs_max_lines", 200_000),              // ring buffer per log tab — the Swing app's default
     LOGS_FONT_SIZE("logs_font_size", 13),                   // log table text size, ⌘+/⌘- adjusts it
+    SCRIPT_SOURCE_PCT("script_source_pct", 35),             // Scripts page: the source's share of source + results, dragged
     SIDEBAR_WIDTH("sidebar_width", 216),                    // desktop sidebar, in dp; under 150 it is the icon rail
     DEVICES_ICON_SIZE("devices_icon_size", 0),              // Devices icon view: glyph height in dp from the status bar slider; 0 = Fit, sized to show every device
     SHARE_PORT("share_port", 8765),                         // desktop: Share Devices' port — the Swing app's default

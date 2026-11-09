@@ -3,9 +3,9 @@ name: Desktop (jDeploy)
 # Builds the desktop fat jar and publishes native installers to the PUBLIC release repo via
 # jDeploy (https://www.jdeploy.com).
 #
-# Flow: merge to main -> job 2 tags "2.0.<commit count>" -> the tag push runs job 3, which builds
-# and publishes. The tag is what makes jDeploy cut a versioned release; on a branch push it instead
-# publishes a rolling prerelease at version "0.0.0-<branch>".
+# Flow: merge to main -> job 2 tags "2.0.<commit count>" -> the tag push runs job 3, which is one
+# call to scripts/build-desktop.sh — the same script a local publish runs. The same tag also starts
+# build-android.yml.
 #
 # Needs the GH_TOKEN secret — a PAT with contents:write on BOTH this repo (to push the tag) and the
 # release repo (to create the release). See docs/RELEASING.md.
@@ -97,7 +97,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # full history so gen_release_notes.sh can log commits back to the previous tag
+          # gen_release_notes.sh reads the merge commit's PR
           fetch-depth: 0
 
       - name: Set up JDK 21
@@ -107,9 +107,6 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
@@ -118,21 +115,6 @@ jobs:
         with:
           secrets_json: ${{ toJSON(secrets) }}
 
-      # buildExecutableJar is also what flips BuildConfig IS_RELEASE to true — see
-      # composeApp/build.gradle.kts
-      - name: Build desktop jar
-        run: ./gradlew :composeApp:buildExecutableJar
-
-      # publish under the pushed tag, so the release jDeploy creates in the target repo is named the
-      # same thing the "Update GitHub release" step below looks up
-      - name: Resolve publish version
-        run: |
-          VERSION="${{ github.ref_name }}"
-          GRADLE_VERSION=$(./gradlew -q printVersion | tail -n 1)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Publishing as: $VERSION (gradle APP_VERSION: $GRADLE_VERSION)"
-
-      # -- JDEPLOY --
       - name: Setup Node.js & cache npm
         uses: actions/setup-node@v4
         with:
@@ -140,73 +122,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'package.json'
 
-      - name: Sync package.json version
+      # the same script a local publish runs: builds the jar, has jDeploy prepare the installers,
+      # creates the release on TARGET_REPO with the jar and the release notes, and updates the
+      # 'jdeploy' release's package-info.json. GH_TOKEN reaches it through gradle.properties, and the
+      # version is this tag's name
+      # view releases here: https://github.com/jpage4500/AndroidDeviceManager2/releases
+      - name: Build and publish
         run: |
-          echo "Setting package.json version to ${{ env.VERSION }}"
-          npm version ${{ env.VERSION }} --no-git-tag-version
-
-      # uploads the mac/windows/linux installers as release assets, and updates package-info.json
-      # on the target repo's 'jdeploy' tag — which is what installed apps read to auto-update
-      - name: jDeploy publish to public repo
-        uses: shannah/jdeploy@master
-        with:
-          github_token: ${{ secrets.GH_TOKEN }}
-          target_repository: ${{ env.TARGET_REPO }}
-          deploy_target: 'github'
-
-      # also attach the fat jar, for running headless or on a platform with no installer.
-      # uploaded with the CLI rather than an action so the release body jDeploy just wrote is left alone
-      - name: Attach jar to release
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: |
-          gh release upload "${{ env.VERSION }}" composeApp/build/libs/adm-all.jar \
-            --repo "${{ env.TARGET_REPO }}" --clobber
-
-      - name: Generate release notes
-        env:
-          # only used to look up PR titles for merge commits; read access is enough
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          chmod +x scripts/gen_release_notes.sh
-          ./scripts/gen_release_notes.sh "pr" "brief" > notes.raw || true
-
-          # drop blank lines and empty-subject commits, then normalise to "- " markdown bullets
-          grep -v '^[[:space:]]*$' notes.raw \
-            | grep -viE '^[[:space:]]*-?[[:space:]]*no message[[:space:]]*$' \
-            | sed -E 's/^[[:space:]]*-[[:space:]]*//; s/^/- /' > release-notes.txt || true
-
-          if [[ ! -s release-notes.txt ]]; then
-            echo "- no changes" > release-notes.txt
-          fi
-
-          echo "Generated release notes:"
-          cat release-notes.txt
-
-      # jDeploy has already written the installer download links into the body — keep them and put
-      # the release notes above.
-      #
-      # IMPORTANT: --draft=false is required. jDeploy uploads tag releases through
-      # xresloader/upload-to-github-release, which defaults draft=true and jDeploy never overrides
-      # it — so the release is created hidden and its assets 404 for the launcher.
-      - name: Publish GitHub release with notes
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: |
-          EXISTING=$(gh release view "${{ env.VERSION }}" \
-            --repo "${{ env.TARGET_REPO }}" \
-            --json body -q '.body' || echo "")
-
-          # if the body couldn't be read, fall back to the installer links jdeploy generated
-          INSTALLER_LINKS=./jdeploy/github-release-files/jdeploy-release-notes.md
-          if [[ -z "$EXISTING" && -f "$INSTALLER_LINKS" ]]; then
-            EXISTING=$(cat "$INSTALLER_LINKS")
-          fi
-
-          { echo "## Release Notes"; echo ""; cat release-notes.txt; echo ""; echo "$EXISTING"; } > combined-notes.txt
-
-          gh release edit "${{ env.VERSION }}" \
-            --notes-file combined-notes.txt \
-            --draft=false \
-            --latest \
-            --repo "${{ env.TARGET_REPO }}"
+          chmod +x scripts/build-desktop.sh scripts/gen_release_notes.sh
+          ./scripts/build-desktop.sh

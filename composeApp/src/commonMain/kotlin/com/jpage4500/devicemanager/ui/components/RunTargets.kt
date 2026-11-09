@@ -24,17 +24,20 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * which devices a page acts on — Scripts, Commands and Input all ask the same question: the chosen
- * ones that are ready when the action starts. There is no "all": the devices are always picked.
+ * ones that are ready when the action starts, or every ready one when [all] is on (Scripts only).
  */
-fun runTargets(ready: List<Device>, chosen: List<String>): List<String> =
-    chosen.filter { id -> ready.any { it.id == id } }
+fun runTargets(ready: List<Device>, chosen: List<String>, all: Boolean = false): List<String> =
+    if (all) ready.map { it.id } else chosen.filter { id -> ready.any { it.id == id } }
 
 /**
  * "Runs on: [chips] +" — the chosen devices, and the shared [DevicePickerButton] to change them.
  *
- * Nothing chosen when the page opens starts from what is selected on the Devices page.
+ * Nothing chosen when the page opens starts from what is selected on the Devices page — unless the
+ * page offers [all], which is its own start.
  *
  * @param label what the row is called — "Runs on", or "Types on" for Input
+ * @param all null for no All devices pill; else whether it's on. On, it stands in for the chips;
+ * picking a device turns it off, which is the caller's to do in [onChoose]
  */
 @Composable
 fun RunsOn(
@@ -42,15 +45,18 @@ fun RunsOn(
     chosen: List<String>,
     onChoose: (List<String>) -> Unit,
     label: String = stringResource(Res.string.run_on),
+    all: Boolean? = null,
+    onAll: (Boolean) -> Unit = {},
 ) {
     val selection by DeviceManager.selectedIds.collectAsState()
     LaunchedEffect(Unit) {
-        if (chosen.isEmpty()) {
+        if (all == null && chosen.isEmpty()) {
             val seed = selection.filter { id -> ready.any { it.id == id } }
             if (seed.isNotEmpty()) onChoose(seed)
         }
     }
-    val skipped = chosen.count { id -> ready.none { it.id == id } }
+    val allOn = all == true
+    val skipped = if (allOn) 0 else chosen.count { id -> ready.none { it.id == id } }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.gap)) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = Colors.primaryText)
         Row(
@@ -58,23 +64,49 @@ fun RunsOn(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Dimens.liveDot),
         ) {
-            if (chosen.isEmpty()) {
-                Text(stringResource(Res.string.run_none), style = MaterialTheme.typography.bodySmall, color = Colors.secondaryText)
+            if (all != null) {
+                AllDevicesPill(stringResource(Res.string.run_all_devices, ready.size), allOn) { onAll(!allOn) }
             }
-            chosen.forEach { id ->
-                DeviceChipPill(DeviceManager.nameOf(id)) { onChoose(chosen - id) }
+            if (!allOn) {
+                if (chosen.isEmpty()) {
+                    Text(stringResource(Res.string.run_none), style = MaterialTheme.typography.bodySmall, color = Colors.secondaryText)
+                }
+                chosen.forEach { id ->
+                    DeviceChipPill(DeviceManager.nameOf(id)) { onChoose(chosen - id) }
+                }
             }
         }
         DevicePickerButton(
             title = stringResource(Res.string.run_pick_title),
-            checked = chosen,
-            onChange = { ids, on -> onChoose(if (on) chosen + ids else chosen - ids.toSet()) },
+            checked = if (allOn) emptyList() else chosen,
+            onChange = { ids, on ->
+                val from = if (allOn) emptyList() else chosen
+                onChoose(if (on) (from + ids).distinct() else from - ids.toSet())
+            },
             canPick = { it.isReady },
             size = Dimens.chipHeight + Dimens.liveDot,
         )
         if (skipped > 0) {
             Text(stringResource(Res.string.run_skips, skipped), style = MaterialTheme.typography.bodySmall, color = Colors.secondaryText)
         }
+    }
+}
+
+/** the All devices toggle: filled when on, an outline when off — the Devices page's filter chip look. */
+@Composable
+private fun AllDevicesPill(label: String, on: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(percent = 50)
+    Box(
+        Modifier
+            .height(Dimens.chipHeight)
+            .clip(shape)
+            .background(if (on) Colors.chipOn else Color.Transparent)
+            .border(Dimens.hairline, if (on) Colors.chipOn else Colors.divider, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = Dimens.navGap),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = if (on) Colors.chipOnText else Colors.primaryText, maxLines = 1)
     }
 }
 

@@ -91,9 +91,40 @@ object DeviceDetails {
      * opens a new connection to the adb server, so five commands across 45 devices was 225 round
      * trips. As one line it is 45.
      */
-    val FIXED_BATCH =
-        batch(listOf("getprop", CMD_NICKNAME, CMD_PHONE_1, CMD_PHONE_2, CMD_IMEI, CMD_CUSTOM_PROPS))
-    const val FIXED_COUNT = 6
+    private val FIXED_COMMANDS = listOf("getprop", CMD_NICKNAME, CMD_PHONE_1, CMD_PHONE_2, CMD_IMEI, CMD_CUSTOM_PROPS)
+    val FIXED_COUNT = FIXED_COMMANDS.size
+
+    /**
+     * [FIXED_COMMANDS], then one [versionCommand] per package a custom column asks about — so an
+     * app version costs a few more lines on a round trip that was happening anyway, not one of its
+     * own. Each section after [FIXED_COUNT] is the package at the same index.
+     */
+    fun fixedBatch(packages: List<String>): String = batch(FIXED_COMMANDS + packages.map(::versionCommand))
+
+    /**
+     * the one line of `dumpsys package` that holds an app's version — the Swing app's command.
+     *
+     * an app that isn't installed prints no `versionName=` line, so it reads back as null.
+     */
+    fun versionCommand(pkg: String): String =
+        "dumpsys package ${Utils.shellQuote(pkg)} | grep -m1 versionName="
+
+    /** `    versionName=11.2.3` → `11.2.3`, or null for an app that isn't there. */
+    fun parseVersionName(output: String?): String? = output?.lineSequence()
+        ?.firstNotNullOfOrNull { line -> line.substringAfter("versionName=", "").trim().takeIf { it.isNotEmpty() } }
+
+    /** one property, for when the device's full `getprop` hasn't been read yet. */
+    fun propertyCommand(key: String): String = "getprop ${Utils.shellQuote(key)}"
+
+    /** every package on the device — what the custom column dialog suggests. */
+    const val CMD_PACKAGES = "pm list packages"
+
+    /** `package:com.example.app` per line. */
+    fun parsePackages(output: String?): List<String> = output?.lineSequence()
+        ?.mapNotNull { it.trim().removePrefix("package:").takeIf { name -> name.isNotEmpty() && name != it.trim() } }
+        ?.sorted()
+        ?.toList()
+        .orEmpty()
 
     /** and the two that go stale, likewise in one round trip. */
     val CHANGING_BATCH = batch(listOf(CMD_DISK, CMD_BATTERY, CMD_UPTIME, CMD_BOOTED))
@@ -119,7 +150,12 @@ object DeviceDetails {
         val parts = MutableList(count) { StringBuilder() }
         var index = 0
         output?.lineSequence()?.forEach { line ->
-            if (line.trim() == MARKER) {
+            val trimmed = line.trimEnd()
+            // a command whose output has no trailing newline — a custom props file saved without
+            // one — gets the marker on the end of its last line: "phone_number=+1555…__ADM_NEXT__"
+            if (trimmed.endsWith(MARKER)) {
+                val rest = trimmed.removeSuffix(MARKER)
+                if (rest.isNotBlank() && index < count) parts[index].append(rest).append('\n')
                 index++
                 return@forEach
             }

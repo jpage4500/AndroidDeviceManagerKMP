@@ -15,6 +15,7 @@ import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.transport.*
 import com.jpage4500.devicemanager.ui.components.*
 import com.jpage4500.devicemanager.ui.dialog.common.*
+import com.jpage4500.devicemanager.ui.screen.*
 import com.jpage4500.devicemanager.ui.setting.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
@@ -246,6 +247,17 @@ private fun GeneralTab() {
         SwitchSetting(Res.drawable.star, Res.string.settings_on_top, AppPref.ALWAYS_ON_TOP, showDivider = false)
     }
 
+    if (ScriptHost.supported) {
+        Section(Res.string.settings_section_scripts)
+        TextSetting(
+            icon = Res.drawable.script,
+            label = Res.string.settings_script_editor,
+            pref = AppPref.SCRIPT_EDITOR,
+            placeholder = stringResource(Res.string.settings_script_editor_hint),
+            showDivider = false,
+        )
+    }
+
     Section(Res.string.settings_section_preferences)
     ResetSetting()
 }
@@ -275,8 +287,7 @@ private fun DevicesTab() {
     Section(Res.string.settings_section_table)
     // the column table is the desktop's; a phone's device list has no columns
     if (isDesktop) ColumnsSetting()
-    SwitchSetting(Res.drawable.menu, Res.string.settings_compact_rows, AppPref.DEVICES_COMPACT)
-    SwitchSetting(Res.drawable.about, Res.string.settings_tooltips, AppPref.SHOW_TOOLTIPS, showDivider = false)
+    SwitchSetting(Res.drawable.menu, Res.string.settings_compact_rows, AppPref.DEVICES_COMPACT, showDivider = false)
 
     Section(Res.string.settings_section_mirror)
     SliderSetting(
@@ -850,19 +861,31 @@ private fun ScrcpyPathSetting() {
     )
 }
 
-/** how many device columns are shown, and the checklist that picks them; then a layout reset. */
+/**
+ * how many device columns are shown, and the checklist that picks them; a custom column to add;
+ * then a layout reset.
+ */
 @Composable
 private fun ColumnsSetting() {
     val hidden by DeviceTableState.hidden.collectAsState()
+    val columns by DeviceTableState.all.collectAsState()
     var editing by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
-    val total = DeviceColumn.entries.size
+    val total = columns.size
+    val shown = columns.count { it.id !in hidden }
 
     SettingItem(
         icon = Res.drawable.menu,
         labelRes = Res.string.settings_columns,
-        valueText = stringResource(Res.string.settings_columns_shown, total - hidden.size, total),
+        valueText = stringResource(Res.string.settings_columns_shown, shown, total),
         onClick = { editing = true },
+    )
+    SettingItem(
+        icon = Res.drawable.add,
+        labelRes = Res.string.settings_columns_add,
+        valueRes = Res.string.settings_columns_add_value,
+        onClick = { adding = true },
     )
     SettingItem(
         icon = Res.drawable.restart,
@@ -874,10 +897,17 @@ private fun ColumnsSetting() {
     if (editing) {
         MultiSelectOptionsDialog(
             titleRes = Res.string.settings_columns,
-            options = DeviceColumn.entries.map { MultiSelectDialogOption(data = it, text = it.label) },
-            selectedValues = DeviceColumn.entries.toSet() - hidden,
+            options = columns.map { MultiSelectDialogOption(data = it.id, text = it.label) },
+            selectedValues = columns.map { it.id }.toSet() - hidden,
             onDismiss = { editing = false },
-            onConfirm = { shown -> DeviceTableState.setHidden(DeviceColumn.entries.toSet() - shown) },
+            onConfirm = { picked -> DeviceTableState.setHidden(columns.map { it.id }.toSet() - picked) },
+        )
+    }
+    if (adding) {
+        CustomColumnDialog(
+            original = null,
+            onDismiss = { adding = false },
+            onSave = { DeviceTableState.addCustom(it) },
         )
     }
     if (confirmReset) {
@@ -913,7 +943,7 @@ private fun ResetSetting() {
             onConfirm = {
                 SettingsManager.clearAll()
                 // the table holds its layout in memory as well as in the prefs just cleared
-                if (isDesktop) DeviceTableState.resetColumns()
+                if (isDesktop) DeviceTableState.reload()
                 applyTransport()
             },
         )

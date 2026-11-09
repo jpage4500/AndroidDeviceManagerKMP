@@ -10,6 +10,8 @@ import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.*
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.platform.*
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.*
@@ -49,12 +51,14 @@ fun ExploreScreen(
     val files by browser.files.collectAsState()
     val loading by browser.loading.collectAsState()
     val error by browser.error.collectAsState()
+    val missing by browser.missing.collectAsState()
+    val denied by browser.denied.collectAsState()
     val sort by browser.sort.collectAsState()
     val query by browser.query.collectAsState()
     val widths by FileTableState.widths.collectAsState()
+    val bookmarks by FileBookmarks.paths.collectAsState()
     val showHidden by SettingsManager.getBoolAsState(AppPref.FILES_SHOW_HIDDEN)
     val copyToClipboard = rememberClipboardCopy()
-    val showTooltips by SettingsManager.getBoolAsState(AppPref.SHOW_TOOLTIPS)
     val cellTooltip: (DeviceFile, FileColumn, Boolean) -> String? = { file, column, clipped ->
         column.text(file)?.takeIf { clipped }
     }
@@ -77,7 +81,7 @@ fun ExploreScreen(
     val sorted = remember(files, sort, showHidden, query) { browser.sorted(browser.visible(files, showHidden, query)) }
     val selected = remember(selection, files) { files.filter { it.path in selection.keys } }
 
-    LaunchedEffect(deviceId) { browser.open(scope) }
+    LaunchedEffect(deviceId) { browser.start(scope) }
     // a selection belongs to the folder it was made in
     LaunchedEffect(path) { selection = TableSelection() }
 
@@ -85,6 +89,22 @@ fun ExploreScreen(
 
     fun openFolder(file: DeviceFile) {
         if (file.isDirectory || file.isSymlink) browser.open(scope, file.path)
+    }
+
+    /** a folder opens in place; a file is pulled and handed to whatever this machine opens it with. */
+    fun activate(file: DeviceFile) {
+        if (file.isDirectory || file.isSymlink) {
+            openFolder(file)
+        } else {
+            scope.launch { browser.download(file).onSuccess { openLocalFile(it) } }
+        }
+    }
+
+    /** files one at a time, then each folder with everything in it. */
+    fun download(targets: List<DeviceFile>) {
+        scope.launch {
+            targets.forEach { if (it.isDirectory) browser.downloadFolder(it) else browser.download(it) }
+        }
     }
 
     fun upload(local: List<LocalFile>) {
@@ -134,6 +154,8 @@ fun ExploreScreen(
                     }
                 },
                 onUpload = { scope.launch { upload(pickLocalFiles(uploadTitle)) } },
+                bookmarked = path in bookmarks,
+                onBookmark = { FileBookmarks.toggle(path) },
             )
 
             val one = selected.singleOrNull()
@@ -148,8 +170,8 @@ fun ExploreScreen(
                 outlined = false,
                 modifier = Modifier.height(Dimens.controlHeight + Dimens.hairline * 4),
             ) {
-                BarAction(Res.drawable.download, stringResource(Res.string.files_download), plain.isNotEmpty()) {
-                    scope.launch { plain.forEach { browser.download(it) } }
+                BarAction(Res.drawable.download, stringResource(Res.string.files_download), selected.isNotEmpty()) {
+                    download(selected)
                 }
                 if (apks.isNotEmpty()) {
                     // one after another: each is a copy and a `pm install` on the same device
@@ -171,7 +193,13 @@ fun ExploreScreen(
             Modifier.weight(1f).padding(start = Dimens.pageGutter, end = Dimens.pageGutter, top = Dimens.rowPadding),
             horizontalArrangement = Arrangement.spacedBy(Dimens.rowPadding),
         ) {
-            Places(deviceId = deviceId, path = path, onOpen = { browser.open(scope, it) })
+            Places(
+                deviceId = deviceId,
+                path = path,
+                bookmarks = bookmarks,
+                onOpen = { browser.open(scope, it) },
+                onRemoveBookmark = FileBookmarks::toggle,
+            )
 
             val cardShape = RoundedCornerShape(Dimens.cardCorner)
             Box(
@@ -184,16 +212,42 @@ fun ExploreScreen(
                     // anything dropped here goes into the folder on screen — an APK included;
                     // installing one is a button once it's there
                     .fileDropTarget(
-                        enabled = error == null,
+                        enabled = error == null && !denied,
                         onDragChanged = { dropping = it },
                         onDrop = ::upload,
                     )
             ) {
                 when {
                     error != null -> EmptyState(stringResource(Res.string.files_error), error.orEmpty())
+                    missing -> EmptyState(
+                        stringResource(Res.string.files_missing),
+                        stringResource(Res.string.files_missing_msg, path, deviceName),
+                        // the usual way here is a bookmark from another device, so offer to drop it
+                        action = if (path in bookmarks) ({
+                            OutlinedAction(
+                                stringResource(Res.string.files_bookmark_remove),
+                                icon = Res.drawable.bookmark,
+                                onClick = { FileBookmarks.toggle(path) },
+                            )
+                        }) else null,
+                    )
+                    denied -> EmptyState(
+                        stringResource(Res.string.files_denied),
+                        stringResource(Res.string.files_denied_msg, path, deviceName),
+                    )
                     sorted.isEmpty() && !loading ->
                         EmptyState(stringResource(Res.string.files_empty), stringResource(Res.string.files_empty_msg))
                     else -> DataTable(
+                        // ⌘⌫ (Ctrl+Backspace) or Delete asks to delete the selection, as Finder does.
+                        // caught here as it bubbles up: the table lets command keys it doesn't claim
+                        // through, and Delete has no character for its type-ahead
+                        modifier = Modifier.onKeyEvent { event ->
+                            val meta = event.isMetaPressed || event.isCtrlPressed
+                            val asks = event.type == KeyEventType.KeyDown && selected.isNotEmpty() &&
+                                ((event.key == Key.Backspace && meta) || event.key == Key.Delete)
+                            if (asks) delete(selected)
+                            asks
+                        },
                         rows = sorted,
                         columns = FileColumn.entries,
                         widths = FileColumn.entries.associateWith { widths[it] ?: it.defaultWidth.dp },
@@ -203,17 +257,27 @@ fun ExploreScreen(
                         rowKey = { it.path },
                         header = { it.label },
                         rowHeight = Dimens.tableRowHeight,
+                        // the columns always span the pane: a file list wider than its window hides
+                        // Size and Modified off to the right, behind a scroll nobody thinks to try
+                        fitColumns = true,
                         typeAheadText = { it.name },
                         onSelectionChange = { selection = it },
                         onSort = { browser.sortBy(it) },
                         onResize = { column, width -> FileTableState.resize(column, width) },
-                        onActivate = ::openFolder,
+                        // a folder is never downloaded by a double-click: it could be the whole of DCIM
+                        onActivate = ::activate,
                         // a path is the value most likely not to fit here, and the only thing worth
                         // saying about a cell that does fit is nothing
-                        tooltip = cellTooltip.takeIf { showTooltips },
+                        tooltip = cellTooltip,
                         rowMenu = { file, _ ->
                             if (file.isDirectory) {
                                 Item(stringResource(Res.string.files_open)) { openFolder(file) }
+                                Item(stringResource(Res.string.files_download)) { download(listOf(file)) }
+                                Item(
+                                    stringResource(
+                                        if (file.path in bookmarks) Res.string.files_bookmark_remove else Res.string.files_bookmark
+                                    )
+                                ) { FileBookmarks.toggle(file.path) }
                                 Separator()
                             } else {
                                 Item(stringResource(Res.string.files_download)) {
@@ -230,7 +294,7 @@ fun ExploreScreen(
                             Item(stringResource(Res.string.files_delete)) { delete(listOf(file)) }
                         },
                     ) { file, column ->
-                        FileCell(file, column)
+                        FileCell(file, column, listable = browser.listable(file))
                     }
                 }
                 if (loading) {
@@ -258,7 +322,7 @@ private val VIDEOS = setOf("mp4", "mkv", "webm", "3gp", "mov")
 
 /** the name cell carries the icon; everything else is text. */
 @Composable
-private fun FileCell(file: DeviceFile, column: FileColumn) {
+private fun FileCell(file: DeviceFile, column: FileColumn, listable: Boolean) {
     if (column != FileColumn.NAME) {
         TableText(column.text(file))
         return
@@ -267,6 +331,7 @@ private fun FileCell(file: DeviceFile, column: FileColumn) {
         AppIcon(
             res = when {
                 file.isSymlink && file.isDirectory -> Res.drawable.folder_link
+                file.isDirectory && !listable -> Res.drawable.folder_readonly
                 file.isDirectory -> Res.drawable.folder
                 file.isSymlink -> Res.drawable.file_link
                 file.isApk -> Res.drawable.file_apk
@@ -278,6 +343,7 @@ private fun FileCell(file: DeviceFile, column: FileColumn) {
             },
             size = Dimens.icon,
             tint = when {
+                file.isDirectory && !listable -> Colors.secondaryText
                 file.isDirectory -> Colors.accent
                 file.isApk -> Colors.tabAccent
                 else -> Colors.secondaryText
@@ -312,6 +378,8 @@ private fun PathRow(
     onRefresh: () -> Unit,
     onNewFolder: () -> Unit,
     onUpload: () -> Unit,
+    bookmarked: Boolean,
+    onBookmark: () -> Unit,
 ) {
     val shape = RoundedCornerShape(Dimens.navCorner)
     Row(
@@ -331,28 +399,33 @@ private fun PathRow(
                 .padding(horizontal = Dimens.liveDot),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState(), reverseScrolling = true),
-                verticalAlignment = Alignment.CenterVertically,
+            // the crumbs sit over the click-to-type area rather than beside it: two weighted siblings
+            // split the bar evenly, which cut a long path off at half the width
+            Box(
+                Modifier.weight(1f).fillMaxHeight().plainClickable(onClick = onGoTo),
+                contentAlignment = Alignment.CenterStart,
             ) {
-                crumbs(path).forEachIndexed { index, (label, target) ->
-                    if (index > 1) Text("›", color = Colors.secondaryText, style = MaterialTheme.typography.bodySmall)
-                    val last = target == path
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = if (last) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (last) Colors.primaryText else Colors.secondaryText,
-                        maxLines = 1,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(Dimens.checkboxCorner))
-                            .clickable { onOpen(target) }
-                            .padding(horizontal = Dimens.liveDot, vertical = Dimens.hairline * 2),
-                    )
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState(), reverseScrolling = true),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    crumbs(path).forEachIndexed { index, (label, target) ->
+                        if (index > 1) Text("›", color = Colors.secondaryText, style = MaterialTheme.typography.bodySmall)
+                        val last = target == path
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (last) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (last) Colors.primaryText else Colors.secondaryText,
+                            maxLines = 1,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(Dimens.checkboxCorner))
+                                .clickable { onOpen(target) }
+                                .padding(horizontal = Dimens.liveDot, vertical = Dimens.hairline * 2),
+                        )
+                    }
                 }
             }
-            // the rest of the bar types a path — the Go To… the toolbar used to have
-            Box(Modifier.weight(1f).fillMaxHeight().plainClickable(onClick = onGoTo))
             val copy = stringResource(Res.string.files_copy_path)
             CellTooltip(text = { copy }) {
                 AppIcon(
@@ -379,6 +452,13 @@ private fun PathRow(
         }
 
         AppSwitch(checked = showHidden, label = stringResource(Res.string.files_hidden)) { onHidden() }
+        // lit while the open folder is one — a second click takes it off again
+        IconBox(
+            Res.drawable.bookmark,
+            stringResource(if (bookmarked) Res.string.files_bookmark_remove else Res.string.files_bookmark_folder),
+            on = bookmarked,
+            onClick = onBookmark,
+        )
         IconBox(Res.drawable.refresh, stringResource(Res.string.action_refresh)) { if (!loading) onRefresh() }
         OutlinedAction(stringResource(Res.string.files_new_folder), onClick = onNewFolder)
         OutlinedAction(stringResource(Res.string.files_upload), onClick = onUpload)
@@ -401,18 +481,24 @@ private val PLACES = listOf(
     Place(Res.string.files_place_screenshots, Res.drawable.screenshot, "/sdcard/Pictures/Screenshots"),
     Place(Res.string.files_place_pictures, Res.drawable.folder, "/sdcard/Pictures"),
     Place(Res.string.files_place_app_data, Res.drawable.android, "/sdcard/Android/data"),
-    Place(Res.string.files_place_temp, Res.drawable.terminal, "/data/local/tmp"),
-    Place(Res.string.files_place_root, Res.drawable.root, "/"),
 )
 
 /**
- * the folders people go to, down the left, and the device's free space under them.
+ * the folders people go to, down the left, then the bookmarked ones, and the device's free space
+ * under them.
  *
  * the one marked is the deepest place the open folder is inside — `/sdcard/Pictures/Screenshots`
- * marks Screenshots, not Pictures or Internal storage.
+ * marks Screenshots, not Pictures or Internal storage. A bookmark is marked only when it's the
+ * folder that's open, so a bookmark inside a place doesn't light both.
  */
 @Composable
-private fun Places(deviceId: String, path: String, onOpen: (String) -> Unit) {
+private fun Places(
+    deviceId: String,
+    path: String,
+    bookmarks: List<String>,
+    onOpen: (String) -> Unit,
+    onRemoveBookmark: (String) -> Unit,
+) {
     val devices by DeviceManager.devices.collectAsState()
     val device = devices.firstOrNull { it.id == deviceId }
     val here = PLACES
@@ -460,9 +546,61 @@ private fun Places(deviceId: String, path: String, onOpen: (String) -> Unit) {
                     )
                 }
             }
+            if (bookmarks.isNotEmpty()) {
+                Text(
+                    stringResource(Res.string.files_bookmarks),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Colors.secondaryText,
+                    modifier = Modifier.padding(start = Dimens.liveDot, top = Dimens.gap, bottom = Dimens.liveDot),
+                )
+                bookmarks.forEach { bookmark ->
+                    BookmarkRow(bookmark, on = bookmark == path, onOpen = onOpen, onRemove = onRemoveBookmark)
+                }
+            }
         }
         if (device != null) {
             Box(Modifier.padding(Dimens.liveDot)) { StorageBar(device.freeSpace, device.totalSpace) }
+        }
+    }
+}
+
+/** a bookmarked folder in Places: its last part as the name, the whole path on hover, Remove on a right-click. */
+@Composable
+private fun BookmarkRow(path: String, on: Boolean, onOpen: (String) -> Unit, onRemove: (String) -> Unit) {
+    val density = LocalDensity.current
+    var menuAt by remember { mutableStateOf<DpOffset?>(null) }
+    Box {
+        CellTooltip(text = { path }) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(Dimens.placeRowHeight)
+                    .clip(RoundedCornerShape(Dimens.navCorner))
+                    .background(if (on) Colors.navSelected else Color.Transparent)
+                    .contextClickable { at -> menuAt = with(density) { DpOffset(at.x.toDp(), at.y.toDp()) } }
+                    .clickable { onOpen(path) }
+                    .padding(horizontal = Dimens.liveDot),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppIcon(Res.drawable.bookmark, size = Dimens.icon, tint = if (on) Colors.tabAccent else Colors.toolbarIcon)
+                Spacer(Modifier.width(Dimens.gap))
+                Text(
+                    path.trimEnd('/').substringAfterLast('/').ifEmpty { "/" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    color = Colors.primaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        AppPopupMenu(
+            expanded = menuAt != null,
+            onDismissRequest = { menuAt = null },
+            offset = menuAt ?: DpOffset.Zero,
+        ) {
+            Item(stringResource(Res.string.files_bookmark_remove)) { onRemove(path) }
         }
     }
 }

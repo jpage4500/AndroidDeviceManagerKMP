@@ -4,19 +4,24 @@ import androidx.compose.ui.unit.*
 import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.ui.theme.*
 import com.jpage4500.devicemanager.util.*
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
-/** which column the table is sorted on, and which way. */
-data class DeviceSort(val column: DeviceColumn = DeviceColumn.NAME, val ascending: Boolean = true)
+/** which column the table is sorted on — a [TableColumn.id] — and which way. */
+data class DeviceSort(val columnId: String = DeviceColumn.NAME.id, val ascending: Boolean = true)
 
 /**
- * everything about the device table that isn't a device: which columns show, in what order, how wide
- * they are and what the rows are sorted on.
+ * everything about the device table that isn't a device: which columns there are, which show, in
+ * what order, how wide they are and what the rows are sorted on.
  *
  * separate from [DeviceManager] because none of it is about devices — it survives a transport change
  * and it is the half that persists. every setter writes through to [SettingsManager] as it is called,
  * which is cheap because a person changes a column, not a timer — with one exception: a **resize**
  * is a stream of changes rather than one, so its write is debounced. See [Debouncer].
+ *
+ * order, visibility, widths and sort are all held by [TableColumn.id], so a [CustomColumn] is laid
+ * out by exactly the same code as a [DeviceColumn]. The built-ins' ids are their enum names — what
+ * these prefs held before there were custom columns, so a saved layout still loads.
  */
 object DeviceTableState {
     private val log = LoggerConfig.createLogger("DeviceTableState")
@@ -25,14 +30,19 @@ object DeviceTableState {
     // not a useful column
     private val COLUMN_MAX = 480.dp
 
+    private val _custom = MutableStateFlow(loadCustom())
+    /** the columns someone added, in the order they were added. */
+    val customColumns: StateFlow<List<CustomColumn>> = _custom.asStateFlow()
+
     private val _order = MutableStateFlow(loadOrder())
-    val order: StateFlow<List<DeviceColumn>> = _order.asStateFlow()
 
     private val _hidden = MutableStateFlow(loadHidden())
-    val hidden: StateFlow<Set<DeviceColumn>> = _hidden.asStateFlow()
+    /** the ids of the columns not drawn. */
+    val hidden: StateFlow<Set<String>> = _hidden.asStateFlow()
 
     private val _widths = MutableStateFlow(loadWidths())
-    val widths: StateFlow<Map<DeviceColumn, Dp>> = _widths.asStateFlow()
+    /** the widths someone dragged to, by id; a column not in here is at its default. */
+    val widths: StateFlow<Map<String, Dp>> = _widths.asStateFlow()
 
     private val _sort = MutableStateFlow(loadSort())
     val sort: StateFlow<DeviceSort> = _sort.asStateFlow()
@@ -40,16 +50,25 @@ object DeviceTableState {
     // a resize arrives once per pixel of the drag; the file it lands in doesn't need to
     private val widthWrite = Debouncer()
 
-    /** the columns actually drawn, in order — what the table iterates. */
-    val visible: StateFlow<List<DeviceColumn>> = _order.combine(_hidden) { order, hidden ->
-        order.filterNot { it in hidden }
-    }.stateIn(
-        scope = kotlinx.coroutines.CoroutineScope(ioDispatcher),
-        started = SharingStarted.Eagerly,
-        initialValue = _order.value.filterNot { it in _hidden.value },
-    )
+    // set by [publish] in the same call as the change behind them, never derived on another
+    // dispatcher: a header drag reorders once per pointer event, and each step maps its indices
+    // through these — read a step behind, the next swap undid the last and the column jumped back
+    private val _all = MutableStateFlow(resolve(_order.value, _custom.value))
+    private val _visible = MutableStateFlow(_all.value.filterNot { it.id in _hidden.value })
 
-    fun widthOf(column: DeviceColumn): Dp = _widths.value[column] ?: column.defaultWidth.dp
+    /** every column, shown or not, in table order. */
+    val all: StateFlow<List<TableColumn>> = _all.asStateFlow()
+
+    /** the columns actually drawn, in order — what the table iterates. */
+    val visible: StateFlow<List<TableColumn>> = _visible.asStateFlow()
+
+    /** bring [all] and [visible] up to date with the order, the custom columns and the hidden set. */
+    private fun publish() {
+        _all.value = resolve(_order.value, _custom.value)
+        _visible.value = _all.value.filterNot { it.id in _hidden.value }
+    }
+
+    fun widthOf(column: TableColumn): Dp = _widths.value[column.id] ?: column.defaultWidth.dp
 
     /**
      * sort by [column]; clicking the column already sorted reverses it.
@@ -57,22 +76,27 @@ object DeviceTableState {
      * ascending first for a new column, which is what every table does — and what makes a second
      * click mean "no, the other way" rather than "did that do anything".
      */
-    fun sortBy(column: DeviceColumn) {
+    fun sortBy(column: TableColumn) {
         val current = _sort.value
-        val next = if (current.column == column) current.copy(ascending = !current.ascending)
-        else DeviceSort(column, ascending = true)
-        _sort.value = next
-        SettingsManager.setString(AppPref.DEVICE_SORT, "${next.column.name},${if (next.ascending) "asc" else "desc"}")
+        val next = if (current.columnId == column.id) current.copy(ascending = !current.ascending)
+        else DeviceSort(column.id, ascending = true)
+        setSort(next)
     }
 
-    fun resize(column: DeviceColumn, width: Dp) {
-        _widths.value = _widths.value + (column to width)
-        widthWrite.submit {
-            // stored as whole px: a fractional Dp reads as noise in a settings file someone opens
-            val asMap = _widths.value.mapValues { (_, dp) -> dp.value.toInt() }
-                .mapKeys { (each, _) -> each.name }
-            SettingsManager.setString(AppPref.COLUMN_WIDTHS, JsonUtils.toJson(asMap) ?: "")
-        }
+    private fun setSort(sort: DeviceSort) {
+        _sort.value = sort
+        SettingsManager.setString(AppPref.DEVICE_SORT, "${sort.columnId},${if (sort.ascending) "asc" else "desc"}")
+    }
+
+    fun resize(column: TableColumn, width: Dp) {
+        _widths.value = _widths.value + (column.id to width)
+        widthWrite.submit { saveWidths() }
+    }
+
+    private fun saveWidths() {
+        // stored as whole px: a fractional Dp reads as noise in a settings file someone opens
+        val asMap = _widths.value.mapValues { (_, dp) -> dp.value.toInt() }
+        SettingsManager.setString(AppPref.COLUMN_WIDTHS, JsonUtils.toJson(asMap) ?: "")
     }
 
     /**
@@ -84,11 +108,11 @@ object DeviceTableState {
      */
     fun moveColumn(from: Int, to: Int) {
         val shown = visible.value
-        val moved = shown.getOrNull(from) ?: return
-        val target = shown.getOrNull(to) ?: return
+        val moved = shown.getOrNull(from)?.id ?: return
+        val target = shown.getOrNull(to)?.id ?: return
         if (moved == target) return
 
-        val order = _order.value.toMutableList()
+        val order = all.value.map { it.id }.toMutableList()
         val fromIndex = order.indexOf(moved)
         if (fromIndex < 0) return
         order.removeAt(fromIndex)
@@ -97,30 +121,86 @@ object DeviceTableState {
         val targetIndex = order.indexOf(target)
         if (targetIndex < 0) return
         order.add(if (from < to) targetIndex + 1 else targetIndex, moved)
+        setOrder(order)
+    }
 
+    private fun setOrder(order: List<String>) {
         _order.value = order
-        SettingsManager.setEnumOrder(AppPref.COLUMN_ORDER, order)
+        publish()
+        SettingsManager.setString(AppPref.COLUMN_ORDER, order.joinToString(","))
     }
 
-    fun toggleHidden(column: DeviceColumn) {
-        val next = if (column in _hidden.value) _hidden.value - column else _hidden.value + column
-        // hiding the last column leaves a table with nothing in it and no header to un-hide from
-        if (next.size >= DeviceColumn.entries.size) {
-            log.d("toggleHidden: refusing to hide every column")
-            return
-        }
-        _hidden.value = next
-        SettingsManager.setEnumSet(AppPref.HIDDEN_COLUMNS, next)
+    fun toggleHidden(column: TableColumn) {
+        val next = if (column.id in _hidden.value) _hidden.value - column.id else _hidden.value + column.id
+        setHidden(next)
     }
 
-    /** hide exactly [columns] — Settings › Devices › Columns. never all of them, as [toggleHidden]. */
-    fun setHidden(columns: Set<DeviceColumn>) {
-        if (columns.size >= DeviceColumn.entries.size) {
+    /**
+     * hide exactly the columns in [ids] — Settings › Devices › Columns.
+     *
+     * never all of them: a table with nothing in it has no header to un-hide one from.
+     */
+    fun setHidden(ids: Set<String>) {
+        if (all.value.all { it.id in ids }) {
             log.d("setHidden: refusing to hide every column")
             return
         }
-        _hidden.value = columns
-        SettingsManager.setEnumSet(AppPref.HIDDEN_COLUMNS, columns)
+        _hidden.value = ids
+        publish()
+        saveHidden()
+    }
+
+    private fun saveHidden() {
+        // an empty set clears the pref rather than storing "", which reads back as one bad name
+        SettingsManager.setString(AppPref.HIDDEN_COLUMNS, _hidden.value.takeIf { it.isNotEmpty() }?.joinToString(","))
+    }
+
+    /**
+     * add [column] to the table, just after [after] when it's given — the header that was
+     * right-clicked — and at the end otherwise. It shows straight away.
+     *
+     * its values are read by [DeviceManager], which watches [customColumns].
+     */
+    fun addCustom(column: CustomColumn, after: TableColumn? = null) {
+        log.d("addCustom: ${column.label}: ${column.type} ${column.key}")
+        val order = all.value.map { it.id }.toMutableList()
+        val at = after?.let { order.indexOf(it.id) }?.takeIf { it >= 0 }?.plus(1) ?: order.size
+        order.add(at, column.id)
+        _custom.value = _custom.value + column
+        publish()
+        saveCustom()
+        setOrder(order)
+    }
+
+    /** replace the custom column with [column]'s id — a new header, or a new thing to read. */
+    fun updateCustom(column: CustomColumn) {
+        log.d("updateCustom: ${column.label}: ${column.type} ${column.key}")
+        _custom.value = _custom.value.map { if (it.id == column.id) column else it }
+        publish()
+        saveCustom()
+    }
+
+    /** take a custom column out of the table, and out of everything that remembered it. */
+    fun removeCustom(column: CustomColumn) {
+        log.d("removeCustom: ${column.label}")
+        _custom.value = _custom.value.filterNot { it.id == column.id }
+        publish()
+        saveCustom()
+        setOrder(_order.value - column.id)
+        if (column.id in _hidden.value) {
+            _hidden.value = _hidden.value - column.id
+            publish()
+            saveHidden()
+        }
+        if (column.id in _widths.value) {
+            _widths.value = _widths.value - column.id
+            saveWidths()
+        }
+        if (_sort.value.columnId == column.id) setSort(DeviceSort())
+    }
+
+    private fun saveCustom() {
+        SettingsManager.setString(AppPref.CUSTOM_COLUMNS, _custom.value.takeIf { it.isNotEmpty() }?.let { JsonUtils.toJson(it) })
     }
 
     /**
@@ -129,25 +209,42 @@ object DeviceTableState {
      * the measuring is the caller's — only a composable has a `TextMeasurer` — so this just takes
      * the answer and clamps it to something a table can live with.
      */
-    fun sizeToFit(column: DeviceColumn, contentWidth: Dp) {
+    fun sizeToFit(column: TableColumn, contentWidth: Dp) {
         resize(column, (contentWidth + Dimens.cellPadding * 2).coerceIn(Dimens.columnMin, COLUMN_MAX))
     }
 
+    /**
+     * order, widths and visibility back to their defaults. Custom columns stay — they're something
+     * someone made, not a layout — and go after the built-ins, shown.
+     */
     fun resetColumns() {
         log.d("resetColumns: back to defaults")
         // or a resize from a moment ago would land on top of the defaults
         widthWrite.cancel()
-        _order.value = DeviceColumn.defaultOrder
-        _hidden.value = DeviceColumn.defaultHidden
+        _order.value = emptyList()
+        _hidden.value = DeviceColumn.defaultHidden.mapTo(HashSet()) { it.id }
         _widths.value = emptyMap()
+        publish()
         SettingsManager.setString(AppPref.COLUMN_ORDER, null)
         SettingsManager.setString(AppPref.COLUMN_WIDTHS, null)
-        SettingsManager.setEnumSet(AppPref.HIDDEN_COLUMNS, DeviceColumn.defaultHidden)
+        saveHidden()
+    }
+
+    /** everything read back from the prefs again — after Settings › Reset has cleared them. */
+    fun reload() {
+        widthWrite.cancel()
+        _custom.value = loadCustom()
+        _order.value = loadOrder()
+        _hidden.value = loadHidden()
+        _widths.value = loadWidths()
+        _sort.value = loadSort()
+        publish()
     }
 
     /** the rows in the order the table draws them — nulls last, whichever way it's sorted. */
     fun sorted(devices: List<Device>): List<Device> {
-        val (column, ascending) = _sort.value
+        val (columnId, ascending) = _sort.value
+        val column = all.value.firstOrNull { it.id == columnId } ?: DeviceColumn.NAME
         @Suppress("UNCHECKED_CAST")
         val comparator = compareBy<Device, Comparable<Any>?>(nullsLast()) {
             column.sortKey(it) as Comparable<Any>?
@@ -155,23 +252,35 @@ object DeviceTableState {
         return devices.sortedWith(if (ascending) comparator else comparator.reversed())
     }
 
-    private fun loadOrder(): List<DeviceColumn> =
-        SettingsManager.getEnumOrder<DeviceColumn>(AppPref.COLUMN_ORDER)
-
-    private fun loadHidden(): Set<DeviceColumn> =
-        if (SettingsManager.getString(AppPref.HIDDEN_COLUMNS) == null) DeviceColumn.defaultHidden
-        else SettingsManager.getEnumSet(AppPref.HIDDEN_COLUMNS)
-
-    private fun loadWidths(): Map<DeviceColumn, Dp> {
-        val stored = JsonUtils.stringToMap<Int>(SettingsManager.getString(AppPref.COLUMN_WIDTHS))
-        return stored.mapNotNull { (name, px) ->
-            Utils.enumFromName<DeviceColumn>(name)?.let { it to px.dp }
-        }.toMap()
+    /**
+     * [order]'s ids as columns: the ones that no longer exist dropped, and any column it doesn't
+     * mention appended — so a layout saved by an older build still lists every column a newer one
+     * adds, and a custom column the order never heard of still shows up.
+     */
+    private fun resolve(order: List<String>, custom: List<CustomColumn>): List<TableColumn> {
+        val byId: Map<String, TableColumn> = (DeviceColumn.defaultOrder + custom).associateBy { it.id }
+        val listed = order.distinct().mapNotNull { byId[it] }
+        return listed + byId.values.filter { it !in listed }
     }
+
+    private fun loadCustom(): List<CustomColumn> =
+        JsonUtils.stringToList<CustomColumn>(SettingsManager.getString(AppPref.CUSTOM_COLUMNS))
+
+    private fun loadOrder(): List<String> =
+        SettingsManager.getString(AppPref.COLUMN_ORDER)?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+
+    private fun loadHidden(): Set<String> {
+        val stored = SettingsManager.getString(AppPref.HIDDEN_COLUMNS)
+            ?: return DeviceColumn.defaultHidden.mapTo(HashSet()) { it.id }
+        return stored.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
+
+    private fun loadWidths(): Map<String, Dp> =
+        JsonUtils.stringToMap<Int>(SettingsManager.getString(AppPref.COLUMN_WIDTHS)).mapValues { (_, px) -> px.dp }
 
     private fun loadSort(): DeviceSort {
         val stored = SettingsManager.getString(AppPref.DEVICE_SORT) ?: return DeviceSort()
-        val column = Utils.enumFromName<DeviceColumn>(stored.substringBefore(',')) ?: return DeviceSort()
-        return DeviceSort(column, ascending = stored.substringAfter(',', "asc") != "desc")
+        val id = stored.substringBefore(',').takeIf { it.isNotEmpty() } ?: return DeviceSort()
+        return DeviceSort(id, ascending = stored.substringAfter(',', "asc") != "desc")
     }
 }

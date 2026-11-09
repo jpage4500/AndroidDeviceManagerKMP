@@ -29,7 +29,19 @@ class AdbServerTransport(
     override val label: String
         get() = if (server.isLoopback) "adb (this computer)" else "adb (${server.host})"
 
-    override fun devices(): Flow<List<Device>> = AdbDevices.track(server)
+    /**
+     * the tracker, after starting a loopback server that isn't running — the Swing app did the same.
+     *
+     * once per collection (launch, a refresh, a settings change), never from the tracker's own retry
+     * loop: someone who ran `adb kill-server` on purpose shouldn't see it come straight back.
+     */
+    override fun devices(): Flow<List<Device>> = flow {
+        if (server.isLoopback) {
+            val running = AdbConnection.openOrNull(server)?.also { it.close() } != null
+            if (!running) AdbServerHost.start(server)
+        }
+        emitAll(AdbDevices.track(server))
+    }
 
     override suspend fun exec(serial: String, command: String): Result<String> =
         adbExec(server, serial, command).toResult()

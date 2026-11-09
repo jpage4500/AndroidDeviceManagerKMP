@@ -58,6 +58,16 @@ class FileBrowser(private val deviceId: String) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _missing = MutableStateFlow(false)
+
+    /** the open folder isn't on the device — a bookmark made on another one, or a mistyped path. */
+    val missing: StateFlow<Boolean> = _missing.asStateFlow()
+
+    private val _denied = MutableStateFlow(false)
+
+    /** the open folder is there but the shell can't list it — `/data/data`, say, without root. */
+    val denied: StateFlow<Boolean> = _denied.asStateFlow()
+
     private val _query = MutableStateFlow("")
 
     /** "Filter this folder" — kept here, with the folder, so a tab switch doesn't lose it. */
@@ -68,26 +78,107 @@ class FileBrowser(private val deviceId: String) {
 
     private var job: Job? = null
 
-    fun open(scope: CoroutineScope, to: String = _path.value) {
+    /** who the device's shell runs as — null until [start] has asked, or if it couldn't. */
+    private var shell: ShellId? = null
+
+    // whether the first folder has been picked — a browser kept by a Files tab comes back to where
+    // it was, not to Download again
+    private var started = false
+
+    /**
+     * the first open: Download if the device has one, which is where anything worth pulling off a
+     * phone usually is, and [START_PATH] if not. After that, the folder it was left in.
+     */
+    fun start(scope: CoroutineScope) {
+        if (started) return open(scope)
+        started = true
         job?.cancel()
         job = scope.launch {
             _loading.value = true
-            _error.value = null
-            val target = normalise(to)
-            DeviceManager.listFiles(deviceId, target)
-                .onSuccess {
-                    // a filter typed for one folder means nothing in the next
-                    if (target != _path.value) _query.value = ""
-                    _path.value = target
-                    // "." and ".." come back as ordinary entries; nothing wants to see them
-                    _files.value = it.filterNot { file -> file.name == "." || file.name == ".." }
-                    log.d("open: $target: ${_files.value.size} files")
-                }
-                .onFailure {
-                    _error.value = it.message
-                    log.w("open: $target: ${it.message}")
-                }
-            _loading.value = false
+            // a sync LIST of a missing folder answers with nothing rather than an error, so ask —
+            // and who the shell is in the same round trip, for [listable]
+            val probe = DeviceManager.exec(
+                deviceId,
+                "[ -d $DOWNLOAD_PATH ] && echo yes; echo \"$ID_PREFIX$(id -u) $(id -G)\"",
+            ).getOrNull()
+            shell = probe?.lineSequence()?.firstOrNull { it.startsWith(ID_PREFIX) }?.let { line ->
+                val ids = line.removePrefix(ID_PREFIX).trim().split(' ').mapNotNull { it.toIntOrNull() }
+                ids.firstOrNull()?.let { ShellId(it, ids.drop(1).toSet()) }
+            }
+            load(if (probe?.contains("yes") == true) DOWNLOAD_PATH else START_PATH)
+        }
+    }
+
+    fun open(scope: CoroutineScope, to: String = _path.value) {
+        job?.cancel()
+        job = scope.launch { load(to) }
+    }
+
+    private suspend fun load(to: String) {
+        _loading.value = true
+        _error.value = null
+        val target = normalise(to)
+        DeviceManager.listFiles(deviceId, target)
+            .onSuccess {
+                // "." and ".." come back as ordinary entries; nothing wants to see them
+                val listed = it.filterNot { file -> file.name == "." || file.name == ".." }
+                // a sync LIST of a folder that isn't there, or one the shell can't read, answers
+                // with nothing, the same as an empty one — so only an empty answer costs the extra
+                // round trip to tell them apart
+                val check = if (listed.isEmpty()) check(target) else FolderCheck.READABLE
+                _missing.value = check == FolderCheck.MISSING
+                _denied.value = check == FolderCheck.DENIED
+                // a filter typed for one folder means nothing in the next
+                if (target != _path.value) _query.value = ""
+                // moved to even when missing, so Up and the crumbs lead somewhere real
+                _path.value = target
+                _files.value = listed
+                log.d("load: $target: ${listed.size} files${if (check != FolderCheck.READABLE) ", $check" else ""}")
+            }
+            .onFailure {
+                _error.value = it.message
+                log.w("load: $target: ${it.message}")
+            }
+        _loading.value = false
+    }
+
+    /**
+     * whether the shell may list [dir], from its mode bits and owner — false only when they say no.
+     * SELinux can still refuse a folder they allow; opening it then says No permission. Anything
+     * that isn't a folder, or whose owner the listing didn't carry (no `stat_v2`), counts as yes.
+     */
+    fun listable(dir: DeviceFile): Boolean {
+        val id = shell ?: return true
+        if (!dir.isDirectory || !dir.ownerKnown || id.uid == 0) return true
+        val bits = when {
+            dir.uid == id.uid -> dir.mode shr 6
+            dir.gid in id.groups -> dir.mode shr 3
+            else -> dir.mode
+        }
+        // listing a folder takes both read and search
+        return bits and 0b101 == 0b101
+    }
+
+    private data class ShellId(val uid: Int, val groups: Set<Int>)
+
+    private enum class FolderCheck { READABLE, MISSING, DENIED }
+
+    /**
+     * whether a folder that listed as empty is there, and readable. `ls` rather than `[ -r ]`: the
+     * mode bits can allow a read SELinux then refuses, and `ls` is refused the same way the listing was.
+     */
+    private suspend fun check(path: String): FolderCheck {
+        val quoted = Utils.shellQuote(path)
+        val answer = DeviceManager.exec(
+            deviceId,
+            "if [ -d $quoted ]; then ls $quoted >/dev/null 2>&1 && echo yes || echo denied; else echo no; fi",
+        ).getOrNull()
+        return when {
+            answer == null -> FolderCheck.READABLE // no answer isn't proof of anything; say empty rather than wrong
+            answer.contains("denied") -> FolderCheck.DENIED
+            answer.contains("yes") -> FolderCheck.READABLE
+            answer.contains("no") -> FolderCheck.MISSING
+            else -> FolderCheck.READABLE
         }
     }
 
@@ -199,6 +290,59 @@ class FileBrowser(private val deviceId: String) {
         return sent
     }
 
+    /**
+     * save a folder and everything under it into the download folder, as a folder of the same name.
+     *
+     * `find` lists the files rather than walking the tree a sync LIST at a time: one round trip for
+     * the whole tree instead of one per folder. An empty folder has no file to carry it, so one
+     * doesn't come across.
+     *
+     * @return the local folder it was saved as
+     */
+    suspend fun downloadFolder(dir: DeviceFile): Result<String> {
+        val root = dir.path.trimEnd('/')
+        StatusManager.post("Downloading ${dir.name}", progress = 0)
+        val listing = DeviceManager.exec(deviceId, "find ${Utils.shellQuote(root)} -type f")
+            .getOrElse {
+                StatusManager.post("${dir.name}: ${it.message}", isError = true)
+                return Result.failure(it)
+            }
+        val remote = listing.lineSequence().map { it.trim() }.filter { it.startsWith("$root/") }.toList()
+        if (remote.isEmpty()) {
+            StatusManager.post("${dir.name}: nothing to download", isError = true)
+            return Result.failure(IllegalStateException("no files in ${dir.name}"))
+        }
+        // never into a folder already there: a second download of DCIM lands as "DCIM (2)"
+        val base = SaveFolders.downloads()?.trimEnd('/', '\\')
+        val name = if (base == null) dir.name else generateSequence(1) { it + 1 }
+            .map { n -> if (n == 1) dir.name else "${dir.name} ($n)" }
+            .first { localFileInfo("$base/$it") == null }
+        var saved = 0
+        remote.forEachIndexed { index, path ->
+            StatusManager.post("Downloading ${dir.name}: ${index + 1} of ${remote.size}", progress = index * 100 / remote.size)
+            val relative = path.removePrefix("$root/")
+            val bytes = DeviceManager.pullFile(deviceId, path).getOrElse {
+                log.w("downloadFolder: $path: ${it.message}")
+                return@forEachIndexed
+            }
+            val ok = if (base == null) {
+                val sub = relative.substringBeforeLast('/', "")
+                val folder = listOf(PATH_DOWNLOADS, name, sub).filter { it.isNotEmpty() }.joinToString("/")
+                StorageManager.writeBytes(folder, relative.substringAfterLast('/'), bytes)
+            } else {
+                writeLocalFile("$base/$name/$relative", bytes)
+            }
+            if (ok) saved++ else log.w("downloadFolder: couldn't write $relative")
+        }
+        val local = if (base == null) StorageManager.getAbsolutePath(PATH_DOWNLOADS, name) ?: name else "$base/$name"
+        if (saved == remote.size) {
+            StatusManager.post("Downloaded ${dir.name}: $saved files", progress = 100)
+        } else {
+            StatusManager.post("Downloaded $saved of ${remote.size} files from ${dir.name}", isError = true)
+        }
+        return Result.success(local)
+    }
+
     /** what a path is once the slashes are tidy — `/sdcard/` and `//sdcard` are the same folder. */
     private fun normalise(path: String): String {
         val trimmed = path.trim().ifEmpty { "/" }
@@ -207,13 +351,35 @@ class FileBrowser(private val deviceId: String) {
     }
 
     companion object {
-        /** where a browser opens: the one folder anyone actually wants. */
+        /** where a browser opens when the device has no [DOWNLOAD_PATH]. */
         const val START_PATH = "/sdcard"
+
+        /** where a browser opens: what's been downloaded on the phone is what gets pulled off it. */
+        const val DOWNLOAD_PATH = "/sdcard/Download"
         const val PATH_DOWNLOADS = "downloads"
+
+        /** marks the `id` line in [start]'s probe. */
+        private const val ID_PREFIX = "id:"
 
         /** somewhere every Android version lets the shell write and `pm` read. */
         private const val SCRATCH = "/data/local/tmp"
     }
+}
+
+/** folders kept to one click away in Places, across every device — a path, not a device's folder. */
+object FileBookmarks {
+    private val _paths = MutableStateFlow(load())
+    val paths: StateFlow<List<String>> = _paths.asStateFlow()
+
+    fun contains(path: String): Boolean = path in _paths.value
+
+    fun toggle(path: String) {
+        _paths.value = if (contains(path)) _paths.value - path else _paths.value + path
+        SettingsManager.setString(AppPref.FILES_BOOKMARKS, _paths.value.joinToString("\n"))
+    }
+
+    private fun load(): List<String> =
+        SettingsManager.getString(AppPref.FILES_BOOKMARKS).orEmpty().lines().filter { it.isNotBlank() }
 }
 
 /** which columns the file table shows, and how wide — persisted, like the other two tables. */

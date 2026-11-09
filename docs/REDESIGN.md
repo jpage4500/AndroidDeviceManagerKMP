@@ -26,7 +26,7 @@ lines cost what 50 do. No table library is added — none that runs on all three
 | 1 · Devices | Filter chips, action bar, details panel, no-devices onboarding | Done | |
 | 2 · Logs | Tabs per device, combined filters, right-click filters | In progress | Heap and key-rebuild measurements left |
 | 3 · Files | Tabs per device, path bar, places, transfers | In progress | Canvas gaps, root, streaming transfers, Transfers panel left |
-| 4 · Scripts | Script list, per-device runs, results | Done | Concurrency to tune on the rig |
+| 4 · Scripts | Script list, one run with every serial, results | Done | — |
 | 5 · Input and Commands | Type text and Commands as pages, targeting like Scripts | Done | Not yet run against devices |
 | Stats | — | Deferred | After 0–5 |
 
@@ -107,7 +107,8 @@ picked. Scripts, Commands and Input use the same list for the devices they run o
 
 - Header: title, filter chips with counts (All, then the problems: Needs attention, Not charging,
   Low battery, Low storage, Not responding — each with a red or amber dot, and shown only while it
-  would narrow the list), search (⌘F, or just start typing; Escape clears it), refresh,
+  would narrow the list; then a chip per OS version and per Custom 1 / Custom 2 value that two or
+  more devices share), search (start typing; Escape clears it), refresh,
   Connect. Search highlights the matching text in the list and on the icons rather than filtering.
 - Selection bar: a hint with nothing selected; with a selection, its count and Mirror, Screenshot,
   Record, Logs, Install, Type text, Terminal, Run script, Clear. Logs and Run script take the
@@ -412,9 +413,9 @@ Matching the canvas — the gaps found on 10/30:
 - [x] adb on the script's `PATH` — the app has no adb of its own, so the usual SDK and Homebrew
   folders go in front; `ANDROID_ADB_SERVER_ADDRESS` follows a remote adb server.
 - [x] Script list, read-only view, Open in editor, Show folder, New script (a starter template).
-- [x] Runs on: chosen devices from the shared + checklist; per-device runs in parallel, capped (8 to start, tuned on the rig).
-- [x] Results table, per-device output, Run again on failed; last run kept per script in
-  `StorageManager`.
+- [x] Runs on: an All devices pill (the start), or chosen devices from the shared + checklist; the
+  script runs once with every serial as `$1 $2 …`, the Swing app's way.
+- [x] Results row and output, Run again on failed; last run kept per script in `StorageManager`.
 - [x] Run script from the Devices selection bar.
 
 ---

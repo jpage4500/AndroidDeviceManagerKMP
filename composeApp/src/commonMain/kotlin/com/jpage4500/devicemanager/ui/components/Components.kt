@@ -50,7 +50,13 @@ fun Chip(text: String, modifier: Modifier = Modifier) {
 
 /** what a list says when it has nothing in it — never an empty pane. */
 @Composable
-fun EmptyState(title: String, detail: String, modifier: Modifier = Modifier) {
+fun EmptyState(
+    title: String,
+    detail: String,
+    modifier: Modifier = Modifier,
+    /** something to do about it, under the text — a button, usually. */
+    action: (@Composable () -> Unit)? = null,
+) {
     Column(
         modifier.fillMaxSize().padding(Dimens.gapLarge),
         verticalArrangement = Arrangement.Center,
@@ -64,6 +70,10 @@ fun EmptyState(title: String, detail: String, modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
+        if (action != null) {
+            Spacer(Modifier.height(Dimens.gapLarge))
+            action()
+        }
     }
 }
 

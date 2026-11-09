@@ -389,6 +389,7 @@ fun <T, C> DataTable(
                 onReorder = onReorder,
                 drag = drag,
                 menu = headerMenu,
+                tooltips = tooltip != null,
             )
         }
         HorizontalDivider(color = Colors.tableRule)
@@ -583,6 +584,8 @@ private fun <C> TableHeader(
     onReorder: (Int, Int) -> Unit,
     drag: ColumnDrag<C>,
     menu: (@Composable AppMenuScope.(C) -> Unit)?,
+    /** whether a title cut short answers with its full name — off with the cells' own tooltips. */
+    tooltips: Boolean,
 ) {
     var menuFor by remember { mutableStateOf<C?>(null) }
     var menuAt by remember { mutableStateOf(DpOffset.Zero) }
@@ -746,15 +749,35 @@ private fun <C> TableHeader(
                     // titles sit over the start of their cells, as the cells' text does
                     horizontalArrangement = Arrangement.Start,
                 ) {
-                    Text(
-                        text = header(column),
-                        style = tableTextStyle(MaterialTheme.typography.labelMedium, Dimens.headerTextSize),
-                        fontWeight = FontWeight.SemiBold,
-                        color = Colors.tableHeaderText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
+                    val title = header(column)
+                    val titleText: @Composable () -> Unit = {
+                        val clipped = LocalCellClipped.current
+                        Text(
+                            text = title,
+                            style = tableTextStyle(MaterialTheme.typography.labelMedium, Dimens.headerTextSize),
+                            fontWeight = FontWeight.SemiBold,
+                            color = Colors.tableHeaderText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            onTextLayout = { result ->
+                                if (clipped != null && clipped.value != result.hasVisualOverflow) {
+                                    clipped.value = result.hasVisualOverflow
+                                }
+                            },
+                        )
+                    }
+                    if (tooltips) {
+                        // a narrowed column's title answers with its whole name, and only when cut
+                        // short. the tooltip consumes nothing, so the bar's drag and click still see
+                        // every press
+                        CellTooltip(
+                            text = { clipped -> title.takeIf { clipped } },
+                            modifier = Modifier.weight(1f, fill = false),
+                            content = titleText,
+                        )
+                    } else {
+                        Box(Modifier.weight(1f, fill = false)) { titleText() }
+                    }
                     if (column == sortedBy) {
                         Spacer(Modifier.width(Dimens.tabGap))
                         AppIcon(

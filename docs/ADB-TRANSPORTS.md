@@ -71,6 +71,12 @@ With 45 devices on powered hubs, USB isn't a nice-to-have in this app — it is 
 > **The desktop build keeps talking to the adb server on 5037.** Not a compromise made for the port:
 > it is also what lets Android Studio and the `adb` CLI keep working alongside it.
 
+When nothing is listening on loopback, `AdbServerTransport` runs `adb -P <port> start-server` once
+before it starts tracking (`AdbServerHost`, desktop only; the `adb` is the first one `HostPath`
+finds). Only at the start of a collection — launch, a refresh, a settings change — never from the
+tracker's retry loop, so a server someone killed on purpose stays down until they ask for a refresh.
+The adb client in `adb/` still never starts anything.
+
 Android *can* reach USB directly through `UsbManager` in host mode without root — the ADB interface
 is a standard bulk endpoint pair, and cgutman's AdbLib has done it for years — but OTG plus hub power
 makes it a poor fit for a 45-device bench. iOS has no USB host access at all, so it is network-only,

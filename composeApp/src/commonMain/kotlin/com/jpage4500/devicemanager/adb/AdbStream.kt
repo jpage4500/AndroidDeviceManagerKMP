@@ -79,8 +79,9 @@ class AdbStream private constructor(
         /**
          * connect, or null when nothing is listening.
          *
-         * **never runs `adb start-server`.** a refused connect to loopback comes back in single-digit
-         * milliseconds, which is what makes it reasonable to ask this on a timer.
+         * **never runs `adb start-server`** — that is `AdbServerHost`, called by the transport. a
+         * refused connect to loopback comes back in single-digit milliseconds, which is what makes it
+         * reasonable to ask this on a timer.
          */
         suspend fun openOrNull(host: String, port: Int, connectMs: Long = CONNECT_MS): AdbStream? =
             withContext(ioDispatcher) {
