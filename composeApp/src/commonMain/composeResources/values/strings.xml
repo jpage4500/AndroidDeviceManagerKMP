@@ -26,6 +26,7 @@
     <string name="picker_select_all">Select all</string>
     <string name="picker_none">No devices connected</string>
     <string name="tab_close">Close %1$s</string>
+    <string name="tab_reopen">Open %1$s again</string>
 
     <!-- devices page: header chips, the selection bar, and what shows with nothing connected -->
     <string name="chip_all">All</string>

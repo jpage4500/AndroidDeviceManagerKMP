@@ -51,12 +51,25 @@ Each line keeps the `CHANGES.txt` style: `- Area: what changed`, under 100 chara
   replaces it, keep only the outcome.
 - Don't invent behavior that isn't in the lines, and don't add rationale or file names.
 
-**Title:** the single most notable line from the body, copied word for word, leading `- ` included.
+**Title:** line 1 of the summarized list, copied word for word, leading `- ` included.
 
-**Body**, exactly this shape and nothing else:
+**Body:** every line *after* line 1. The title is not repeated in the body: the release notes script
+prints the PR title and then its body, so a title that is also in the body shows up twice in the
+release notes. If the list has only one line, the body is empty.
+
+For a summarized list of
 
 ```
 - Files: bookmark a folder to keep it under Places
+- Files: double-click a file to download it and open it
+- Scripts: a script that asks a question shows a prompt to answer it
+- Devices: fixed a phone number or custom field ending in __ADM_NEXT__
+```
+
+the title is `- Files: bookmark a folder to keep it under Places` and the body is exactly this,
+nothing else:
+
+```
 - Files: double-click a file to download it and open it
 - Scripts: a script that asks a question shows a prompt to answer it
 - Devices: fixed a phone number or custom field ending in __ADM_NEXT__

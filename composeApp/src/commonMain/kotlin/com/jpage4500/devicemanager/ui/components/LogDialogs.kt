@@ -142,7 +142,9 @@ fun FilterDialog(
         val fit = LocalDialogFit.current
         // the summary waits for its count, so it arrives at its full height in one step
         val summary = expression.isNotEmpty() && (count == null || counted != null)
-        LaunchedEffect(terms.size, summary, counted?.combined != null) { fit() }
+        // keyed on the summary's text too: a value typed long enough wraps it onto another line, and
+        // a window that didn't grow for it took that line out of the buttons
+        LaunchedEffect(terms.size, summary, expression, counted) { fit() }
         Column(Modifier.heightIn(max = Dimens.filterRulesMaxHeight).verticalScroll(rememberScrollState())) {
             terms.forEachIndexed { index, term ->
                 TermRow(
@@ -204,7 +206,7 @@ private fun TermRow(
         Spacer(Modifier.width(Dimens.gap))
         AppDropdown(
             value = term.operator,
-            options = LogOperator.OFFERED + listOf(term.operator).filter { it !in LogOperator.OFFERED },
+            options = LogOperator.OFFERED,
             label = { it.label },
             onSelect = { onChange(term.copy(operator = it)) },
             modifier = Modifier.width(OPERATOR_WIDTH),

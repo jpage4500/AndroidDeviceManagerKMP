@@ -135,6 +135,7 @@ private fun LogsPage(shell: ShellState, scope: CoroutineScope) {
                 onSelect = shell::showLogs,
                 onClose = shell::closeLogs,
                 onPick = { shell.openLogs(listOf(it)) },
+                recent = RecentDevices.logs,
                 openGround = Colors.toolbarBg,
                 // live, paused, offline — or not capturing, when the stream ended with the device
                 // still there
@@ -181,6 +182,7 @@ private fun FilesPage(shell: ShellState) {
                 onSelect = shell::showFiles,
                 onClose = shell::closeFiles,
                 onPick = shell::openFiles,
+                recent = RecentDevices.files,
                 openGround = Colors.toolbarBg,
                 pickerTitle = stringResource(Res.string.files_browse_on),
                 modifier = Modifier.weight(1f).padding(end = Dimens.pageGutter),

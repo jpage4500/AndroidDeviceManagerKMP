@@ -562,11 +562,11 @@ therefore caps itself to `LocalWindowInfo.containerSize` and scrolls — an eigh
 
 **The filter editor is structured**, not a text box: a name, then one row per rule of
 where / and / or · [column ▾] [condition ▾] [value] ×, and a dashed + Add rule. It offers the
-design's columns (App, Tag, Message, Level, and Any, which a saved text search uses) and six
-conditions (is, is not, contains, does not contain, starts with, ends with); a filter carried over
-from the Swing app that uses Date, Thread or "does not start/end with" keeps that option on its own
-row. The last rule can't be removed. The rules and the summary under them scroll once they pass
-`Dimens.filterRulesMaxHeight`; until then the window grows a rule at a time (`LocalDialogFit`). Over the rows, **All / Any** (`SegmentedToggle`): rows are
+design's columns (App, Tag, Message, Level, and Any, which a saved text search uses) and eight
+conditions (is, is not, contains, does not contain, starts with, does not start with, ends with, does
+not end with); a filter carried over from the Swing app that uses Date or Thread keeps that column on
+its own row. The last rule can't be removed. The rules and the summary under them scroll once they pass
+`Dimens.filterRulesMaxHeight`; until then the window refits (`LocalDialogFit`) whenever a rule is added or removed or the summary's text or count changes — a value typed long enough wraps the summary onto another line, and a window that didn't grow for it took that line from the buttons. Over the rows, **All / Any** (`SegmentedToggle`): rows are
 `LogTermSpec`s joined with `&&` for All or `||` for Any into the same expression string the
 saved-filter file already speaks, so nothing downstream knows the dialog exists. Under them, a
 summary box: the filter in words, how many lines it passes on its own of all held on the device, and

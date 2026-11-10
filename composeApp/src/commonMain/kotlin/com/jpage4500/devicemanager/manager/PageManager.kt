@@ -5,6 +5,7 @@ import androidx.compose.runtime.*
 import com.jpage4500.devicemanager.data.*
 import com.jpage4500.devicemanager.util.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 
 /** a page of the desktop shell — what the sidebar switches between. See docs/REDESIGN.md. */
 enum class Page { DEVICES, FILES, LOGS, INPUT, COMMANDS, SCRIPTS }
@@ -74,6 +75,32 @@ class LogsView {
     var saveRequested by mutableStateOf(false)
 }
 
+/**
+ * the devices last given a tab on one page, newest first — the chips beside the tab strip's +.
+ *
+ * one list per page and shared by every window, kept across launches: the devices someone reads logs
+ * on aren't always the ones they browse.
+ */
+class RecentDevices(private val pref: AppPref) {
+    private val _ids = MutableStateFlow(JsonUtils.stringToList<String>(SettingsManager.getString(pref)))
+    val ids: StateFlow<List<String>> = _ids.asStateFlow()
+
+    fun add(deviceId: String) {
+        val list = (listOf(deviceId) + _ids.value.filterNot { it == deviceId }).take(MAX)
+        if (list == _ids.value) return
+        _ids.value = list
+        SettingsManager.setString(pref, JsonUtils.toJson(list))
+    }
+
+    companion object {
+        // more than the strip ever has room to show; the rest is so a chip is still there to fill
+        // the place of a recent device that's unplugged
+        private const val MAX = 8
+        val logs = RecentDevices(AppPref.LOGS_RECENT_DEVICES)
+        val files = RecentDevices(AppPref.FILES_RECENT_DEVICES)
+    }
+}
+
 /** one device's filesystem in the Files page; [browser] holds the folder it was left in. */
 class FilesTab(val deviceId: String, val browser: FileBrowser)
 
@@ -117,6 +144,8 @@ class ShellState(private val scope: CoroutineScope) {
     /** open (or focus) a log tab for each device, in order, and show the first. */
     fun openLogs(deviceIds: List<String>) {
         if (deviceIds.isEmpty()) return
+        // the one shown is the newest
+        deviceIds.reversed().forEach(RecentDevices.logs::add)
         deviceIds.forEach { id ->
             if (logTabs.none { it.deviceId == id }) {
                 log.d("openLogs: $id")
@@ -143,6 +172,7 @@ class ShellState(private val scope: CoroutineScope) {
 
     /** open (or focus) a files tab for the device, and show it. */
     fun openFiles(deviceId: String) {
+        RecentDevices.files.add(deviceId)
         if (fileTabs.none { it.deviceId == deviceId }) {
             log.d("openFiles: $deviceId")
             fileTabs.add(FilesTab(deviceId, FileBrowser(deviceId)))

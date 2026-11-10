@@ -103,6 +103,11 @@ is always one of those showing. + is `DevicePickerButton`, the one device checkl
 ticking opens a tab and unticking closes it, and the list stays open until Done so several can be
 picked. Scripts, Commands and Input use the same list for the devices they run on.
 
+After the +, up to three chips for the devices that last had a tab on that page (`RecentDevices`,
+one list for Logs and one for Files, kept across launches) — only ones online with no tab open.
+Clicking one opens its tab. They use room the tabs don't need: a chip is left out before a tab
+would shrink under 120 dp, and none show while tabs are in "N more".
+
 ### Devices
 
 - Header: title, filter chips with counts (All, then the problems: Needs attention, Not charging,
@@ -359,7 +364,7 @@ Matching the canvas — the gaps found on 10/30:
 - [x] **Add filter popover** — a panel rather than a menu: header and hint, checkboxes with each
   filter's rules under its name, ✎ and 🗑 per row, New filter and Done; stays open while ticking.
 - [x] **Editor** — where / and / or before each rule, + Add rule, a summary box naming the filters
-  it combines with, Save and turn on; conditions trimmed to the design's six. Delete lives in the
+  it combines with, Save and turn on; eight conditions, each test followed by its negation. Delete lives in the
   Add filter panel; an App rule picks from the apps in the log.
 - [x] **Right-click** — a heading (`TAG · Choreographer`); Show only / Hide lines containing this on
   Message; Copy the clicked column's value; filters first, then copies; Time offers only copies.
