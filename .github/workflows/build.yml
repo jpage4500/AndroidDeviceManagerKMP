@@ -63,7 +63,7 @@ jobs:
   # a separate macOS runner: the iOS targets need Xcode's toolchain and cannot be built on Linux
   ios:
     name: iOS
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 

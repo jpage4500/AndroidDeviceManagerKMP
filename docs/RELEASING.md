@@ -194,7 +194,7 @@ put in it. Nothing bundles it today either — Compose Desktop packages `icon.ic
 
 - **jvm** (ubuntu) — compiles desktop, builds the debug APK, uploads it as an artifact. The APK is
   what proves ktor still dexes on minSdk 24 (see [PROJECT-SETUP.md](PROJECT-SETUP.md)).
-- **ios** (macos-14) — *links* the framework rather than just compiling it, because linking is what
+- **ios** (macos-15) — *links* the framework rather than just compiling it, because linking is what
   catches an unresolved symbol an `actual` forgot.
 
 There's no test suite, so compiling on all three is the check. `commonMain` is most of the app and
