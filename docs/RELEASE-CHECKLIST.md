@@ -42,7 +42,7 @@ so the version, whenever history is squashed (`main` has 3 commits, this branch 
 ### 1c. Source private or public — done: public
 
 The source repo is public and releases are published to it; the separate release repo and the README
-sync are gone. Still to do: add a `LICENSE` (there is none; `package.json` says `ISC`).
+sync are gone. It's MIT-licensed (`LICENSE`, and `license` in `package.json`).
 
 ### 1d. Desktop auto-update: jDeploy or EngageAdminKMP's updater
 
@@ -59,8 +59,6 @@ separate builds (a flavor) if both are ever wanted. See [§4](#android-port-enga
 ## 2. The repo's settings
 
 1. Settings → General: turn off Wiki and Projects. Leave **Issues on** — it's where bug reports go.
-2. Settings → Actions → General: require approval for workflow runs from outside contributors.
-3. Protect `main` — a merge to it publishes a release.
 
 ## 3. Secrets and tokens
 

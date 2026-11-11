@@ -3,7 +3,7 @@
     "version": "2.0.0",
     "description": "Manage many Android devices at once over adb — desktop, Android and iOS",
     "author": "Joe Page",
-    "license": "ISC",
+    "license": "MIT",
     "main": "index.js",
     "preferGlobal": true,
     "bin": {
