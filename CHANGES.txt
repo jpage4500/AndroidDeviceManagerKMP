@@ -328,3 +328,4 @@
 
 11/11
 - Releases and update checks now come from the AndroidDeviceManagerKMP repo
+- Screenshots: the toast's Open button shows the image instead of its folder
