@@ -109,10 +109,9 @@ It reads from the environment first, then `~/.gradle/gradle.properties` — the 
 `LOGGING_URL` and `LOGGING_API` go up the same way; without them the app still builds and runs, and
 only the log upload refuses (see [APP-SERVICES.md](APP-SERVICES.md)).
 
-On the two release workflows the `.github/actions/write-secrets` composite action appends *every*
-Actions secret to `~/.gradle/gradle.properties`, so a new key needs naming only where the build
-actually uses it — not in each workflow's `env:` block as well. `build.yml` doesn't run it: compiling
-needs no secrets, and a PR from a fork gets none anyway.
+On CI the `.github/actions/write-secrets` composite action appends *every* Actions secret to
+`~/.gradle/gradle.properties`, so a new key needs naming only where the build actually uses it — not
+in each workflow's `env:` block as well.
 
 ## jDeploy configuration
 
@@ -190,15 +189,12 @@ put in it. Nothing bundles it today either — Compose Desktop packages `icon.ic
 
 ## CI
 
-`.github/workflows/build.yml` runs on every push to main and every PR, and publishes nothing:
-
-- **jvm** (ubuntu) — compiles desktop, builds the debug APK, uploads it as an artifact. The APK is
-  what proves ktor still dexes on minSdk 24 (see [PROJECT-SETUP.md](PROJECT-SETUP.md)).
-- **ios** (macos-15) — *links* the framework rather than just compiling it, because linking is what
-  catches an unresolved symbol an `actual` forgot.
-
-There's no test suite, so compiling on all three is the check. `commonMain` is most of the app and
-desktop-only verification is how iOS breaks.
+There's no compile-only workflow and nothing runs on a PR. The two release workflows are the only
+CI: a merge to main builds and publishes desktop and Android, so a change that breaks either fails
+there — after the merge, not before it. Nothing builds iOS on CI at all; compiling every target
+locally before merging (see CLAUDE.md) is the check, and for iOS link rather than compile
+(`./gradlew :composeApp:linkDebugFrameworkIosSimulatorArm64`), because linking is what catches an
+unresolved symbol an `actual` forgot.
 
 ## Not set up
 
