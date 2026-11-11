@@ -3,7 +3,7 @@
     "version": "2.0.0",
     "description": "Manage many Android devices at once over adb — desktop, Android and iOS",
     "author": "Joe Page",
-    "license": "ISC",
+    "license": "MIT",
     "main": "index.js",
     "preferGlobal": true,
     "bin": {
@@ -13,7 +13,7 @@
         "type": "git",
         "url": "git+https://github.com/jpage4500/AndroidDeviceManagerKMP.git"
     },
-    "homepage": "https://github.com/jpage4500/AndroidDeviceManager2",
+    "homepage": "https://github.com/jpage4500/AndroidDeviceManagerKMP",
     "files": [
         "jdeploy-bundle"
     ],
@@ -28,7 +28,7 @@
             {
                 "name": "github: github",
                 "type": "GITHUB",
-                "url": "https://github.com/jpage4500/AndroidDeviceManager2"
+                "url": "https://github.com/jpage4500/AndroidDeviceManagerKMP"
             }
         ],
         "urlSchemes": [

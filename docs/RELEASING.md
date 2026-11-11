@@ -4,17 +4,10 @@ The desktop app ships through **jDeploy**: native installers for macOS, Windows 
 as a GitHub release. The Android app ships as a signed APK on the same repo's releases. There is no
 store involved for either.
 
-This repo is **private**. Releases and the public README go to a separate **public** repo:
-
-```
-jpage4500/AndroidDeviceManager2
-```
-
-Nothing but the README and the release assets lives there — no source. The name is set in five
-places and they must agree: `RELEASE_REPO` in `scripts/lib/common.sh` (both build scripts),
-`TARGET_REPO` in `.github/workflows/build-desktop.yml` (the README sync),
-`jdeploy.publishTargets[].url` and `homepage` in `package.json`, and `LATEST_RELEASE_URL` in
-`manager/UpdateManager.kt`.
+This repo is **public**, and releases are published to it — there is no separate release repo. The
+name is set in four places and they must agree: `RELEASE_REPO` in `scripts/lib/common.sh` (both
+build scripts), `jdeploy.publishTargets[].url` and `homepage` in `package.json`, and
+`LATEST_RELEASE_URL` in `manager/UpdateManager.kt`.
 
 The version is `2.0.<git commit count>`, not the Swing app's `1.0.<count>`: the major is bumped so
 this app always sorts above Swing's releases (1.0.585 and counting), which is what lets a Swing
@@ -25,16 +18,11 @@ install ever be updated into it.
 The workflows are thin: each build job is one call to a script in `scripts/`, the same one you run
 by hand. Anything a release does lives in the script, so a local publish and a CI one can't drift.
 
-`.github/workflows/build-desktop.yml` runs three jobs:
+`.github/workflows/build-desktop.yml` runs two jobs:
 
-1. **sync-readme** — copies `README.md` and every local file it links to into the public repo.
-   `README.md` is the user-facing page, so it must never link into `docs/` — that would publish a
-   private doc. Developer notes live in [docs/README.md](README.md). The job fails, on purpose, while an image the README shows
-   is missing — screenshots go in `resources/screenshots/`.
-   Deliberately not a dependency of the others: a docs sync failing shouldn't hold up a release.
-2. **tag-release** — computes `2.0.<git commit count>` and pushes it as a tag. The same scheme
+1. **tag-release** — computes `2.0.<git commit count>` and pushes it as a tag. The same scheme
    `composeApp/build.gradle.kts` uses, so the tag and `APP_VERSION` can't disagree.
-3. **build-and-deploy** — triggered *by that tag*: `scripts/build-desktop.sh`.
+2. **build-and-deploy** — triggered *by that tag*: `scripts/build-desktop.sh`.
 
 `.github/workflows/build-android.yml` is triggered by the **same tag**: `scripts/build-android.sh ci`.
 Both platforms release the same version off the same commit, and there's no second tagging job.
@@ -44,11 +32,15 @@ Things that exist because they were paid for once already:
 - **`tags: ['2.0.*']`, never `['*']`.** jDeploy keeps its update metadata on a release literally
   named `jdeploy`. A `*` filter matching a tag of that name would publish a release at version
   "jdeploy". There's a second guard on the job itself (`github.ref_name != 'jdeploy'`).
+- **`'!2.0.*-android'` in both workflows' tag filters.** `build-android.sh` creates
+  `<version>-android` here with the PAT, and a PAT-made tag starts workflows: without the exclusion
+  it starts a second desktop build, and starts `build-android.yml` again — which deletes and
+  recreates the same tag, forever. Each job also checks `!endsWith(github.ref_name, '-android')`.
 - **The checkout in `tag-release` uses the PAT, not `GITHUB_TOKEN`.** A push made with the default
   token does not trigger workflows, so neither build would ever run.
 - **No `shannah/jdeploy` action, and no `jdeploy publish`.** The CLI can't publish to GitHub at all
   ("GitHub token is required for publishing to GitHub") — only the GUI and the Action can. So
-  `build-desktop.sh` does what the Action does for a separate target repo: `jdeploy@6
+  `build-desktop.sh` does what the Action does: `jdeploy@6
   github-prepare-release` writes the installers and `package-info.json`, and `gh` creates the
   release and refreshes the `jdeploy` release's `package-info.json`. Found first in CastToTVKMP.
   It also sidesteps the Action's habit of leaving tag releases as hidden drafts.
@@ -88,8 +80,8 @@ the script sets the real one at publish time.
 | `android` | `AndroidDeviceManager.apk`, replaced every release | a fixed link for the README: `…/releases/download/android/AndroidDeviceManager.apk` |
 | `jdeploy` | `package-info.json` | what installed desktop apps read to update; a prerelease |
 
-The `-android` and `android` tags exist only in the release repo — `gh` creates them there. One
-pushed to *this* repo would match `tags: ['2.0.*']` and start a desktop build.
+The `-android` and `android` tags are created by `gh` at publish time, the first on the commit
+that was built. `android` matches no tag filter; `2.0.N-android` is excluded from both.
 
 ## Android signing
 
@@ -103,9 +95,9 @@ lose that keystore and every user uninstalls and reinstalls.
 
 ## Secrets
 
-`GH_TOKEN` — a PAT with `contents: write` on **both** repos: this one, to push the version tag, and
-the release repo, to create the releases and push the README. Plus the four `KMP_*` signing keys
-above, for Android.
+`GH_TOKEN` — a PAT with `contents: write` on this repo, to push the version tag and create the
+releases. It has to be a PAT: a tag pushed with the default `GITHUB_TOKEN` starts no workflows. Plus
+the four `KMP_*` signing keys above, for Android.
 
 ```sh
 ./scripts/set-github-secrets.sh --dry-run   # names and value lengths only, never values
@@ -117,9 +109,10 @@ It reads from the environment first, then `~/.gradle/gradle.properties` — the 
 `LOGGING_URL` and `LOGGING_API` go up the same way; without them the app still builds and runs, and
 only the log upload refuses (see [APP-SERVICES.md](APP-SERVICES.md)).
 
-On CI the `.github/actions/write-secrets` composite action appends *every* Actions secret to
-`~/.gradle/gradle.properties`, so a new key needs naming only where the build actually uses it — not
-in each workflow's `env:` block as well.
+On the two release workflows the `.github/actions/write-secrets` composite action appends *every*
+Actions secret to `~/.gradle/gradle.properties`, so a new key needs naming only where the build
+actually uses it — not in each workflow's `env:` block as well. `build.yml` doesn't run it: compiling
+needs no secrets, and a PR from a fork gets none anyway.
 
 ## jDeploy configuration
 
@@ -201,7 +194,7 @@ put in it. Nothing bundles it today either — Compose Desktop packages `icon.ic
 
 - **jvm** (ubuntu) — compiles desktop, builds the debug APK, uploads it as an artifact. The APK is
   what proves ktor still dexes on minSdk 24 (see [PROJECT-SETUP.md](PROJECT-SETUP.md)).
-- **ios** (macos-14) — *links* the framework rather than just compiling it, because linking is what
+- **ios** (macos-15) — *links* the framework rather than just compiling it, because linking is what
   catches an unresolved symbol an `actual` forgot.
 
 There's no test suite, so compiling on all three is the check. `commonMain` is most of the app and
@@ -212,7 +205,7 @@ desktop-only verification is how iOS breaks.
 [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) has the full list of what's left before the first
 release, in order. In short:
 
-- **The release repo and `GH_TOKEN`.** Neither exists yet, so the workflow above has never run.
+- **`GH_TOKEN`.** Not set yet, so the workflow above has never run.
 - **Android in-app updater.** The APK is released, but the app only reports a newer version as a
   link to the release page — nothing downloads or installs it. See
   [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md). No Play Store.

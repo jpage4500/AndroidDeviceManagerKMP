@@ -130,9 +130,8 @@ data class LogTerm(
  * how a term compares, as the filter editor offers it.
  *
  * The editor builds terms from dropdowns rather than asking for the syntax. These are the Swing
- * app's eight (`LogFilterExpression`), in the redesign's lower-case wording; the editor offers
- * [OFFERED] and only shows the other two to a filter that already uses them. Each maps onto a
- * [LogTerm.Match] plus a negation.
+ * app's eight (`LogFilterExpression`), in the redesign's lower-case wording, and the editor offers
+ * all of them. Each maps onto a [LogTerm.Match] plus a negation.
  */
 enum class LogOperator(val label: String, val match: LogTerm.Match, val negate: Boolean) {
     EQUALS("is", LogTerm.Match.EQUALS, false),
@@ -149,8 +148,10 @@ enum class LogOperator(val label: String, val match: LogTerm.Match, val negate: 
         fun of(match: LogTerm.Match, negate: Boolean): LogOperator =
             entries.first { it.match == match && it.negate == negate }
 
-        /** the design's six, in its order. */
-        val OFFERED = listOf(EQUALS, NOT_EQUALS, CONTAINS, NOT_CONTAINS, STARTS_WITH, ENDS_WITH)
+        /** the editor's order: each test, then its negation. */
+        val OFFERED = listOf(
+            EQUALS, NOT_EQUALS, CONTAINS, NOT_CONTAINS, STARTS_WITH, NOT_STARTS_WITH, ENDS_WITH, NOT_ENDS_WITH,
+        )
     }
 }
 

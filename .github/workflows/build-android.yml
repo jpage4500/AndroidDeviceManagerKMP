@@ -1,6 +1,6 @@
 name: Android
 
-# Builds the signed release APK and publishes it to the PUBLIC release repo as "<version>-android",
+# Builds the signed release APK and publishes it to this repo's releases as "<version>-android",
 # beside the desktop's "<version>" release. No Play Store.
 #
 # Flow: merge to main -> build-desktop.yml's tag-release job pushes "2.0.<commit count>" -> that tag
@@ -8,13 +8,16 @@ name: Android
 # `build-android.sh publish` runs. Riding the desktop's tag means both platforms release the same
 # version off the same commit, with no second tagging job.
 #
-# Needs GH_TOKEN (contents:write on the release repo) and the KMP_* signing secrets.
+# Needs GH_TOKEN (contents:write on this repo) and the KMP_* signing secrets.
 # See docs/RELEASING.md.
 
 on:
   push:
     tags:
       - '2.0.*'
+      # the "<version>-android" tag this workflow's own release creates — without this it re-runs
+      # itself, and every run deletes and recreates that tag, forever
+      - '!2.0.*-android'
   # from main this publishes too (at Gradle's version); from any other branch it only builds
   workflow_dispatch:
 
@@ -27,6 +30,8 @@ permissions:
 
 jobs:
   build-and-deploy:
+    # second guard against the loop described at the tags filter
+    if: ${{ !endsWith(github.ref_name, '-android') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +55,6 @@ jobs:
         with:
           secrets_json: ${{ toJSON(secrets) }}
 
-      # view releases here: https://github.com/jpage4500/AndroidDeviceManager2/releases
       - name: Build and publish
         run: |
           chmod +x scripts/build-android.sh scripts/gen_release_notes.sh

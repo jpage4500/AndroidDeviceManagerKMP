@@ -39,6 +39,11 @@ class TabStatus(val color: Color, val label: String)
  *
  * The + is the shared [DevicePickerButton]: a checklist of every device, titled [pickerTitle], where
  * ticking opens a tab ([onPick]) and unticking closes it ([onClose]).
+ *
+ * After it, a chip for each of the [recent] devices that's online with no tab open, newest first —
+ * one click to bring back a device closed a minute ago. They take only room the tabs don't need: a
+ * chip goes before a tab is squeezed under [Dimens.tabMinWidth], and with tabs in "N more" there are
+ * none.
  */
 @Composable
 fun DeviceTabStrip(
@@ -47,6 +52,7 @@ fun DeviceTabStrip(
     onSelect: (String) -> Unit,
     onClose: (String) -> Unit,
     onPick: (String) -> Unit,
+    recent: RecentDevices,
     modifier: Modifier = Modifier,
     /** the open tab's ground — whatever the page under it starts with, so the two are one shape. */
     openGround: Color = Colors.listBg,
@@ -55,6 +61,7 @@ fun DeviceTabStrip(
     pickerTitle: String,
 ) {
     val devices by DeviceManager.devices.collectAsState()
+    val recentIds by recent.ids.collectAsState()
     val border = Colors.sidebarBorder
     val onlineLabel = stringResource(Res.string.tab_online)
     val offlineLabel = stringResource(Res.string.tab_offline)
@@ -81,6 +88,11 @@ fun DeviceTabStrip(
             if (active == null || active in first || active !in deviceIds) first else first.dropLast(1) + active
         }
         val hidden = deviceIds.filter { it !in shown }
+        val eachChip = Dimens.tabRecentWidth + Dimens.tabGap
+        val chipRoom = room - each * deviceIds.size
+        val chips = if (hidden.isNotEmpty() || chipRoom < eachChip) emptyList() else recentIds
+            .filter { id -> id !in deviceIds && devices.any { it.id == id && it.isOnline } }
+            .take((chipRoom / eachChip).toInt().coerceAtMost(MAX_RECENT_CHIPS))
 
         Row(
             Modifier.fillMaxSize(),
@@ -113,6 +125,46 @@ fun DeviceTabStrip(
                 onChange = { ids, on -> ids.forEach { if (on) onPick(it) else onClose(it) } },
                 modifier = Modifier.padding(bottom = Dimens.tabGap),
             )
+            chips.forEach { id ->
+                key(id) {
+                    RecentChip(devices.firstOrNull { it.id == id }?.displayName ?: Device.serialOf(id)) { onPick(id) }
+                }
+            }
+        }
+    }
+}
+
+// three is what reads as "the ones I just had", rather than a second row of tabs
+private const val MAX_RECENT_CHIPS = 3
+
+/** a recent device beside the +: an outline pill, quieter than a tab, that opens one for it. */
+@Composable
+private fun RecentChip(name: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(percent = 50)
+    val label = stringResource(Res.string.tab_reopen, name)
+    CellTooltip(text = { label }, modifier = Modifier.padding(bottom = Dimens.tabGap)) {
+        Box(Modifier.height(Dimens.tabAdd), contentAlignment = Alignment.Center) {
+            Row(
+                Modifier
+                    .height(Dimens.chipHeight)
+                    .widthIn(max = Dimens.tabRecentWidth)
+                    .clip(shape)
+                    .border(Dimens.hairline, Colors.divider, shape)
+                    .clickable(onClick = onClick)
+                    .semantics { contentDescription = label }
+                    .padding(horizontal = Dimens.navGap),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppIcon(Res.drawable.recent, size = Dimens.tabCloseIcon, tint = Colors.secondaryText)
+                Spacer(Modifier.width(Dimens.tabGap))
+                Text(
+                    name,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Colors.secondaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

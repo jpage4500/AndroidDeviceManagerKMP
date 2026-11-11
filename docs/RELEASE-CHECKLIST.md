@@ -4,10 +4,9 @@ What still has to happen before the first public release, in order. [RELEASING.m
 describes the pipeline that already exists; this is the list of what's missing around it. Tick items
 off here and delete the file once the first release is out.
 
-State as of 11/06: the desktop pipeline (`build-desktop.yml`, jDeploy, README sync, version tag) is
-written but has **never run** — `GH_TOKEN` isn't set yet. The release repo,
-[jpage4500/AndroidDeviceManager2](https://github.com/jpage4500/AndroidDeviceManager2), exists and
-the version is `2.0.<commit count>`. Android and
+State as of 11/11: the desktop pipeline (`build-desktop.yml`, jDeploy, version tag) is written but
+has **never run** — `GH_TOKEN` isn't set yet. Releases go to this repo, which is public, and the
+version is `2.0.<commit count>`. Android and
 iOS have no release path at all. Nothing is on `main` yet beyond the first 3 commits.
 
 ---
@@ -21,7 +20,7 @@ These change what the later steps look like, so settle them before creating anyt
 Both `package.json` files use the same npm name, `android-device-manager`, but publish to different
 repos. A jDeploy install updates from the repo it was installed from, so:
 
-- **Publish to the new `AndroidDeviceManager2` repo** (what the config says today) — the KMP
+- **Publish to this repo** (what the config says today) — the KMP
   app is a separate install. Swing users keep getting Swing updates and never see the new app unless
   they go and install it. Safe; no migration.
 - **Publish to `jpage4500/AndroidDeviceManager`** (the Swing repo, public, latest `1.0.585`) — every
@@ -40,13 +39,10 @@ those users won't jump from 1.x to 2.x by themselves.
 Still to decide: **merge, don't squash** for `feature/* → main`. A squash drops the commit count, and
 so the version, whenever history is squashed (`main` has 3 commits, this branch 23).
 
-### 1c. Source private or public?
+### 1c. Source private or public — done: public
 
-The plan of record is **private source, public release repo** with only the README synced across.
-Making `AndroidDeviceManagerKMP` itself public would remove the second repo and the README sync,
-though not the PAT — a tag pushed with `GITHUB_TOKEN` never triggers the build, whichever repo it's
-in. The Swing app's source is public. Keep it private unless there's a reason to
-open it — but if it goes public, add a `LICENSE` first (there is none; `package.json` says `ISC`).
+The source repo is public and releases are published to it; the separate release repo and the README
+sync are gone. It's MIT-licensed (`LICENSE`, and `license` in `package.json`).
 
 ### 1d. Desktop auto-update: jDeploy or EngageAdminKMP's updater
 
@@ -60,17 +56,14 @@ separate builds (a flavor) if both are ever wanted. See [§4](#android-port-enga
 
 ---
 
-## 2. The public release repo
+## 2. The repo's settings
 
-1. ~~Create it~~ — done: `jpage4500/AndroidDeviceManager2`, public, with a README on `main`. Every
-   place that names it has been updated (see [RELEASING.md](RELEASING.md)).
-2. Settings → General: turn off Wiki and Projects. Leave **Issues on** — it's the only public place
-   for bug reports, since the source repo is private.
+1. Settings → General: turn off Wiki and Projects. Leave **Issues on** — it's where bug reports go.
 
 ## 3. Secrets and tokens
 
-1. Create a **fine-grained PAT** (`GH_TOKEN`): repository access = `AndroidDeviceManagerKMP` and
-   `AndroidDeviceManager2`; permission **Contents: Read and write**. Give it an expiry you'll
+1. Create a **fine-grained PAT** (`GH_TOKEN`): repository access = `AndroidDeviceManagerKMP`;
+   permission **Contents: Read and write**. Give it an expiry you'll
    remember, and put the date in your calendar — when it lapses, releases fail silently at the tag
    step.
 2. Put it, `LOGGING_URL` and `LOGGING_API` in `~/.gradle/gradle.properties`, then
@@ -85,7 +78,7 @@ separate builds (a flavor) if both are ever wanted. See [§4](#android-port-enga
 
 | | jDeploy (already wired) | EngageAdminKMP-style |
 |---|---|---|
-| How it updates | jDeploy's launcher checks the release repo's `jdeploy` tag on every start and installs the newer version before the app opens | `Launcher.kt` main class swaps staged jars in on start; the app downloads `payload.zip` in the background and asks to restart |
+| How it updates | jDeploy's launcher checks this repo's `jdeploy` release on every start and installs the newer version before the app opens | `Launcher.kt` main class swaps staged jars in on start; the app downloads `payload.zip` in the background and asks to restart |
 | Installers | jDeploy builds mac/win/linux installers from one fat jar on one Linux runner | `jpackage` on a 3-OS matrix (+ WiX on Windows) |
 | macOS signing | jDeploy's installer is signed and notarized by jDeploy — no Apple Developer ID needed | unsigned DMG unless you pay for a Developer ID and add notarization; otherwise Gatekeeper blocks it |
 | Code to write | none — `UpdateManager` already tells the user a release exists | port `update/`, `launcher/`, `assemblePayload`, the matrix workflow |
@@ -138,11 +131,11 @@ client" on iPhone is for — have the remote-control use case written up.
 
 ## 6. Public-facing content
 
-1. ~~Write a user README~~ — done: `README.md` is now the user page the sync publishes; the
-   developer notes moved to `docs/README.md`.
+1. ~~Write a user README~~ — done: `README.md` is the user page; the developer notes live in
+   `docs/README.md`.
 2. ~~Screenshots~~ — six desktop ones in `resources/screenshots/`, all linked from the README.
-   Every image the README links is published, so check one for real phone numbers, IMEIs and file
-   names before it goes in.
+   Everything in the repo is public, so check one for real phone numbers, IMEIs and file names
+   before it goes in.
 3. A line on the Swing repo's README pointing to the new app, once §1a is decided.
 
 ## 7. Before tagging the first release

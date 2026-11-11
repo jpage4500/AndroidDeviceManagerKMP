@@ -120,8 +120,8 @@ reads it.
 
 ## Releasing
 
-The desktop app ships through jDeploy to a separate **public** repo,
-`jpage4500/AndroidDeviceManager2`. `.github/workflows/build-desktop.yml` does it on a merge to
+The desktop app ships through jDeploy to this repo's GitHub releases.
+`.github/workflows/build-desktop.yml` does it on a merge to
 main; `scripts/build-desktop.sh` does the same thing by hand. `.github/workflows/build.yml` compiles
 all three targets on every push and PR and publishes nothing. See [RELEASING.md](RELEASING.md).
 

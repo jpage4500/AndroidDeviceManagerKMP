@@ -19,7 +19,7 @@
 #
 # Required env vars or ~/.gradle/gradle.properties entries (validated up front):
 #   API keys:  LOGGING_URL, LOGGING_API
-#   Publish:   GH_TOKEN — contents:write on the release repo (also reads PR titles for the notes)
+#   Publish:   GH_TOKEN — contents:write on this repo (also reads PR titles for the notes)
 #######################################################################################################################################
 
 set -e

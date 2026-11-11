@@ -1,6 +1,6 @@
 #!/bin/bash
 #######################################################################################################################################
-# Build the signed Android APK and publish it as a release on the public repo. No Play Store.
+# Build the signed Android APK and publish it as a release on this repo. No Play Store.
 #
 # Usage: build-android.sh [mode]
 #
@@ -20,8 +20,8 @@
 #   https://github.com/<RELEASE_REPO>/releases/download/android/AndroidDeviceManager.apk
 # is always the newest APK — a link the README can hold that never changes.
 #
-# Both tags are created in RELEASE_REPO only, by gh. A "<version>-android" tag pushed to THIS repo
-# would match build-desktop.yml's `tags: ['2.0.*']` and start a desktop build.
+# Both tags are created by gh, with the PAT, so they do start workflows. Both release workflows
+# exclude '2.0.*-android' from their `tags: ['2.0.*']` filter for that reason; "android" matches neither.
 #
 # Required env vars or ~/.gradle/gradle.properties entries (validated up front):
 #   API keys:  LOGGING_URL, LOGGING_API
@@ -29,7 +29,7 @@
 #              KMP_SIGNING_STORE_PASSWORD, KMP_SIGNING_KEY_ALIAS, KMP_SIGNING_KEY_PASSWORD
 #              — the keystore shared by the KMP apps. every release must be signed with the same key or
 #              an installed copy can't update in place
-#   Publish:   GH_TOKEN — contents:write on the release repo (also reads PR titles for the notes)
+#   Publish:   GH_TOKEN — contents:write on this repo (also reads PR titles for the notes)
 #######################################################################################################################################
 
 set -e
@@ -101,7 +101,9 @@ function publish {
     # a re-run replaces the release, the same as build-desktop.sh does.
     # --latest=false keeps releases/latest on the desktop release (see header)
     gh release delete "$TAG" --repo "$RELEASE_REPO" --yes --cleanup-tag 2>/dev/null || true
+    # --target: the tag is new, and without one gh puts it on main's head rather than the commit built
     gh release create "$TAG" "$APK_NAME" --repo "$RELEASE_REPO" \
+        --target "$(git rev-parse HEAD)" \
         --title "Android $VERSION" \
         --notes-file combined-notes.txt \
         --latest=false

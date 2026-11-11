@@ -5,10 +5,10 @@
 # Expects the caller to have cd'd to the repo root first.
 #######################################################################################################################################
 
-# the PUBLIC repo releases are published to; this repo is private. must agree with
+# the repo releases are published to — this one, which is public. must agree with
 # package.json > jdeploy.publishTargets[].url and UpdateManager's LATEST_RELEASE_URL — see
 # docs/RELEASING.md
-RELEASE_REPO="jpage4500/AndroidDeviceManager2"
+RELEASE_REPO="jpage4500/AndroidDeviceManagerKMP"
 
 # value from the environment first, then ~/.gradle/gradle.properties — the same order
 # composeApp/build.gradle.kts resolves them in, so a local build matches CI

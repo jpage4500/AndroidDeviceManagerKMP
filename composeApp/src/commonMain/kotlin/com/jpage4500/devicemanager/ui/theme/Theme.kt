@@ -299,6 +299,8 @@ object Dimens {
     val tabCloseCross = 8.dp
     val tabCloseStroke = 1.5.dp
     val tabAdd = 32.dp
+    // a recent device's chip beside the +: wide enough for "Galaxy S21 Ultra" before it ellipsizes
+    val tabRecentWidth = 140.dp
     // the open tab's ground covers this much of the strip's rule, and edges are this thick
     val hairline = 1.dp
 
