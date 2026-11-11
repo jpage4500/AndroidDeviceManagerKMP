@@ -40,8 +40,8 @@ SECRETS=(
     LOGGING_URL
     LOGGING_API
 
-    # github releases: a PAT with contents:write on THIS repo (to push the version tag) and on
-    # jpage4500/AndroidDeviceManager2 (to create the releases and sync the README)
+    # github releases: a PAT with contents:write on this repo, to push the version tag (a push made
+    # with the default GITHUB_TOKEN starts no workflows) and create the releases
     GH_TOKEN
 
     # android release signing (build-android.yml) — the keystore shared across the KMP apps.

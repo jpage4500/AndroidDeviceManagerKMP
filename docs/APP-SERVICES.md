@@ -110,8 +110,8 @@ afterwards.
 
 ## Updates
 
-`UpdateManager.checkForUpdates()` reads the GitHub releases API for `latest` on the **public release
-repo** — this one is private, and an API call against it would need a token no install has. See
+`UpdateManager.checkForUpdates()` reads the GitHub releases API for `latest` on this repo — an
+unauthenticated call, since the repo is public. See
 [RELEASING.md](RELEASING.md). `latest` skips drafts and prereleases, so the rolling `0.0.0-<branch>`
 build a branch push publishes never offers itself as an update.
 

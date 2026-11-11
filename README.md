@@ -86,7 +86,7 @@ phone app that's on the way.
 
 ## Install
 
-Download the installer for your computer from **[Releases](https://github.com/jpage4500/AndroidDeviceManager2/releases/latest)**.
+Download the installer for your computer from **[Releases](https://github.com/jpage4500/AndroidDeviceManagerKMP/releases/latest)**.
 
 It's packaged with [jDeploy](https://www.jdeploy.com), which installs Java for the app on its own
 and keeps the app up to date: when a new version is out, it's installed the next time you open the
@@ -161,5 +161,5 @@ Tested with **45 Android devices** on one MacBook.
 
 ## Bugs and ideas
 
-Open an [issue](https://github.com/jpage4500/AndroidDeviceManager2/issues). Settings › About ›
+Open an [issue](https://github.com/jpage4500/AndroidDeviceManagerKMP/issues). Settings › About ›
 **Support / Feedback** sends the app's log along with your note on what went wrong.

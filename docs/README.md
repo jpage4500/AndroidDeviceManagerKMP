@@ -1,7 +1,6 @@
 # docs
 
-The repo's own `README.md` is the public, user-facing page — it's copied to the release repo along
-with every file it links to, so it never links in here. This is the developer entry point.
+The repo's own `README.md` is the user-facing page; this is the developer entry point.
 
 ## Building
 
@@ -16,7 +15,7 @@ open iosApp/iosApp.xcodeproj             # ios — set your signing team on firs
 ```
 
 The desktop ships through jDeploy to
-[AndroidDeviceManager2](https://github.com/jpage4500/AndroidDeviceManager2) on every merge to main
+[this repo's releases](https://github.com/jpage4500/AndroidDeviceManagerKMP/releases) on every merge to main
 — see [RELEASING.md](RELEASING.md).
 
 ## How it reaches devices
@@ -37,8 +36,8 @@ would take to talk to `adbd` directly instead.
 | [UI-PORT.md](UI-PORT.md) | How the Swing screens become Compose ones on the **desktop** — the device table, the windows beyond it, and the tray menu |
 | [SHARE-SERVER.md](SHARE-SERVER.md) | Share Devices — the desktop serving its devices to the phone and to other desks over the Swing app's HTTP API, and why that server is hand-built on ktor's parts rather than ktor-server |
 | [MOBILE-UI.md](MOBILE-UI.md) | The **phone** app — the device list, the detail sheet, the three ways to connect a device, and what happens to a connection when the app is backgrounded |
-| [RELEASING.md](RELEASING.md) | How the desktop app ships — jDeploy, the public release repo, the CI workflows and the one secret they need |
-| [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) | What's still missing before the first public release — the decisions, the release repo, auto-update on desktop and Android — to delete once it's out |
+| [RELEASING.md](RELEASING.md) | How the desktop app ships — jDeploy, GitHub releases, the CI workflows and the one secret they need |
+| [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) | What's still missing before the first public release — the decisions, the repo's settings, auto-update on desktop and Android — to delete once it's out |
 | [WINDOWS.md](WINDOWS.md) | More than one window on the desktop, and what "native look and feel" can and can't mean on this stack |
 
 These are working documents, not a manual. When something here stops describing the code, fix it or

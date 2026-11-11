@@ -325,3 +325,6 @@
 - Logs, Files: chips beside + reopen the devices that last had a tab
 - Logs: fixed the filter dialog's buttons getting squished when its summary wraps
 - Logs: filter rules can test that a field does not start with or end with a value
+
+11/11
+- Releases and update checks now come from the AndroidDeviceManagerKMP repo

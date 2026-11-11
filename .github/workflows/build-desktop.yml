@@ -1,14 +1,14 @@
 name: Desktop (jDeploy)
 
-# Builds the desktop fat jar and publishes native installers to the PUBLIC release repo via
+# Builds the desktop fat jar and publishes native installers to this repo's releases via
 # jDeploy (https://www.jdeploy.com).
 #
-# Flow: merge to main -> job 2 tags "2.0.<commit count>" -> the tag push runs job 3, which is one
+# Flow: merge to main -> job 1 tags "2.0.<commit count>" -> the tag push runs job 2, which is one
 # call to scripts/build-desktop.sh — the same script a local publish runs. The same tag also starts
 # build-android.yml.
 #
-# Needs the GH_TOKEN secret — a PAT with contents:write on BOTH this repo (to push the tag) and the
-# release repo (to create the release). See docs/RELEASING.md.
+# Needs the GH_TOKEN secret — a PAT with contents:write on this repo, to push the tag and create the
+# release. See docs/RELEASING.md.
 
 on:
   push:
@@ -19,17 +19,14 @@ on:
     # a bogus release at version "jdeploy" and pointing dist-tags.latest at it
     tags:
       - '2.0.*'
+      # build-android.sh creates "<version>-android" in this repo with the PAT, which would
+      # otherwise start a second desktop build of the same version
+      - '!2.0.*-android'
   workflow_dispatch:
 
 concurrency:
   group: jdeploy-release-${{ github.repository }}
   cancel-in-progress: false
-
-# the PUBLIC repo releases and the README are published to; this repo is private.
-# declared at workflow scope because two jobs need it — a step writing it into $GITHUB_ENV is
-# job-scoped, so sync-readme couldn't see it
-env:
-  TARGET_REPO: jpage4500/AndroidDeviceManager2
 
 # needed to create tags and releases
 permissions:
@@ -37,25 +34,7 @@ permissions:
 
 jobs:
   # ==========================================
-  # JOB 1: mirror README + its images to the public repo
-  # ==========================================
-  # deliberately NOT a dependency of tag-release: a docs sync failing shouldn't hold up a release.
-  # it runs on the merge, so it lands well before the tag-triggered build gets as far as publishing
-  sync-readme:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Sync README to ${{ env.TARGET_REPO }}
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: |
-          chmod +x scripts/sync_public_readme.sh
-          ./scripts/sync_public_readme.sh "${{ env.TARGET_REPO }}"
-
-  # ==========================================
-  # JOB 2: auto-tag on merge to main
+  # JOB 1: auto-tag on merge to main
   # ==========================================
   tag-release:
     if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
@@ -88,11 +67,11 @@ jobs:
           fi
 
   # ==========================================
-  # JOB 3: build and deploy (triggered by the tag)
+  # JOB 2: build and deploy (triggered by the tag)
   # ==========================================
   build-and-deploy:
-    # second guard against publishing jDeploy's own metadata tag as if it were a release
-    if: ${{ github.ref_type == 'tag' && github.ref_name != 'jdeploy' }}
+    # second guard against publishing jDeploy's own metadata tag, or android's, as a desktop release
+    if: ${{ github.ref_type == 'tag' && github.ref_name != 'jdeploy' && !endsWith(github.ref_name, '-android') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -123,10 +102,9 @@ jobs:
           cache-dependency-path: 'package.json'
 
       # the same script a local publish runs: builds the jar, has jDeploy prepare the installers,
-      # creates the release on TARGET_REPO with the jar and the release notes, and updates the
+      # creates the release on this repo with the jar and the release notes, and updates the
       # 'jdeploy' release's package-info.json. GH_TOKEN reaches it through gradle.properties, and the
       # version is this tag's name
-      # view releases here: https://github.com/jpage4500/AndroidDeviceManager2/releases
       - name: Build and publish
         run: |
           chmod +x scripts/build-desktop.sh scripts/gen_release_notes.sh

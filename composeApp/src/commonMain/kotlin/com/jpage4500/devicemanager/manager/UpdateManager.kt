@@ -28,7 +28,7 @@ object UpdateManager {
     private var backgroundJob: Job? = null
 
     private const val LATEST_RELEASE_URL =
-        "https://api.github.com/repos/jpage4500/AndroidDeviceManager2/releases/latest"
+        "https://api.github.com/repos/jpage4500/AndroidDeviceManagerKMP/releases/latest"
 
     sealed interface Result {
         data class UpToDate(val version: String) : Result

@@ -5,6 +5,10 @@ name: Build
 #
 # This does NOT publish anything. Releases live in build-desktop.yml and build-android.yml; there
 # is no Play Store or TestFlight job (see docs/RELEASING.md).
+#
+# No secrets: compiling needs none (LOGGING_* resolve to "" and only switch off log upload), a PR
+# from a fork gets none anyway, and a compile job holding the signing keys and the PAT is exposure
+# for nothing.
 
 on:
   push:
@@ -42,11 +46,6 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
 
-      - name: Write secrets to gradle.properties
-        uses: ./.github/actions/write-secrets
-        with:
-          secrets_json: ${{ toJSON(secrets) }}
-
       - name: Compile desktop
         run: ./gradlew :composeApp:compileKotlinDesktop
 
@@ -80,11 +79,6 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
-
-      - name: Write secrets to gradle.properties
-        uses: ./.github/actions/write-secrets
-        with:
-          secrets_json: ${{ toJSON(secrets) }}
 
       # the Kotlin/Native compiler and its dependencies are a large download; without this every
       # run re-fetches them
