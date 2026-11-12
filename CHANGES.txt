@@ -336,3 +336,4 @@
 - Shortcuts: ⌘1, ⌘2 and ⌘3 show Devices, Files and Logs in place of ⌘D and ⌘L
 - Devices: ⌘L opens logs for the selected devices
 - Shortcuts: ⌘4, ⌘5 and ⌘6 show Input, Commands and Scripts
+- Menus: the separators between groups of items are drawn instead of left as blank gaps
