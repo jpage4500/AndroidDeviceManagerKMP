@@ -30,14 +30,17 @@ fun runTargets(ready: List<Device>, chosen: List<String>, all: Boolean = false):
     if (all) ready.map { it.id } else chosen.filter { id -> ready.any { it.id == id } }
 
 /**
- * "Runs on: [chips] +" — the chosen devices, and the shared [DevicePickerButton] to change them.
+ * "Runs on: [chips] + [recent]" — the chosen devices, the shared [DevicePickerButton] to change them,
+ * and after it a chip for each of the [recent] devices that's ready and not chosen, newest first —
+ * one click to bring back a device dropped a minute ago, as Logs and Files do for their tabs.
  *
- * Nothing chosen when the page opens starts from what is selected on the Devices page — unless the
- * page offers [all], which is its own start.
+ * Nothing is chosen for the page until someone picks: the Devices selection is not a start, since
+ * which devices that happens to be is rarely the ones to type or run on.
  *
  * @param label what the row is called — "Runs on", or "Types on" for Input
  * @param all null for no All devices pill; else whether it's on. On, it stands in for the chips;
  * picking a device turns it off, which is the caller's to do in [onChoose]
+ * @param recent the page's recently chosen devices, or null for no chips after the +
  */
 @Composable
 fun RunsOn(
@@ -47,15 +50,13 @@ fun RunsOn(
     label: String = stringResource(Res.string.run_on),
     all: Boolean? = null,
     onAll: (Boolean) -> Unit = {},
+    recent: RecentDevices? = null,
 ) {
-    val selection by DeviceManager.selectedIds.collectAsState()
-    LaunchedEffect(Unit) {
-        if (all == null && chosen.isEmpty()) {
-            val seed = selection.filter { id -> ready.any { it.id == id } }
-            if (seed.isNotEmpty()) onChoose(seed)
-        }
-    }
+    val recentIds = recent?.ids?.collectAsState()?.value.orEmpty()
     val allOn = all == true
+    val chips = if (allOn) emptyList() else recentIds
+        .filter { id -> id !in chosen && ready.any { it.id == id } }
+        .take(MAX_RECENT_CHIPS)
     val skipped = if (allOn) 0 else chosen.count { id -> ready.none { it.id == id } }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.gap)) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = Colors.primaryText)
@@ -86,6 +87,12 @@ fun RunsOn(
             canPick = { it.isReady },
             size = Dimens.chipHeight + Dimens.liveDot,
         )
+        chips.forEach { id ->
+            key(id) {
+                val name = DeviceManager.nameOf(id)
+                RecentChip(name, stringResource(Res.string.run_add_recent, name)) { onChoose(chosen + id) }
+            }
+        }
         if (skipped > 0) {
             Text(stringResource(Res.string.run_skips, skipped), style = MaterialTheme.typography.bodySmall, color = Colors.secondaryText)
         }

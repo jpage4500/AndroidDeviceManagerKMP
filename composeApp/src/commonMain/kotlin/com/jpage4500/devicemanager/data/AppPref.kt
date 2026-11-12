@@ -35,6 +35,8 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     LOGS_SAVE_DIR("logs_save_dir"),                         // folder the last saved log went to
     LOGS_RECENT_DEVICES("logs_recent_devices"),             // JSON list of device ids given a Logs tab, newest first
     FILES_RECENT_DEVICES("files_recent_devices"),           // JSON list of device ids given a Files tab, newest first
+    INPUT_RECENT_DEVICES("input_recent_devices"),           // JSON list of device ids chosen on Input, newest first
+    COMMANDS_RECENT_DEVICES("commands_recent_devices"),     // JSON list of device ids chosen on Commands, newest first
     FILES_COLUMN_WIDTHS("files_column_widths"),             // JSON map of FileColumn name -> px
     FILES_RECENT_PATHS("files_recent_paths"),               // newline-separated paths from "Go To…"
     FILES_BOOKMARKS("files_bookmarks"),                     // newline-separated bookmarked folders, any device

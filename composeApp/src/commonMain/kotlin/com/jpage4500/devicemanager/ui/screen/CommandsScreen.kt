@@ -98,7 +98,7 @@ fun CommandsScreen() {
             )
 
             Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(Dimens.rowPadding)) {
-                RunsOn(ready = ready, chosen = chosen, onChoose = CommandManager::choose)
+                RunsOn(ready = ready, chosen = chosen, onChoose = CommandManager::choose, recent = RecentDevices.commands)
 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.gap)) {
                     Text(

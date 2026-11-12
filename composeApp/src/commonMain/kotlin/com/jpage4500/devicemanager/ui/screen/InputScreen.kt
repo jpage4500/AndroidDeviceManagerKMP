@@ -105,6 +105,7 @@ fun InputScreen() {
                 chosen = chosen,
                 onChoose = InputManager::choose,
                 label = stringResource(Res.string.input_types_on),
+                recent = RecentDevices.input,
             )
 
             Column(Modifier.fillMaxWidth().pageCard().padding(Dimens.rowPadding)) {

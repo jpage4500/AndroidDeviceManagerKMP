@@ -209,8 +209,8 @@ would shrink under 120 dp, and none show while tabs are in "N more".
 - A script runs **once per device, with that device's serial as `$1`** — not once with every serial,
   as the Swing app does. That is what gives each device its own result.
 - Runs on: the chosen devices as chips and a + that opens the shared device checklist (Select all
-  included). There is no "All" — the devices are always picked. Nothing chosen when the page opens
-  starts from the Devices selection; a note counts chosen devices that aren't ready and are skipped.
+  included). There is no "All" — the devices are always picked. Nothing is chosen until someone
+  picks; a note counts chosen devices that aren't ready and are skipped.
 - Read-only listing with line numbers; Open in editor, Show folder, New script.
 - Results: a row per device — running, done or failed, exit code, time, last line — and that device's
   full output under the table. Run again on failed.
@@ -220,9 +220,13 @@ would shrink under 120 dp, and none show while tabs are in "N more".
 Both were the Swing app's windows (`InputScreen`, one per device, and `CommandScreen`) and then
 dialogs here. As pages they sit with Scripts — the three things that act on many devices at once —
 and **target devices the same way**: "Runs on" (Input: "Types on") with chips and the shared + device
-checklist — always an explicit choice, starting from the Devices selection, of which the devices
-ready when the action starts are the ones acted on. Type text and Commands on the Devices selection bar, ⌘I, and
-a row's Run command… arrive with those devices chosen. Each page keeps its own choice.
+checklist — always an explicit choice, starting empty, of which the devices ready when the action
+starts are the ones acted on. Type text and Commands on the Devices selection bar, ⌘I, and a row's
+Run command… arrive with those devices chosen. Each page keeps its own choice.
+
+After the +, up to three chips for the devices last chosen on that page (`RecentDevices.input` and
+`.commands`, kept across launches, like Logs' and Files') — only ready ones not already chosen.
+Clicking one adds it.
 
 ```
 Input                                          Commands

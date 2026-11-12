@@ -98,6 +98,8 @@ class RecentDevices(private val pref: AppPref) {
         private const val MAX = 8
         val logs = RecentDevices(AppPref.LOGS_RECENT_DEVICES)
         val files = RecentDevices(AppPref.FILES_RECENT_DEVICES)
+        val input = RecentDevices(AppPref.INPUT_RECENT_DEVICES)
+        val commands = RecentDevices(AppPref.COMMANDS_RECENT_DEVICES)
     }
 }
 
