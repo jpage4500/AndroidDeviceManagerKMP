@@ -144,7 +144,8 @@ would shrink under 120 dp, and none show while tabs are in "N more".
   Fit button beside it starts it again.
 - The grid shares the table's selection, click and key semantics, menu and drop target; nothing
   in it polls a device, so 45 tiles cost no more adb than 45 rows.
-- ⌘1 / ⌘2 / ⌘3 (View › Devices, Files, Logs) bring that page up from any page, as it was left.
+- ⌘1 to ⌘6 (View › Devices, Files, Logs, Input, Commands, Scripts) bring that page up from any page,
+  as it was left.
 - ⌘F puts the keyboard in the page's search box — Devices, Files and Logs.
 - **No devices connected** shows three cards — USB steps, Wi-Fi pairing with the QR, another
   computer by address and token — over the adb server's status, Restart adb, and a help link. One

@@ -30,10 +30,10 @@ is behind another one reads as a dead shortcut.
 - **No dialogs.** FileExplorerKMP's `DetachedWindow` is the pattern worth copying if they should be
   movable, real top-level windows rather than in-window overlays.
 - **The menu bar is three menus.** File ▸ New Window ⌘N / Mirror ⌘M / Save Log… ⌘S / Close ⌘W,
-  View ▸ Devices ⌘1 / Files ⌘2 / Logs ⌘3 (the page as it was left), and Device ▸ View Logs /
-  Browse Files / Take Screenshot ⌘S / Type Text… ⌘I (the Input page). ⌘F is not a menu item: each
-  page with a search box (Devices, Files, Logs) takes it to focus that box. The Device items act on the device list's selection — the ready
-  devices, as the selection bar does — or, in a mirror window, on that window's device; they work
+  View ▸ Devices ⌘1 to Scripts ⌘6 (the sidebar's pages in order, as they were left), and
+  Device ▸ View Logs ⌘L (on Devices only) / Browse Files / Take Screenshot ⌘S / Type Text… ⌘I (the Input page). ⌘F is
+  not a menu item: each page with a search box (Devices, Files, Logs) takes it to focus that box.
+  The Device items act on the device list's selection — the ready devices, as the selection bar does — or, in a mirror window, on that window's device; they work
   from any window and any page. ⌘W on Logs or Files closes the open tab first, and the window only
   once that page has no tabs left (or on any other page).
 - **⌘S follows the page.** On Devices (and in a mirror window) it is Take Screenshot; on Logs it is

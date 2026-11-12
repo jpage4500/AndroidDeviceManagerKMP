@@ -265,7 +265,7 @@ object PageManager {
     /** the Devices page — View › as List / as Icons. */
     fun openDevices() = show(Page.DEVICES)
 
-    /** [page] as it was left, tabs and all — ⌘1 / ⌘2 / ⌘3 from the menu bar. */
+    /** [page] as it was left, tabs and all — ⌘1 to ⌘6 from the menu bar. */
     fun show(page: Page) = withShell { it.page = page }
 
     /** the Devices page with [deviceId] selected and its details panel open — a row's menu, the tray. */

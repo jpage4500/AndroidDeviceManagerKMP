@@ -334,3 +334,5 @@
 11/12
 - Shortcuts: ⌘F focuses the page's search box instead of opening Files
 - Shortcuts: ⌘1, ⌘2 and ⌘3 show Devices, Files and Logs in place of ⌘D and ⌘L
+- Devices: ⌘L opens logs for the selected devices
+- Shortcuts: ⌘4, ⌘5 and ⌘6 show Input, Commands and Scripts
