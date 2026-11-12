@@ -425,15 +425,15 @@ fun SelectionBar(
         onClear = onClear,
         modifier = Modifier.padding(start = Dimens.pageGutter, end = Dimens.pageGutter, bottom = Dimens.rowPadding),
     ) {
-        BarAction(Res.drawable.mirror, stringResource(Res.string.action_mirror), any) { onMirror(ready) }
-        BarAction(Res.drawable.screenshot, stringResource(Res.string.action_screenshot), any) { onScreenshot(ready) }
-        BarAction(Res.drawable.logs, stringResource(Res.string.sel_logs), any) { onLogs(ready) }
-        BarAction(Res.drawable.folder, stringResource(Res.string.sel_files), first != null) { first?.let(onFiles) }
-        BarAction(Res.drawable.download, stringResource(Res.string.action_install), any, onClick = onInstall)
-        BarAction(Res.drawable.keyboard, stringResource(Res.string.sel_type_text), any, onClick = onInput)
-        BarAction(Res.drawable.terminal, stringResource(Res.string.sel_commands), true, onClick = onCommands)
+        BarAction(Res.drawable.mirror, stringResource(Res.string.action_mirror), any, tooltip = stringResource(Res.string.tip_sel_mirror)) { onMirror(ready) }
+        BarAction(Res.drawable.screenshot, stringResource(Res.string.action_screenshot), any, tooltip = stringResource(Res.string.tip_sel_screenshot)) { onScreenshot(ready) }
+        BarAction(Res.drawable.logs, stringResource(Res.string.sel_logs), any, tooltip = stringResource(Res.string.tip_sel_logs)) { onLogs(ready) }
+        BarAction(Res.drawable.folder, stringResource(Res.string.sel_files), first != null, tooltip = stringResource(Res.string.tip_sel_files)) { first?.let(onFiles) }
+        BarAction(Res.drawable.download, stringResource(Res.string.action_install), any, tooltip = stringResource(Res.string.tip_sel_install), onClick = onInstall)
+        BarAction(Res.drawable.keyboard, stringResource(Res.string.sel_type_text), any, tooltip = stringResource(Res.string.tip_sel_type_text), onClick = onInput)
+        BarAction(Res.drawable.terminal, stringResource(Res.string.sel_commands), true, tooltip = stringResource(Res.string.tip_sel_commands), onClick = onCommands)
         if (ScriptHost.supported) {
-            BarAction(Res.drawable.script, stringResource(Res.string.sel_run_script), any) { onRunScript(ready) }
+            BarAction(Res.drawable.script, stringResource(Res.string.sel_run_script), any, tooltip = stringResource(Res.string.tip_sel_run_script)) { onRunScript(ready) }
         }
     }
 }
@@ -514,6 +514,20 @@ fun BarAction(
     enabled: Boolean,
     /** true for the one that can't be undone — Delete — which is drawn in the error colour. */
     danger: Boolean = false,
+    /** what the action does, said when the pointer rests on it — the label alone is one word. */
+    tooltip: String? = null,
+    onClick: () -> Unit,
+) {
+    if (tooltip == null) BarActionContent(icon, label, enabled, danger, onClick)
+    else CellTooltip(text = { tooltip }) { BarActionContent(icon, label, enabled, danger, onClick) }
+}
+
+@Composable
+private fun BarActionContent(
+    icon: DrawableResource,
+    label: String,
+    enabled: Boolean,
+    danger: Boolean,
     onClick: () -> Unit,
 ) {
     val alpha = if (enabled) 1f else 0.4f

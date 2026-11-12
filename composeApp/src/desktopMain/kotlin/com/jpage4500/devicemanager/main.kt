@@ -207,8 +207,15 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
             }
         }
         Menu(stringResource(Res.string.menu_view), mnemonic = 'V') {
-            Item(stringResource(Res.string.devices), shortcut = shortcut(Key.D)) {
-                PageManager.openDevices()
+            // ⌘1–⌘3 are the sidebar's first three pages, in its order; ⌘F is each page's search box
+            Item(stringResource(Res.string.devices), shortcut = shortcut(Key.One)) {
+                PageManager.show(Page.DEVICES)
+            }
+            Item(stringResource(Res.string.page_files), shortcut = shortcut(Key.Two)) {
+                PageManager.show(Page.FILES)
+            }
+            Item(stringResource(Res.string.page_logs), shortcut = shortcut(Key.Three)) {
+                PageManager.show(Page.LOGS)
             }
             Separator()
             // the Devices page's List / Icons toggle; picking one also brings that page up
@@ -222,10 +229,10 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
             }
         }
         Menu(stringResource(Res.string.menu_device), mnemonic = 'D') {
-            Item(stringResource(Res.string.menu_logs), enabled = ids.isNotEmpty(), shortcut = shortcut(Key.L)) {
+            Item(stringResource(Res.string.menu_logs), enabled = ids.isNotEmpty()) {
                 PageManager.openLogs(ids)
             }
-            Item(stringResource(Res.string.menu_files), enabled = filesFor != null, shortcut = shortcut(Key.F)) {
+            Item(stringResource(Res.string.menu_files), enabled = filesFor != null) {
                 filesFor?.let(PageManager::openFiles)
             }
             Item(stringResource(Res.string.menu_screenshot), enabled = ids.isNotEmpty(), shortcut = screenshotKey) {

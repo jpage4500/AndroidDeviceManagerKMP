@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
+import androidx.compose.ui.focus.*
 import androidx.compose.ui.geometry.*
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.*
@@ -64,6 +65,7 @@ fun ExploreScreen(
     }
 
     var selection by remember { mutableStateOf(TableSelection<Any?>()) }
+    val filterFocus = remember { FocusRequester() }
     var input by remember { mutableStateOf<InputRequest?>(null) }
     var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
     var dropping by remember { mutableStateOf(false) }
@@ -126,7 +128,17 @@ fun ExploreScreen(
         }
     }
 
-    Column(modifier.fillMaxSize()) {
+    Column(
+        modifier
+            .fillMaxSize()
+            // ⌘F: into the filter box. previewed, so the table's own key handling doesn't claim it
+            .onPreviewKeyEvent { event ->
+                val find = event.type == KeyEventType.KeyDown && event.key == Key.F &&
+                    (event.isMetaPressed || event.isCtrlPressed)
+                if (find) runCatching { filterFocus.requestFocus() }
+                find
+            }
+    ) {
         // the path row and the selection bar are one card, hanging off the open tab
         Column(
             Modifier
@@ -146,6 +158,7 @@ fun ExploreScreen(
                 onGoTo = { input = InputRequest(goToTitle, path) { target -> browser.open(scope, target) } },
                 onCopyPath = { copyToClipboard(path) },
                 onQuery = browser::setQuery,
+                filterFocus = filterFocus,
                 onHidden = { SettingsManager.setBoolean(AppPref.FILES_SHOW_HIDDEN, !showHidden) },
                 onRefresh = ::refresh,
                 onNewFolder = {
@@ -374,6 +387,7 @@ private fun PathRow(
     onGoTo: () -> Unit,
     onCopyPath: () -> Unit,
     onQuery: (String) -> Unit,
+    filterFocus: FocusRequester,
     onHidden: () -> Unit,
     onRefresh: () -> Unit,
     onNewFolder: () -> Unit,
@@ -448,7 +462,13 @@ private fun PathRow(
                 .padding(horizontal = Dimens.gap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FilterField(value = query, onValueChange = onQuery, hint = stringResource(Res.string.files_filter), modifier = Modifier.weight(1f))
+            FilterField(
+                value = query,
+                onValueChange = onQuery,
+                hint = stringResource(Res.string.files_filter),
+                focusRequester = filterFocus,
+                modifier = Modifier.weight(1f),
+            )
         }
 
         AppSwitch(checked = showHidden, label = stringResource(Res.string.files_hidden)) { onHidden() }

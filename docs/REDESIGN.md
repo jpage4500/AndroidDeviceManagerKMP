@@ -144,7 +144,8 @@ would shrink under 120 dp, and none show while tabs are in "N more".
   Fit button beside it starts it again.
 - The grid shares the table's selection, click and key semantics, menu and drop target; nothing
   in it polls a device, so 45 tiles cost no more adb than 45 rows.
-- ⌘D (View › Devices) brings the Devices page up from any page.
+- ⌘1 / ⌘2 / ⌘3 (View › Devices, Files, Logs) bring that page up from any page, as it was left.
+- ⌘F puts the keyboard in the page's search box — Devices, Files and Logs.
 - **No devices connected** shows three cards — USB steps, Wi-Fi pairing with the QR, another
   computer by address and token — over the adb server's status, Restart adb, and a help link. One
   device looks exactly like many.
@@ -324,7 +325,7 @@ Types on (Pixel 9 ×) (S21 ×) +                 ┌ Saved ───────
   row under the pointer.
 - [x] The table looks like EngageAdminKMP's — pale 38dp header, 12sp semibold titles, chevron sort,
   13sp rows, full-width stripes and row rules, no tiled background (every `DataTable`).
-- [x] Icon view — `DeviceGrid`, the List / Icons toggle and the status bar's size slider; ⌘D for
+- [x] Icon view — `DeviceGrid`, the List / Icons toggle and the status bar's size slider; ⌘1 for
   the page.
 - [x] Icon view tiers, serial endings and the battery/storage panel; Fit until the slider is dragged.
 - [x] A selected tile colours the phone's frame (accent) and bezel (a tint of it), not the tile

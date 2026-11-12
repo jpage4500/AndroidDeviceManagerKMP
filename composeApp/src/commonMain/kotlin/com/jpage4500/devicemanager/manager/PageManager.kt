@@ -262,8 +262,11 @@ object PageManager {
     /** ⌘S on Logs in the window last in front — see [ShellState.saveActiveLog]. */
     fun saveActiveLog(): Boolean = shells.lastOrNull()?.saveActiveLog() ?: false
 
-    /** the Devices page — ⌘D from the menu bar. */
-    fun openDevices() = withShell { it.page = Page.DEVICES }
+    /** the Devices page — View › as List / as Icons. */
+    fun openDevices() = show(Page.DEVICES)
+
+    /** [page] as it was left, tabs and all — ⌘1 / ⌘2 / ⌘3 from the menu bar. */
+    fun show(page: Page) = withShell { it.page = page }
 
     /** the Devices page with [deviceId] selected and its details panel open — a row's menu, the tray. */
     fun openDetails(deviceId: String) = withShell {
