@@ -280,7 +280,7 @@ object DeviceManager {
                 transport.devices().collect { devices ->
                     // the connection is stamped on here and nowhere else, so a transport never has
                     // to know its own devices' ids
-                    val stamped = devices.map { it.copy(connectionId = transport.id) }
+                    val stamped = distinctSerials(devices).map { it.copy(connectionId = transport.id) }
                     setDevices(transport, stamped)
                     // remember any wireless device we can see, so the connect dialog opens with a
                     // list rather than an empty field
@@ -289,6 +289,22 @@ object DeviceManager {
                 }
             }
         }
+    }
+
+    /**
+     * one row per serial, the online entry winning.
+     *
+     * adb can list a serial twice while a USB device re-enumerates — the old transport still there
+     * as `offline` beside the new one as `device`. Seen on a 13-device hub overnight; two rows with
+     * the same id is a duplicate key, which crashed the device table.
+     */
+    private fun distinctSerials(devices: List<Device>): List<Device> {
+        if (devices.size == devices.distinctBy { it.serial }.size) return devices
+        val best = devices.groupBy { it.serial }
+            .mapValues { (_, same) -> same.firstOrNull { it.isOnline } ?: same.first() }
+        log.w("distinctSerials: duplicate serials: ${devices.size - best.size} dropped")
+        // first-seen order, so the table doesn't reshuffle
+        return devices.map { it.serial }.distinct().mapNotNull { best[it] }
     }
 
     /**
