@@ -56,7 +56,9 @@ object InputManager {
     /** the devices picked to act on — never "all": the user always chooses. */
     val chosen: StateFlow<List<String>> = _chosen.asStateFlow()
 
+    /** a device newly chosen joins [RecentDevices.input], for its chip beside the + once it's dropped. */
     fun choose(deviceIds: List<String>) {
+        (deviceIds - _chosen.value.toSet()).reversed().forEach(RecentDevices.input::add)
         _chosen.value = deviceIds
     }
 

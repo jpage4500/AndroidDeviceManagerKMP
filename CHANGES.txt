@@ -328,3 +328,13 @@
 
 11/11
 - Releases and update checks now come from the AndroidDeviceManagerKMP repo
+- Screenshots: the toast's Open button shows the image instead of its folder
+- Devices: the selection bar's buttons show a tooltip saying what each one does
+
+11/12
+- Shortcuts: ⌘F focuses the page's search box instead of opening Files
+- Shortcuts: ⌘1, ⌘2 and ⌘3 show Devices, Files and Logs in place of ⌘D and ⌘L
+- Devices: ⌘L opens logs for the selected devices
+- Shortcuts: ⌘4, ⌘5 and ⌘6 show Input, Commands and Scripts
+- Menus: the separators between groups of items are drawn instead of left as blank gaps
+- Input, Commands: start with no devices chosen, with chips beside + for the recent ones

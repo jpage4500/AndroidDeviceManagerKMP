@@ -94,15 +94,9 @@ app.
 
 ## Before you start: adb
 
-Device Manager talks to devices through **adb**, the Android Debug Bridge. Install it, and make sure
-its server is running — Device Manager reads devices from it but **doesn't start it for you**:
-
-```
-adb start-server
-```
-
-The server keeps running until you restart your computer. Any adb command starts it, so if you
-already use `adb devices`, there's nothing extra to do.
+Device Manager talks to devices through **adb**, the Android Debug Bridge, so install it. If adb's
+server isn't running when Device Manager opens, it starts it for you — as long as it can find `adb`
+on your `PATH`, under `ANDROID_HOME`, or in the usual Android SDK and Homebrew folders.
 
 Each device needs **USB debugging** turned on (Settings › Developer options), and the first time it's
 plugged in, accept the "Allow USB debugging?" prompt on its screen.
@@ -116,7 +110,6 @@ With [Homebrew](https://brew.sh):
 
 ```
 brew install --cask android-platform-tools
-adb start-server
 ```
 
 Optional: `brew install scrcpy`
@@ -128,7 +121,6 @@ Optional: `brew install scrcpy`
 1. Download [SDK Platform-Tools](https://developer.android.com/tools/releases/platform-tools) and
    extract it, for example to `C:\Program Files\Android\platform-tools`
 2. Add that folder to your `PATH`
-3. Open a command window and run `adb start-server`
 
 Optional: [scrcpy for Windows](https://github.com/Genymobile/scrcpy/blob/master/doc/windows.md)
 </details>
@@ -138,7 +130,6 @@ Optional: [scrcpy for Windows](https://github.com/Genymobile/scrcpy/blob/master/
 
 ```
 sudo apt-get install adb
-adb start-server
 ```
 
 Optional: `sudo apt-get install scrcpy`, or see [scrcpy's Linux guide](https://github.com/Genymobile/scrcpy/blob/master/doc/linux.md)

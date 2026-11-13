@@ -144,7 +144,9 @@ would shrink under 120 dp, and none show while tabs are in "N more".
   Fit button beside it starts it again.
 - The grid shares the table's selection, click and key semantics, menu and drop target; nothing
   in it polls a device, so 45 tiles cost no more adb than 45 rows.
-- ⌘D (View › Devices) brings the Devices page up from any page.
+- ⌘1 to ⌘6 (View › Devices, Files, Logs, Input, Commands, Scripts) bring that page up from any page,
+  as it was left.
+- ⌘F puts the keyboard in the page's search box — Devices, Files and Logs.
 - **No devices connected** shows three cards — USB steps, Wi-Fi pairing with the QR, another
   computer by address and token — over the adb server's status, Restart adb, and a help link. One
   device looks exactly like many.
@@ -207,8 +209,8 @@ would shrink under 120 dp, and none show while tabs are in "N more".
 - A script runs **once per device, with that device's serial as `$1`** — not once with every serial,
   as the Swing app does. That is what gives each device its own result.
 - Runs on: the chosen devices as chips and a + that opens the shared device checklist (Select all
-  included). There is no "All" — the devices are always picked. Nothing chosen when the page opens
-  starts from the Devices selection; a note counts chosen devices that aren't ready and are skipped.
+  included). There is no "All" — the devices are always picked. Nothing is chosen until someone
+  picks; a note counts chosen devices that aren't ready and are skipped.
 - Read-only listing with line numbers; Open in editor, Show folder, New script.
 - Results: a row per device — running, done or failed, exit code, time, last line — and that device's
   full output under the table. Run again on failed.
@@ -218,9 +220,13 @@ would shrink under 120 dp, and none show while tabs are in "N more".
 Both were the Swing app's windows (`InputScreen`, one per device, and `CommandScreen`) and then
 dialogs here. As pages they sit with Scripts — the three things that act on many devices at once —
 and **target devices the same way**: "Runs on" (Input: "Types on") with chips and the shared + device
-checklist — always an explicit choice, starting from the Devices selection, of which the devices
-ready when the action starts are the ones acted on. Type text and Commands on the Devices selection bar, ⌘I, and
-a row's Run command… arrive with those devices chosen. Each page keeps its own choice.
+checklist — always an explicit choice, starting empty, of which the devices ready when the action
+starts are the ones acted on. Type text and Commands on the Devices selection bar, ⌘I, and a row's
+Run command… arrive with those devices chosen. Each page keeps its own choice.
+
+After the +, up to three chips for the devices last chosen on that page (`RecentDevices.input` and
+`.commands`, kept across launches, like Logs' and Files') — only ready ones not already chosen.
+Clicking one adds it.
 
 ```
 Input                                          Commands
@@ -324,7 +330,7 @@ Types on (Pixel 9 ×) (S21 ×) +                 ┌ Saved ───────
   row under the pointer.
 - [x] The table looks like EngageAdminKMP's — pale 38dp header, 12sp semibold titles, chevron sort,
   13sp rows, full-width stripes and row rules, no tiled background (every `DataTable`).
-- [x] Icon view — `DeviceGrid`, the List / Icons toggle and the status bar's size slider; ⌘D for
+- [x] Icon view — `DeviceGrid`, the List / Icons toggle and the status bar's size slider; ⌘1 for
   the page.
 - [x] Icon view tiers, serial endings and the battery/storage panel; Fit until the slider is dragged.
 - [x] A selected tile colours the phone's frame (accent) and bezel (a tint of it), not the tile

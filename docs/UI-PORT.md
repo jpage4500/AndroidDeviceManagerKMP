@@ -111,7 +111,8 @@ the box holds a `TextFieldValue` so text typed from outside it leaves the caret 
 Logs, Files, Install, Type text, Commands, Run script (desktop) and Details. They act on the selected
 devices that are **ready**, so one offline device in a selection of ten doesn't stop the other nine;
 Logs opens a tab per device in the Logs page; Type text, Commands and Run script open Input,
-Commands and Scripts with them chosen. The bar
+Commands and Scripts with them chosen. Each button's tooltip says what it does — `BarAction` takes
+an optional `tooltip`, shown through `CellTooltip`. The bar
 is `SelectionBarFrame`, which the Files page uses too.
 
 **Table** — the hard part, see below. Rows are two lines, name over model, with a dot for the device's

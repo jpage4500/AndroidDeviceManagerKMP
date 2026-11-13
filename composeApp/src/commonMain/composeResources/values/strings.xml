@@ -48,6 +48,14 @@
     <string name="sel_logs">Logs</string>
     <string name="sel_type_text">Type text</string>
     <string name="sel_run_script">Run script</string>
+    <string name="tip_sel_mirror">Mirror the selected devices</string>
+    <string name="tip_sel_screenshot">Save a screenshot of each selected device</string>
+    <string name="tip_sel_logs">View logs from the selected devices</string>
+    <string name="tip_sel_files">Browse files on the first selected device</string>
+    <string name="tip_sel_install">Install an APK on the selected devices</string>
+    <string name="tip_sel_type_text">Type text on the selected devices</string>
+    <string name="tip_sel_commands">Run adb commands on the selected devices</string>
+    <string name="tip_sel_run_script">Run a script on the selected devices</string>
     <string name="page_scripts">Scripts</string>
     <string name="page_input">Input</string>
     <string name="page_commands">Commands</string>
@@ -63,6 +71,7 @@
     <string name="run_all_devices">All devices (%1$d)</string>
     <string name="run_pick_title">Run on</string>
     <string name="run_none">No devices chosen — press + to pick</string>
+    <string name="run_add_recent">Add %1$s</string>
     <string name="run_skips">Skips %1$d offline or unauthorized</string>
     <string name="scripts_never">Never run</string>
     <string name="scripts_last">Last run: %1$s</string>

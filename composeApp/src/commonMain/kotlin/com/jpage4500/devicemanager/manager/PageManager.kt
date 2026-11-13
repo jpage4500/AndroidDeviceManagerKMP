@@ -98,6 +98,8 @@ class RecentDevices(private val pref: AppPref) {
         private const val MAX = 8
         val logs = RecentDevices(AppPref.LOGS_RECENT_DEVICES)
         val files = RecentDevices(AppPref.FILES_RECENT_DEVICES)
+        val input = RecentDevices(AppPref.INPUT_RECENT_DEVICES)
+        val commands = RecentDevices(AppPref.COMMANDS_RECENT_DEVICES)
     }
 }
 
@@ -262,8 +264,11 @@ object PageManager {
     /** ⌘S on Logs in the window last in front — see [ShellState.saveActiveLog]. */
     fun saveActiveLog(): Boolean = shells.lastOrNull()?.saveActiveLog() ?: false
 
-    /** the Devices page — ⌘D from the menu bar. */
-    fun openDevices() = withShell { it.page = Page.DEVICES }
+    /** the Devices page — View › as List / as Icons. */
+    fun openDevices() = show(Page.DEVICES)
+
+    /** [page] as it was left, tabs and all — ⌘1 to ⌘6 from the menu bar. */
+    fun show(page: Page) = withShell { it.page = page }
 
     /** the Devices page with [deviceId] selected and its details panel open — a row's menu, the tray. */
     fun openDetails(deviceId: String) = withShell {

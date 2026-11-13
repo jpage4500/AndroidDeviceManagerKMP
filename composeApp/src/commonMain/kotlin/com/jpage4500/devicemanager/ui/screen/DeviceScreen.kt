@@ -135,6 +135,11 @@ fun DeviceScreen(
                     // Esc clears the search first; only an empty one lets it through to clear the
                     // selection
                     event.key == Key.Escape && filter.text.isNotEmpty() -> filter = TextFieldValue()
+                    // ⌘F: into the search box, its text selected so typing replaces it
+                    meta && event.key == Key.F -> {
+                        filter = filter.copy(selection = TextRange(0, filter.text.length))
+                        runCatching { filterFocus.requestFocus() }
+                    }
                     meta || event.isAltPressed || searchFocused -> return@onPreviewKeyEvent false
                     else -> {
                         // a printable key anywhere else on the page starts a search with it — keys

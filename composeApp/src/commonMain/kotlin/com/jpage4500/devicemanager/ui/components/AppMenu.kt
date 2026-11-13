@@ -165,6 +165,12 @@ class AppMenuScope internal constructor(private val dismiss: () -> Unit) {
         )
     }
 
+    /**
+     * a line between groups of items.
+     *
+     * `Dimens.hairline` rather than `Dp.Hairline`: the latter is 0.dp, which a border draws as one
+     * pixel but a `height()` lays out as nothing — the separators were only ever their padding.
+     */
     @Composable
     fun Separator() {
         Box(
@@ -174,7 +180,7 @@ class AppMenuScope internal constructor(private val dismiss: () -> Unit) {
                     horizontal = Dimens.menuSeparatorInset,
                     vertical = Dimens.menuSeparatorSpacing,
                 )
-                .height(Dp.Hairline)
+                .height(Dimens.hairline)
                 .background(Colors.menuSeparator),
         )
     }

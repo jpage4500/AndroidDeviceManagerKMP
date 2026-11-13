@@ -330,6 +330,7 @@ fun LogsScreen(
                 }
                 // "⌘+" is ⌘⇧= on most layouts, so Equals counts as an increase too
                 when (event.key) {
+                    Key.F -> runCatching { searchFocus.requestFocus() }
                     Key.Plus, Key.Equals, Key.NumPadAdd -> changeFont(fontSize + 1)
                     Key.Minus, Key.NumPadSubtract -> changeFont(fontSize - 1)
                     Key.Zero, Key.NumPad0 -> changeFont(DEFAULT_FONT)

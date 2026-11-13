@@ -127,7 +127,9 @@ fun DeviceTabStrip(
             )
             chips.forEach { id ->
                 key(id) {
-                    RecentChip(devices.firstOrNull { it.id == id }?.displayName ?: Device.serialOf(id)) { onPick(id) }
+                    Box(Modifier.height(Dimens.tabAdd).padding(bottom = Dimens.tabGap), contentAlignment = Alignment.Center) {
+                        RecentChip(devices.firstOrNull { it.id == id }?.displayName ?: Device.serialOf(id)) { onPick(id) }
+                    }
                 }
             }
         }
@@ -135,36 +137,36 @@ fun DeviceTabStrip(
 }
 
 // three is what reads as "the ones I just had", rather than a second row of tabs
-private const val MAX_RECENT_CHIPS = 3
+internal const val MAX_RECENT_CHIPS = 3
 
-/** a recent device beside the +: an outline pill, quieter than a tab, that opens one for it. */
+/**
+ * a recent device beside a +: an outline pill, quieter than a tab or a chosen chip, that brings it
+ * back — a tab on Logs and Files, a chosen device on Input and Commands.
+ */
 @Composable
-private fun RecentChip(name: String, onClick: () -> Unit) {
+internal fun RecentChip(name: String, label: String = stringResource(Res.string.tab_reopen, name), onClick: () -> Unit) {
     val shape = RoundedCornerShape(percent = 50)
-    val label = stringResource(Res.string.tab_reopen, name)
-    CellTooltip(text = { label }, modifier = Modifier.padding(bottom = Dimens.tabGap)) {
-        Box(Modifier.height(Dimens.tabAdd), contentAlignment = Alignment.Center) {
-            Row(
-                Modifier
-                    .height(Dimens.chipHeight)
-                    .widthIn(max = Dimens.tabRecentWidth)
-                    .clip(shape)
-                    .border(Dimens.hairline, Colors.divider, shape)
-                    .clickable(onClick = onClick)
-                    .semantics { contentDescription = label }
-                    .padding(horizontal = Dimens.navGap),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AppIcon(Res.drawable.recent, size = Dimens.tabCloseIcon, tint = Colors.secondaryText)
-                Spacer(Modifier.width(Dimens.tabGap))
-                Text(
-                    name,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Colors.secondaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+    CellTooltip(text = { label }) {
+        Row(
+            Modifier
+                .height(Dimens.chipHeight)
+                .widthIn(max = Dimens.tabRecentWidth)
+                .clip(shape)
+                .border(Dimens.hairline, Colors.divider, shape)
+                .clickable(onClick = onClick)
+                .semantics { contentDescription = label }
+                .padding(horizontal = Dimens.navGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AppIcon(Res.drawable.recent, size = Dimens.tabCloseIcon, tint = Colors.secondaryText)
+            Spacer(Modifier.width(Dimens.tabGap))
+            Text(
+                name,
+                style = MaterialTheme.typography.labelMedium,
+                color = Colors.secondaryText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

@@ -178,6 +178,8 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
     val page = if (appWindow.content is WindowContent.DeviceList) PageManager.activePage else null
     val onLogs = page == Page.LOGS
     val screenshotKey = if (mirrored != null || page == Page.DEVICES) shortcut(Key.S) else null
+    // ⌘L opens the selection's logs from Devices only, so the letter stays free on every other page
+    val logsKey = if (page == Page.DEVICES) shortcut(Key.L) else null
 
     MenuBar {
         Menu(stringResource(Res.string.menu_file), mnemonic = 'F') {
@@ -207,8 +209,24 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
             }
         }
         Menu(stringResource(Res.string.menu_view), mnemonic = 'V') {
-            Item(stringResource(Res.string.devices), shortcut = shortcut(Key.D)) {
-                PageManager.openDevices()
+            // ⌘1–⌘6 are the sidebar's pages, in its order; ⌘F is each page's search box
+            Item(stringResource(Res.string.devices), shortcut = shortcut(Key.One)) {
+                PageManager.show(Page.DEVICES)
+            }
+            Item(stringResource(Res.string.page_files), shortcut = shortcut(Key.Two)) {
+                PageManager.show(Page.FILES)
+            }
+            Item(stringResource(Res.string.page_logs), shortcut = shortcut(Key.Three)) {
+                PageManager.show(Page.LOGS)
+            }
+            Item(stringResource(Res.string.page_input), shortcut = shortcut(Key.Four)) {
+                PageManager.show(Page.INPUT)
+            }
+            Item(stringResource(Res.string.page_commands), shortcut = shortcut(Key.Five)) {
+                PageManager.show(Page.COMMANDS)
+            }
+            Item(stringResource(Res.string.page_scripts), shortcut = shortcut(Key.Six)) {
+                PageManager.show(Page.SCRIPTS)
             }
             Separator()
             // the Devices page's List / Icons toggle; picking one also brings that page up
@@ -222,10 +240,10 @@ private fun FrameWindowScope.AppMenuBar(appWindow: AppWindow) {
             }
         }
         Menu(stringResource(Res.string.menu_device), mnemonic = 'D') {
-            Item(stringResource(Res.string.menu_logs), enabled = ids.isNotEmpty(), shortcut = shortcut(Key.L)) {
+            Item(stringResource(Res.string.menu_logs), enabled = ids.isNotEmpty(), shortcut = logsKey) {
                 PageManager.openLogs(ids)
             }
-            Item(stringResource(Res.string.menu_files), enabled = filesFor != null, shortcut = shortcut(Key.F)) {
+            Item(stringResource(Res.string.menu_files), enabled = filesFor != null) {
                 filesFor?.let(PageManager::openFiles)
             }
             Item(stringResource(Res.string.menu_screenshot), enabled = ids.isNotEmpty(), shortcut = screenshotKey) {

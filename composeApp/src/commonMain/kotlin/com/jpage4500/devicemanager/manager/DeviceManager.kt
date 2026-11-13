@@ -387,10 +387,10 @@ object DeviceManager {
                 if (path == null) {
                     ToastManager.showToast("Couldn't save the screenshot", success = false)
                 } else {
-                    // a phone has no Finder to show it in
+                    // opens in the OS's image viewer (Preview on a Mac); a phone has none to hand it to
                     val desktop = localDesktopOS != null
-                    ToastManager.showToast(name, success = true, actionLabel = if (desktop) "Show" else null) {
-                        revealLocalFile(path)
+                    ToastManager.showToast(name, success = true, actionLabel = if (desktop) "Open" else null) {
+                        openLocalFile(path)
                     }
                 }
             }
