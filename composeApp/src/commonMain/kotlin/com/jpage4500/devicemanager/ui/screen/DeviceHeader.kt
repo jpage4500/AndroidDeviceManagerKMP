@@ -255,7 +255,7 @@ fun DeviceHeader(
 }
 
 @Composable
-private fun FilterChip(
+internal fun FilterChip(
     label: String,
     leading: (@Composable () -> Unit)?,
     on: Boolean,

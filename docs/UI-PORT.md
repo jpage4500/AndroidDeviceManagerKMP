@@ -889,7 +889,8 @@ reason that component is generic. Directories always sort before files whichever
 no file manager does it any other way. Under the tab, a card joined to it (`Modifier.joinedCard`:
 outlined down the sides and round the bottom, never across the top, which is the tab strip's rule)
 holds two rows. First: Up, the path as clickable crumbs (the empty end of the bar types a path),
-copy path, filter this folder, a Hidden files switch (`AppPref.FILES_SHOW_HIDDEN`), a bookmark toggle
+copy path, filter this folder, a Hidden files switch (`AppPref.FILES_SHOW_HIDDEN`), a Folder sizes switch
+(`AppPref.FILES_FOLDER_SIZES`), a bookmark toggle
 for the open folder, refresh, New Folder, Upload…. Second, the selection bar: "N selected · size", then
 Download (a folder comes down whole, as a folder of the same name), Install (every APK
 in the selection, one after another), Rename (one item), Copy Path, Delete in red; with nothing
@@ -904,6 +905,35 @@ the selection, then names the device. Dragging files over the table covers it wi
 overlay naming the folder and the device. Dropped files go into the folder on screen — an APK too; Install is a button once it's there, and copies it to `/data/local/tmp` first,
 since `pm` can't read shared storage on recent Android. Rename is `mv` and New Folder `mkdir -p`,
 both through `DeviceManager.runCommand`.
+
+**Folder sizes** runs `du -sk` on each folder in the open one, one at a time on the listing's own
+job, so sizes fill in as they come and opening another folder stops it — one `du` of the whole
+folder would say nothing until its slowest child (DCIM, in `/sdcard`) was done. The status line
+counts them ("Measuring folders: 3 of 11"). Answers are kept for the session per path, so Up is
+instant; refresh measures the open folder again. Unmeasured folders sort as the smallest.
+
+**Storage and Apps** are two more rows in Places, which swap the table for a view of their own
+(`FilesView`, kept on the tab's `FileBrowser` with its `StorageAnalyzer`, so a tab switch doesn't
+rescan). Everything is read over the shell without root:
+
+| What | Command | Notes |
+|---|---|---|
+| used, free | `df /data` | the device list's read, `DeviceDetails.parseDiskSpace` |
+| kinds, per-app sizes | `dumpsys diskstats` | fast, but Android's daily measurement — stale up to a day, empty on a new device |
+| which apps are the user's | `pm list packages -3` | everything else diskstats lists is System |
+| last used | `dumpsys usagestats \| grep lastTimeUsed=` | filtered on the device; the whole dump is megabytes. Best effort |
+| trash | `find /sdcard/ -name '.trashed-*'` | MediaStore's 30-day bin |
+| large files, installers | `find /sdcard/ -size +100M` / `-iname '*.apk'` | |
+| adb temp | `find /data/local/tmp/ -maxdepth 1 -type f` | |
+
+The scans run side by side and each Free up space row fills in when its own finishes. App data is
+reported with its cache inside it, so Total is App size + Data. Because diskstats only measures
+once a day, an action writes its effect into the report by hand (`StorageAnalyzer.adjust`) and
+re-reads only `df`; Rescan reads everything again. The actions: `pm trim-caches` with a size no
+device has (every app's cache), `pm clear --cache-only` (Android 14 — older devices fall back to
+deleting the app's cache on shared storage), `pm archive` (Android 15), `pm uninstall` — with
+`--user 0` for a preinstalled app, which `cmd package install-existing` undoes — `pm clear`,
+`am force-stop`, and Download APK pulls the base APK `pm path` names.
 
 A Files tab opens on `/sdcard/Download` when the device has one (`[ -d … ]`, since a sync LIST of a
 missing folder answers with nothing rather than an error) and `/sdcard` when not; after that it

@@ -347,3 +347,6 @@
 - Logs: click the Search or Filter box's icon to see the syntax it takes
 - Logs: the level buttons are one Level ≥ button with a menu, leaving more room to type
 - Logs: Pause and Save are icon buttons, with a floppy disk for Save
+- Files: a Storage view shows what is using space and offers ways to free it
+- Files: an Apps view lists apps by size, to clear their cache, archive or uninstall them
+- Files: a Folder sizes switch fills in each folder's size

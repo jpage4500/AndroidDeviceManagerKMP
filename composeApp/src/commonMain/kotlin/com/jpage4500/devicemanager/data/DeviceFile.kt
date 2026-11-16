@@ -11,6 +11,8 @@ data class DeviceFile(
     val gid: Int = 0,
     /** false on a device with no `stat_v2` — the v1 records carry no ownership at all. */
     val ownerKnown: Boolean = true,
+    /** a folder's size with everything in it, once Folder sizes has measured it; null until then. */
+    val treeSize: Long? = null,
 ) {
     val isDirectory: Boolean get() = AdbFileMode.isDir(mode)
     val isSymlink: Boolean get() = AdbFileMode.isLink(mode)

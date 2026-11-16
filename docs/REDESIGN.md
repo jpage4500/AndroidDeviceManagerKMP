@@ -206,6 +206,17 @@ would shrink under 120 dp, and none show while tabs are in "N more".
   and cancel or show-in-Finder.
 - Status line: the item count and selection, then the device and whether it's browsed as shell or
   root.
+- **Folder sizes** switch beside Hidden files: each folder's Size is its `du`, filled in one folder
+  at a time, and the Size column then sorts folders by it.
+- **Storage** and **Apps** in Places, under the folders — options A and C of the
+  [Files · Storage Analyzer canvas](https://claude.ai/artifact/A7BfTXnAqFb4zony6s2gKY). Storage:
+  used of total over a bar split by kind, then **Where it is** (a row per kind, opening its folder or
+  Apps) beside **Free up space** (Trash, App caches, Large files, Unused apps, Installers, adb temp
+  files — each with its size and Empty, Clear or Review). **Free up space…** opens one review list
+  of all of them: safe ones ticked, files and apps not. Apps: chips (All, Installed, System, Unused
+  90 days, Over 1 GB), a filter, Clear all app caches; the table is the package, App size, Data,
+  Cache, Total, Last used; the bar and a row's menu Clear cache, Archive (Android 15), Uninstall,
+  Download APK, and in the menu Clear data, Force stop, Show app files.
 
 ### Scripts
 
@@ -401,6 +412,9 @@ Matching the canvas — the gaps found on 10/30:
 - [x] Drag-and-drop upload into the open folder (`fileDropTarget`), Upload… picker — whole files in
   memory until the streaming item lands.
 - [ ] Transfers panel.
+- [x] Folder sizes switch (`AppPref.FILES_FOLDER_SIZES`).
+- [x] Storage view, its review dialog, and the Apps view (`StorageAnalyzer`, `StorageScreen.kt`).
+  Not yet run against a device.
 
 Matching the canvas — the gaps found on 10/30:
 

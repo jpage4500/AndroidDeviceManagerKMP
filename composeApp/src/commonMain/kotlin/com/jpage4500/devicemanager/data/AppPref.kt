@@ -67,6 +67,7 @@ enum class AppPref(val key: String, val defaultValue: Any? = null) {
     MINIMIZE_TO_TRAY("minimize_to_tray"),                   // desktop: closing the last window leaves a tray icon
     ALWAYS_ON_TOP("always_on_top"),                         // desktop: keep windows above other apps
     FILES_SHOW_HIDDEN("files_show_hidden", false),          // Files: show names starting with a dot
+    FILES_FOLDER_SIZES("files_folder_sizes", false),        // Files: measure each folder with du for the Size column
     LOGS_SCROLL_SIDEWAYS("logs_scroll_sideways", true),     // log table: scroll sideways, or end the message column at the edge
     DEVICES_COMPACT("devices_compact", false),              // device table: one line a row instead of name over model
     MESSAGE_WRAP("message_wrap", false),                    // message viewer: line wrapping

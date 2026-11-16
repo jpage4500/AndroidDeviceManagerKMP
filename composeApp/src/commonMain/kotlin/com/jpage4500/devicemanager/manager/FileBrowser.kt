@@ -15,7 +15,8 @@ enum class FileColumn(val label: String, val defaultWidth: Int) {
 
     fun text(file: DeviceFile): String? = when (this) {
         NAME -> file.name
-        SIZE -> if (file.isDirectory) "—" else Utils.bytesToDisplayString(file.size)
+        SIZE -> if (file.isDirectory) file.treeSize?.let { Utils.bytesToDisplayString(it) } ?: "—"
+        else Utils.bytesToDisplayString(file.size)
         DATE -> file.modifiedMs.takeIf { it > 0 }?.let { modified(it) }
     }
 
@@ -28,10 +29,14 @@ enum class FileColumn(val label: String, val defaultWidth: Int) {
 
     fun sortKey(file: DeviceFile): Comparable<*>? = when (this) {
         NAME -> file.name.lowercase()
-        SIZE -> file.size
+        // a folder Folder sizes hasn't measured sorts as the smallest
+        SIZE -> if (file.isDirectory) file.treeSize ?: -1L else file.size
         DATE -> file.modifiedMs
     }
 }
+
+/** what a Files tab shows: a folder, or one of the two storage views Places opens. */
+enum class FilesView { FOLDER, STORAGE, APPS }
 
 /**
  * one device's filesystem, as a browser sees it.
@@ -76,6 +81,21 @@ class FileBrowser(private val deviceId: String) {
     private val _sort = MutableStateFlow(FileColumn.NAME to true)
     val sort: StateFlow<Pair<FileColumn, Boolean>> = _sort.asStateFlow()
 
+    private val _view = MutableStateFlow(FilesView.FOLDER)
+    val view: StateFlow<FilesView> = _view.asStateFlow()
+
+    /** the Storage and Apps views' data — kept here, with the tab, so a tab switch doesn't rescan. */
+    val storage = StorageAnalyzer(deviceId)
+
+    private val _sizing = MutableStateFlow<Pair<Int, Int>?>(null)
+
+    /** Folder sizes at work: how many of the open folder's folders are measured, of how many. */
+    val sizing: StateFlow<Pair<Int, Int>?> = _sizing.asStateFlow()
+
+    // what `du` said of each folder this session, so going back Up is instant. Refresh measures again.
+    // a path and a number per folder opened — a session's browsing doesn't make that big
+    private val treeSizes = HashMap<String, Long>()
+
     private var job: Job? = null
 
     /** who the device's shell runs as — null until [start] has asked, or if it couldn't. */
@@ -114,6 +134,68 @@ class FileBrowser(private val deviceId: String) {
         job = scope.launch { load(to) }
     }
 
+    /** a folder, leaving the Storage or Apps view if that's what's showing. */
+    fun go(scope: CoroutineScope, to: String) {
+        _view.value = FilesView.FOLDER
+        open(scope, to)
+    }
+
+    fun show(view: FilesView) {
+        _view.value = view
+    }
+
+    /** the open folder again, and its folders measured again rather than taken from [treeSizes]. */
+    fun refresh(scope: CoroutineScope) {
+        val prefix = _path.value.trimEnd('/') + "/"
+        treeSizes.keys.removeAll { it.startsWith(prefix) }
+        open(scope)
+    }
+
+    /** Folder sizes on or off — on measures the open folder's folders now. */
+    fun setFolderSizes(scope: CoroutineScope, on: Boolean) {
+        SettingsManager.setBoolean(AppPref.FILES_FOLDER_SIZES, on)
+        // a listing still loading measures when it lands; cancelling it would lose the folder
+        if (_loading.value) return
+        if (on) {
+            job?.cancel()
+            job = scope.launch { measure(_path.value) }
+        } else {
+            if (_sizing.value != null) job?.cancel()
+            _sizing.value = null
+            _files.update { files -> files.map { it.copy(treeSize = null) } }
+        }
+    }
+
+    /**
+     * each folder in [folder] through `du -sk`, one at a time, so the sizes fill in as they're found
+     * — one `du` of the whole folder answers nothing until the slowest child is done, and in
+     * `/sdcard` that's DCIM. Runs on the listing's job, so opening another folder stops it.
+     */
+    private suspend fun measure(folder: String) {
+        val dirs = _files.value.filter { it.isDirectory && !it.isSymlink }
+        if (dirs.isEmpty()) return
+        fun fill(path: String, bytes: Long) {
+            _files.update { files -> files.map { if (it.path == path) it.copy(treeSize = bytes) else it } }
+        }
+        dirs.forEach { dir -> treeSizes[dir.path]?.let { fill(dir.path, it) } }
+        val todo = dirs.filter { treeSizes[it.path] == null }
+        val timer = Timer()
+        todo.forEachIndexed { index, dir ->
+            _sizing.value = (dirs.size - todo.size + index) to dirs.size
+            // a folder the shell can't read part of still gets a total for the part it can
+            val kb = DeviceManager.exec(deviceId, "du -sk ${Utils.shellQuote(dir.path)} 2>/dev/null").getOrNull()
+                ?.trim()?.lineSequence()?.lastOrNull()
+                ?.split('\t', ' ')?.firstOrNull()?.toLongOrNull()
+            if (_path.value != folder) return
+            if (kb != null) {
+                treeSizes[dir.path] = kb * 1024
+                fill(dir.path, kb * 1024)
+            }
+        }
+        _sizing.value = null
+        if (todo.isNotEmpty()) log.d("measure: $folder: ${todo.size} folders in ${timer.elapsedTimeMs()}ms")
+    }
+
     private suspend fun load(to: String) {
         _loading.value = true
         _error.value = null
@@ -133,6 +215,7 @@ class FileBrowser(private val deviceId: String) {
                 // moved to even when missing, so Up and the crumbs lead somewhere real
                 _path.value = target
                 _files.value = listed
+                _sizing.value = null
                 log.d("load: $target: ${listed.size} files${if (check != FolderCheck.READABLE) ", $check" else ""}")
             }
             .onFailure {
@@ -140,6 +223,7 @@ class FileBrowser(private val deviceId: String) {
                 log.w("load: $target: ${it.message}")
             }
         _loading.value = false
+        if (_error.value == null && SettingsManager.getBoolean(AppPref.FILES_FOLDER_SIZES)) measure(target)
     }
 
     /**
