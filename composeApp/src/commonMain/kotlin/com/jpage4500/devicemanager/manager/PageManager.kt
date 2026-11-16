@@ -42,10 +42,12 @@ enum class LogLevelFloor(val code: Char, val expression: String?) {
 @Stable
 class LogsView {
     /**
-     * highlights matches rather than filtering to them — ⌘G walks them. Only the level and the
-     * filter pills take lines away.
+     * highlights matches rather than filtering to them — ⌘G walks them. The level, the filter pills
+     * and [filter] are what take lines away.
      */
     var search by mutableStateOf("")
+    /** the typed filter box: an expression, ANDed with the rest. This tab's alone and not saved. */
+    var filter by mutableStateOf("")
     /** the saved filters switched on here, by name — remembered for the next tab opened. */
     private var _selectedFilters by mutableStateOf(
         JsonUtils.stringToList<String>(SettingsManager.getString(AppPref.LOGS_SELECTED_FILTERS)).toSet()
@@ -61,7 +63,7 @@ class LogsView {
      * saved; clicking one's pill saves it as a filter.
      */
     var quick by mutableStateOf(emptyList<String>())
-    /** the level buttons' choice — remembered for the next tab opened, like [selectedFilters]. */
+    /** the level menu's choice — remembered for the next tab opened, like [selectedFilters]. */
     private var _floor by mutableStateOf(SettingsManager.getEnum<LogLevelFloor>(AppPref.LOGS_LEVEL_FLOOR))
     var floor: LogLevelFloor
         get() = _floor

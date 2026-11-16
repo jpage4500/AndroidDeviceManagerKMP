@@ -31,13 +31,14 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * one device's logcat.
  *
- * Two rows of controls — search, the level buttons, Auto-scroll, Pause and Save, then the filters
- * that are on as pills joined by AND — over the log table. See docs/REDESIGN.md.
+ * Two rows of controls — search and the typed filter side by side, the level menu, Pause and
+ * Save, then the filters that are on as pills joined by AND — over the log table. See
+ * docs/REDESIGN.md.
  *
- * Everything that narrows the log is ANDed: the level floor, each saved filter that's on and each
- * quick filter a right-click made. That is the AND the Swing app applies to a multi-selection in
- * its filter list. **Search never narrows it** — it highlights, and steps through the hits — and
- * Save as filter is how a search becomes one of the pills.
+ * Everything that narrows the log is ANDed: the level floor, each saved filter that's on, each
+ * quick filter a right-click made and the typed filter. That is the AND the Swing app applies to a
+ * multi-selection in its filter list. **Search never narrows it** — it highlights, and steps through
+ * the hits — and Save as filter is how a search or the typed filter becomes one of the pills.
  *
  * [view] is what the screen is showing — filters, search, scroll — kept by the Logs page's tab so
  * it survives the tab being left and come back to.
@@ -83,6 +84,7 @@ fun LogsScreen(
     val focusManager = LocalFocusManager.current
 
     var search by state::search
+    var typedFilter by state::filter
     var selectedFilters by state::selectedFilters
     var quick by state::quick
     var floor by state::floor
@@ -107,17 +109,33 @@ fun LogsScreen(
     var currentMatch by remember { mutableStateOf<Long?>(null) }
     val searchFocus = remember { FocusRequester() }
     // whether a text field already has the keyboard; typing-to-search must not steal from one
-    var fieldFocused by remember { mutableStateOf(false) }
+    var searchFocused by remember { mutableStateOf(false) }
+    var filterFocused by remember { mutableStateOf(false) }
+    val fieldFocused = searchFocused || filterFocused
+    /**
+     * the typed filter as applied — it trails the box by [FILTER_SETTLE_MS]. Every change re-walks
+     * the whole buffer (up to 50,000 lines) on the UI thread, and a half-typed `tag:` would blank
+     * the table between keystrokes
+     */
+    var appliedFilter by remember { mutableStateOf(typedFilter.trim()) }
+    LaunchedEffect(typedFilter) {
+        val next = typedFilter.trim()
+        // clearing it shows the lines again at once; only typing waits
+        if (next.isNotEmpty()) delay(FILTER_SETTLE_MS)
+        appliedFilter = next
+    }
     var fontSize by remember {
         mutableStateOf(SettingsManager.getInt(AppPref.LOGS_FONT_SIZE).coerceIn(MIN_FONT, MAX_FONT))
     }
 
     // the level floor, the saved filters switched on here, and the right-click ones — every one of
-    // them must pass. The built-in "Log Level …+" filters are the level buttons now
-    val active = remember(savedFilters, selectedFilters, quick, floor) {
+    // them must pass. The built-in "Log Level …+" filters are the level menu now
+    val active = remember(savedFilters, selectedFilters, quick, floor, appliedFilter) {
         listOfNotNull(floor.expression?.let { LogFilter(floor.name, it) }) +
             savedFilters.filter { it.name in selectedFilters && it.expression.isNotBlank() } +
-            quick.map { LogFilter(it, it) }
+            quick.map { LogFilter(it, it) } +
+            // named by its expression, as a quick filter is, so the editor's count names it in words
+            listOfNotNull(appliedFilter.takeIf { it.isNotEmpty() }?.let { LogFilter(it, it) })
     }
     // handed to the source rather than applied here: it keeps the filtered list incrementally, so a
     // batch only tests its own new lines instead of re-walking 50,000 of them ten times a second
@@ -305,10 +323,15 @@ fun LogsScreen(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
 
-                // Escape clears the search wherever focus is — including out of the field
+                // Escape clears the filter box while it has the keyboard, and the search wherever else
+                // focus is — including out of the field
                 if (event.key == Key.Escape) {
-                    search = ""
-                    currentMatch = null
+                    if (filterFocused) {
+                        typedFilter = ""
+                    } else {
+                        search = ""
+                        currentMatch = null
+                    }
                     runCatching { focusManager.clearFocus() }
                     return@onPreviewKeyEvent true
                 }
@@ -374,7 +397,7 @@ fun LogsScreen(
                 .padding(top = Dimens.tabGap),
         ) {
             LogsToolbar(
-                search = {
+                fields = {
                     LogSearchField(
                         value = search,
                         onValueChange = {
@@ -382,12 +405,27 @@ fun LogsScreen(
                             currentMatch = null
                         },
                         focusRequester = searchFocus,
-                        onFieldFocus = { fieldFocused = it },
+                        onFieldFocus = { searchFocused = it },
                         hits = hits?.size,
                         current = hitNumber,
                         onNext = ::nextMatch,
                         onPrevious = ::previousMatch,
                         onSaveAsFilter = { query?.let { editing = LogFilter("", it.asExpression()) } },
+                        modifier = Modifier.weight(1f).widthIn(min = Dimens.logSearchMinWidth),
+                    )
+                    Spacer(Modifier.width(Dimens.gap))
+                    LogFilterField(
+                        value = typedFilter,
+                        onValueChange = { typedFilter = it },
+                        onFieldFocus = { filterFocused = it },
+                        // saved, it comes off the box — the pill it becomes is the same filter
+                        onSaveAsFilter = {
+                            val expression = typedFilter.trim()
+                            if (expression.isNotEmpty()) {
+                                savingQuick = expression
+                                editing = LogFilter("", expression)
+                            }
+                        },
                         modifier = Modifier.weight(1f).widthIn(min = Dimens.logSearchMinWidth),
                     )
                 },
@@ -648,7 +686,7 @@ fun LogsScreen(
             shown = shown.size,
             total = total,
             selected = selection.size,
-            filtersOn = selectedFilters.size + quick.size,
+            filtersOn = selectedFilters.size + quick.size + (if (appliedFilter.isEmpty()) 0 else 1),
             running = running,
             paused = paused,
             showTooltip = showTooltip,
@@ -702,7 +740,10 @@ fun LogsScreen(
             // whether it was on, under its new name if it has one
             val wasOn = original.name.isBlank() || original.name in selectedFilters
             selectedFilters = (selectedFilters - original.name).let { if (wasOn) it + saved.name else it }
-            savingQuick?.let { quick = quick - it }
+            savingQuick?.let { saving ->
+                quick = quick - saving
+                if (typedFilter.trim() == saving) typedFilter = ""
+            }
             savingQuick = null
         },
         names = apps,
@@ -732,14 +773,14 @@ fun LogsScreen(
 }
 
 /**
- * the first row of a log tab's controls: search, the level buttons, Pause and Save…, and ⋯ for
- * what's used less — clearing the log, sideways scrolling and the text size.
+ * the first row of a log tab's controls: search and the typed filter, the level menu, Pause and
+ * Save…, and ⋯ for what's used less — clearing the log, sideways scrolling and the text size.
  *
  * [showing] is whether lines are arriving on screen; Pause stops that and nothing else.
  */
 @Composable
 private fun LogsToolbar(
-    search: @Composable RowScope.() -> Unit,
+    fields: @Composable RowScope.() -> Unit,
     floor: LogLevelFloor,
     onFloor: (LogLevelFloor) -> Unit,
     showing: Boolean,
@@ -754,17 +795,18 @@ private fun LogsToolbar(
             .padding(horizontal = Dimens.gap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        search()
+        fields()
         Spacer(Modifier.width(Dimens.gapLarge))
-        LevelFloorButtons(floor, onFloor)
+        LevelFloorButton(floor, onFloor)
         ToolbarRule()
-        OutlinedAction(
-            label = stringResource(if (showing) Res.string.logs_pause else Res.string.logs_resume),
+        // icons only, named in their tooltips: the row's width belongs to the search and filter boxes
+        OutlinedIconAction(
             icon = if (showing) Res.drawable.pause else Res.drawable.play,
+            label = stringResource(if (showing) Res.string.logs_pause else Res.string.logs_resume),
             onClick = onPause,
         )
         Spacer(Modifier.width(Dimens.gap))
-        OutlinedAction(stringResource(Res.string.logs_save), icon = Res.drawable.file_save, onClick = onSave)
+        OutlinedIconAction(Res.drawable.save, stringResource(Res.string.logs_save), onClick = onSave)
         Spacer(Modifier.width(Dimens.tabGap))
         MoreButton(menu)
     }
@@ -990,6 +1032,9 @@ private const val MAIN_THREAD = "-"
 
 // the design's own cut-off for a value quoted in the right-click menu
 private const val MENU_VALUE_CHARS = 26
+
+// how long the typed filter waits for typing to pause before it re-filters the log
+private const val FILTER_SETTLE_MS = 250L
 
 private const val MIN_FONT = 8
 private const val MAX_FONT = 28

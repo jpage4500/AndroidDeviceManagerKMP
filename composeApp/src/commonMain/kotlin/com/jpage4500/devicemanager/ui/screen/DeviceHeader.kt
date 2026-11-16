@@ -395,6 +395,30 @@ fun OutlinedAction(
     }
 }
 
+/** [OutlinedAction] as a square with only its icon, the name in a tooltip — for a crowded toolbar. */
+@Composable
+fun OutlinedIconAction(
+    icon: DrawableResource,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(Dimens.navCorner)
+    CellTooltip(text = { label }) {
+        Box(
+            modifier
+                .size(Dimens.controlHeight)
+                .clip(shape)
+                .background(Colors.listBg)
+                .border(Dimens.hairline, Colors.divider, shape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            AppIcon(icon, size = Dimens.pillClose + Dimens.tabGap, tint = Colors.toolbarIcon, contentDescription = label)
+        }
+    }
+}
+
 /**
  * the bar over the device table: a hint while nothing is selected, and with a selection, what can
  * be done to all of it at once.

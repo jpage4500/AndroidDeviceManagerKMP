@@ -341,3 +341,9 @@
 
 11/13
 - Devices: fixed a crash when a device briefly showed up twice during a USB reconnect
+
+11/16
+- Logs: a Filter box beside Search hides the lines that don't match
+- Logs: click the Search or Filter box's icon to see the syntax it takes
+- Logs: the level buttons are one Level ≥ button with a menu, leaving more room to type
+- Logs: Pause and Save are icon buttons, with a floppy disk for Save

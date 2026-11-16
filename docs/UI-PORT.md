@@ -685,8 +685,10 @@ Paste Connection, Edit and Remove. Adding connects first, so a bad token says so
 than leaving a dead row. No colour column and no name field: `SavedServer` has no colour, and the
 name is whatever `/api/info` says.
 
-**Logs** (`LogsScreen`) — two rows of controls over the table. The first: search, the level buttons
-(V D I W E, the lowest level shown, each in its level's colour), Pause and Save…, and ⋯ for Clear
+**Logs** (`LogsScreen`) — two rows of controls over the table. The first: search and the filter box
+side by side, each one's icon (magnifier, funnel) opening a panel of its syntax, Level ≥
+(one button showing the lowest level shown as a letter in its level's colour, clicked for a menu of the five —
+five buttons took the width the two boxes need), Pause and Save… as icons named in their tooltips, and ⋯ for Clear
 log, Horizontal scrolling and text size. **Save…** asks what first — Selected lines (only for more
 than one), Visible lines, or the Entire log buffer (`LogsSource.all`) — then the native save dialog
 (`pickSaveFile`, starting in the folder the last save went to, `AppPref.LOGS_SAVE_DIR`, else
@@ -721,8 +723,9 @@ Three things carry most of its usefulness:
   Done under them. It stays open while ticking, and ticking several combines them: the AND the Swing
   app applies to a multi-selection in its filter list, said out loud between the pills. Clicking a pill edits it; right-clicking a saved one
   offers edit, duplicate and delete. The Swing app's five built-ins ("All Messages", "Log Level …+")
-  are the level buttons now; `level:D+` is still the syntax under them.
-- **Everything is ANDed:** the level floor, each saved filter that's on, and each quick filter. A
+  are the level menu now; `level:D+` is still the syntax under them.
+- **Everything is ANDed:** the level floor, each saved filter that's on, each quick filter and the
+  filter box. A
   saved pill counts its rules, and a quick one reads as words (`tag is not "Choreographer"`, the app
   by name) rather than as its expression. Clear filters leaves the level alone.
 - **Pause stops showing, not reading.** `LogsSource.setPaused` stops publishing `entries` while the
@@ -754,12 +757,18 @@ Three things carry most of its usefulness:
   **⌘Enter** toggles Auto Scroll and **⌘G / ⇧⌘G** walk the search hits, all from the same handler.
 - **Search highlights, it doesn't filter** — yellow for every hit, orange for the one the cursor is
   on. A hit is only useful with the lines around it, and filtering down to the hits throws those
-  away; only the level and the pills filter. The box counts the hits (3 of 41) — off the UI thread,
+  away; only the level, the pills and the filter box filter. The box counts the hits (3 of 41) — off the UI thread,
   once per batch — and steps through them with ↑ ↓, Enter / ⇧Enter, ⌘G / ⇧⌘G. `tag:` and `app:`
   (the process name) look in one column. **Save as filter** opens the editor with the search as a
   rule; an `app:` search carries over as typed, since a filter on App tests the process name as
   well as the pid. That makes an App rule depend on the process table, so the tab's filter is
   re-run when the table changes — but only while a filter that's on has an App rule (`usesApp`).
+- **The filter box is an expression, typed.** The same syntax as a saved filter (below), applied
+  250ms after typing stops (`FILTER_SETTLE_MS`): each change re-walks the whole buffer on the UI
+  thread, and a half-typed `tag:` would otherwise blank the table between keystrokes. Clearing it
+  applies at once. It is the tab's own (`LogsView.filter`), counts as one of the filters on in the
+  status line, and its Save as filter opens the editor and empties the box once the pill exists.
+  Escape clears it while it has the keyboard, and only then.
 - **Typing anywhere searches.** Any printable key with no ⌘ appends to Search and moves focus there,
   and Escape clears it — scanning a log is a two-hand job and reaching for the box first is a step
   nobody should have to take. Both typed boxes report focus back up so this doesn't fire while one of

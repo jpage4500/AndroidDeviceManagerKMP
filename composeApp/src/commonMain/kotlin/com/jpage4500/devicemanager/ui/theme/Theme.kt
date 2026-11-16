@@ -244,8 +244,12 @@ object Dimens {
     val checkboxTick = 10.dp
     // the log tab's two rows of controls: search and the buttons, then the filters
     val filterBarHeight = 44.dp
-    // search takes what the row has left, but never less than room for "tag:OkHttp" and its count
+    // search and the typed filter split what the row has left, but never less than room for
+    // "tag:OkHttp" and its count
     val logSearchMinWidth = 220.dp
+    // the syntax panel each box's icon opens: examples down the left
+    val syntaxHelpWidth = 400.dp
+    val syntaxColumnWidth = 160.dp
     val searchArrow = 22.dp
     // the design's switch: a 28×16 track and a 12dp thumb
     val switchWidth = 28.dp
