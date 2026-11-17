@@ -213,7 +213,7 @@ would shrink under 120 dp, and none show while tabs are in "N more".
   used of total over a bar split by kind, then **Where it is** (a row per kind, opening its folder or
   Apps) beside **Free up space** (Trash, App caches, Large files, Unused apps, Installers, adb temp
   files — each with its size and Empty, Clear or Review). **Free up space…** opens one review list
-  of all of them: safe ones ticked, files and apps not. Apps: chips (All, Installed, System, Unused
+  of all of them: safe ones ticked, files and apps not, with Select all above. Apps: chips (All, Installed, System, Unused
   90 days, Over 1 GB), a filter, Clear all app caches; the table is the package, App size, Data,
   Cache, Total, Last used; the bar and a row's menu Clear cache, Archive (Android 15), Uninstall,
   Download APK, and in the menu Clear data, Force stop, Show app files.

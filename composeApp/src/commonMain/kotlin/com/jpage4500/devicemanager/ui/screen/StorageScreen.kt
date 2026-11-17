@@ -474,6 +474,33 @@ fun CleanupDialog(
     ) {
         Text(stringResource(Res.string.cleanup_intro), style = MaterialTheme.typography.bodySmall, color = Colors.secondaryText)
         Spacer(Modifier.height(Dimens.gap))
+        if (all.size > 1) {
+            val allOn = chosen.size == all.size
+            val toggleAll = { ticked = if (allOn) emptySet() else all.map { it.key }.toSet() }
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = Dimens.cleanupRowMinHeight).plainClickable(onClick = toggleAll),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.gap),
+            ) {
+                val label = stringResource(Res.string.picker_select_all)
+                RowCheckbox(checked = allOn, onToggle = toggleAll, label = label, partial = chosen.isNotEmpty())
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Colors.primaryText,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    Utils.bytesToDisplayString(all.sumOf { it.bytes }),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.End,
+                    color = Colors.secondaryText,
+                    modifier = Modifier.width(Dimens.storageSizeWidth),
+                )
+            }
+            HorizontalDivider(color = Colors.divider)
+        }
         Column(Modifier.heightIn(max = Dimens.cleanupListMaxHeight).verticalScroll(rememberScrollState())) {
             listOf(
                 Res.string.cleanup_group_safe to safe,
