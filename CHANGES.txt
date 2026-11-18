@@ -351,3 +351,6 @@
 - Files: an Apps view lists apps by size, to clear their cache, archive or uninstall them
 - Files: a Folder sizes switch fills in each folder's size
 - Files: the Free up space list has a Select all box
+
+11/18
+- Devices: with several selected, the right-click menu copies all of them and hides the Edit items
