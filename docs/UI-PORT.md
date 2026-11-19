@@ -122,7 +122,8 @@ row's own tint — no tick boxes.
 
 **Right-click menu** (`DeviceMenu`, shared by List and Icons) — a right-click inside a multi-selection
 acts on the whole selection: the Edit items are left out, since they edit one device, and Copy field /
-Copy line put one line per selected device on the clipboard, in the order shown.
+Copy line put one line per selected device on the clipboard, in the order shown. ⌘C (Ctrl+C) is
+Copy line for the whole selection, unless the search box has focus.
 
 **Dropping files** from Finder or Explorer installs an APK and copies anything else (`InstallManager`).
 With several devices selected the drop goes to all of them, wherever it lands; with one or none it

@@ -354,3 +354,4 @@
 
 11/18
 - Devices: with several selected, the right-click menu copies all of them and hides the Edit items
+- Devices: ⌘C copies the selected devices' lines

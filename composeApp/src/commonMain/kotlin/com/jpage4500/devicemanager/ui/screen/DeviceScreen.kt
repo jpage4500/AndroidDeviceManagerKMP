@@ -144,6 +144,10 @@ fun DeviceScreen(
                         filter = filter.copy(selection = TextRange(0, filter.text.length))
                         runCatching { filterFocus.requestFocus() }
                     }
+                    // ⌘C: the selected devices' lines, in the order shown — the search box keeps its own copy
+                    meta && event.key == Key.C && !event.isShiftPressed && !searchFocused && selected.isNotEmpty() -> {
+                        copyToClipboard(sorted.filter { it.id in selection.keys }.ifEmpty { selected }.joinToString("\n") { it.asLine() })
+                    }
                     meta || event.isAltPressed || searchFocused -> return@onPreviewKeyEvent false
                     else -> {
                         // a printable key anywhere else on the page starts a search with it — keys
@@ -520,7 +524,7 @@ private fun AppMenuScope.DeviceMenu(
     Item(stringResource(Res.string.copy_field)) {
         onCopy(targets.joinToString("\n") { column?.text(it) ?: it.displayName })
     }
-    Item(stringResource(Res.string.copy_line)) { onCopy(targets.joinToString("\n") { it.asLine() }) }
+    Item(stringResource(Res.string.copy_line), shortcut = "⌘C") { onCopy(targets.joinToString("\n") { it.asLine() }) }
     Separator()
 
     Item(stringResource(Res.string.device_details)) { PageManager.openDetails(deviceId) }
