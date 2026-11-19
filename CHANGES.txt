@@ -355,3 +355,7 @@
 11/18
 - Devices: with several selected, the right-click menu copies all of them and hides the Edit items
 - Devices: ⌘C copies the selected devices' lines
+
+11/19
+- macOS: the Dock icon hides while the app is only in the menu bar
+- macOS: fixed the Dock and ⌘-Tab icon showing shrunk on a grey tile

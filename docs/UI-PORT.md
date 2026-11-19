@@ -639,7 +639,11 @@ white or black after skiko's `currentSystemTheme`, re-read every 5s since nothin
 
 The icon only appears while **Stay in the menu bar when closed** is on — a tray icon that can't be
 dismissed is one someone has to look at forever. With it on, closing the last window leaves the app
-running and the icon is how it comes back.
+running and the icon is how it comes back — and on macOS the Dock icon goes while no window is
+open, so the app isn't in the Dock or ⌘-Tab twice over. That is `MacDock.setVisible`, the Swing
+app's `setDockIconVisible` ported: `NSApplication.setActivationPolicy:` through JNA, since AWT only
+reads `apple.awt.UIElement` once at launch. The first window back restores the Dock icon and
+activates the app so the window lands in front.
 
 ---
 

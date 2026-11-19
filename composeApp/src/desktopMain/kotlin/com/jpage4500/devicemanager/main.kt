@@ -44,6 +44,8 @@ fun main() {
         // everywhere else
         runCatching { Desktop.getDesktop().setPreferencesHandler { PageManager.openSettings() } }
             .onFailure { log.e("main: preferences handler: ${it.message}") }
+        // our image over the bundle's icns, which macOS 26 can draw shrunk on a grey plate
+        MacDock.applyIcon()
     }
 
     // the device list is app-wide: every window is a reader of it, so it starts before any of them
@@ -62,6 +64,11 @@ fun main() {
                 exitApplication()
             }
         }
+
+        // living in the menu bar with no window open, the app has no business in the Dock or ⌘-Tab
+        // either; the first window back brings it back
+        val inMenuBarOnly = windows.isEmpty() && toTray
+        LaunchedEffect(inMenuBarOnly) { MacDock.setVisible(!inMenuBarOnly) }
 
         AppTray(onQuit = ::exitApplication)
 

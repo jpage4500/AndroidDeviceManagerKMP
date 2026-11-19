@@ -187,6 +187,25 @@ There's no macOS Tahoe `Icon.icon` bundle. It wants a background-free foreground
 procedural gradient, and this artwork has its background baked in, so there's nothing honest to
 put in it. Nothing bundles it today either — Compose Desktop packages `icon.icns`.
 
+### The Dock icon on macOS 26
+
+macOS 26 compares an icon's opaque region with its standard tile, and when it doesn't conform draws
+the artwork shrunk onto a grey plate in the Dock and ⌘-Tab — about 30% too small. A one-slice icns
+gets plated even when its geometry is right, and jDeploy writes its own icns on the user's machine
+from the repo-root `icon.png`, so `icon.icns` here never reaches an installed app. The Swing repo's
+`scripts/generate-icon.sh` has the measurements.
+
+So the app doesn't rely on the bundle: `MacDock.applyIcon()` hands the Dock
+`desktopMain/resources/icon.png` at startup, which is already on the 824-in-1024 grid, and an image
+set while running is drawn as given. It applies to `gradlew run` too, which otherwise passes
+`icon.icns` as `-Xdock:icon`.
+
+macOS caches the plated composite, so an icon that was plated once can stay that way after the
+cause is gone. `scripts/reset-icon.sh [App.app]` clears the icon caches, rebuilds LaunchServices
+and restarts the Dock and Finder — defaulting to the jDeploy install in `~/Applications`. The Dock
+tile of a pinned app that isn't running still comes from the bundle, so that's where a stale plate
+shows longest.
+
 ## CI
 
 There's no compile-only workflow and nothing runs on a PR. The two release workflows are the only

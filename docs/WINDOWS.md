@@ -9,8 +9,9 @@ FileExplorerKMP, where the same design carries tab tear-off.
 
 Two things follow from that shape and are easy to lose:
 
-- **Closing the last window quits.** There is nothing left to draw either way, and a macOS app that
-  stays running with no windows needs a dock menu to get back — which this doesn't have yet.
+- **Closing the last window quits** — unless *Stay in the menu bar when closed* is on, when the app
+  keeps running with the menu-bar icon as the way back and no Dock icon until a window opens (see
+  the tray section of [UI-PORT.md](UI-PORT.md)).
 - **A new window cascades off the one it came from.** Stacked exactly on top it looks like nothing
   happened. `WindowManager.recordBounds` is fed from a `snapshotFlow` on every frame of a drag and
   writes nothing to disk; persistence needs a settings store first.
