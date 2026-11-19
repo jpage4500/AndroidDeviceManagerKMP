@@ -59,6 +59,14 @@ fun ExploreScreen(
     val widths by FileTableState.widths.collectAsState()
     val bookmarks by FileBookmarks.paths.collectAsState()
     val showHidden by SettingsManager.getBoolAsState(AppPref.FILES_SHOW_HIDDEN)
+    val folderSizes by SettingsManager.getBoolAsState(AppPref.FILES_FOLDER_SIZES)
+    val sizing by browser.sizing.collectAsState()
+    val view by browser.view.collectAsState()
+    val analyzer = browser.storage
+    val report by analyzer.report.collectAsState()
+    val apps = remember(deviceId) { AppsViewState() }
+    // the Storage view's Review and Free up space…: which kinds of cleanup the dialog lists
+    var cleanup by remember { mutableStateOf<Set<Cleanup>?>(null) }
     val copyToClipboard = rememberClipboardCopy()
     val cellTooltip: (DeviceFile, FileColumn, Boolean) -> String? = { file, column, clipped ->
         column.text(file)?.takeIf { clipped }
@@ -71,6 +79,8 @@ fun ExploreScreen(
     var dropping by remember { mutableStateOf(false) }
     val devices by DeviceManager.devices.collectAsState()
     val deviceName = devices.firstOrNull { it.id == deviceId }?.displayName ?: deviceId
+    // `pm archive` is Android 15's
+    val canArchive = (devices.firstOrNull { it.id == deviceId }?.sdk?.toIntOrNull() ?: 0) >= ARCHIVE_SDK
 
     // dialog titles are resolved here rather than in the click handlers: a string resource can only
     // be read while composing
@@ -79,6 +89,15 @@ fun ExploreScreen(
     val deleteTitle = stringResource(Res.string.files_delete_title)
     val renameTitle = stringResource(Res.string.files_rename)
     val uploadTitle = stringResource(Res.string.files_upload_title)
+    val trashTitle = stringResource(Res.string.cleanup_trash_title)
+    val trashFiles = analyzer.found.collectAsState().value[Cleanup.TRASH].orEmpty()
+    val trashMessage = stringResource(Res.string.cleanup_trash_msg, trashFiles.size, Utils.bytesToDisplayString(trashFiles.sumOf { it.bytes }))
+    val cachesTitle = stringResource(Res.string.cleanup_caches_title)
+    val cachesMessage = stringResource(Res.string.cleanup_caches_msg)
+    val uninstallTitle = stringResource(Res.string.apps_uninstall_title)
+    val uninstallSystem = stringResource(Res.string.apps_uninstall_system)
+    val clearDataTitle = stringResource(Res.string.apps_clear_data_title)
+    val clearDataMessage = stringResource(Res.string.apps_clear_data_msg, APP_PLACEHOLDER)
 
     val sorted = remember(files, sort, showHidden, query) { browser.sorted(browser.visible(files, showHidden, query)) }
     val selected = remember(selection, files) { files.filter { it.path in selection.keys } }
@@ -86,8 +105,45 @@ fun ExploreScreen(
     LaunchedEffect(deviceId) { browser.start(scope) }
     // a selection belongs to the folder it was made in
     LaunchedEffect(path) { selection = TableSelection() }
+    // the first look at Storage or Apps reads them; after that they're kept until Rescan
+    LaunchedEffect(view) { if (view != FilesView.FOLDER) analyzer.start(scope) }
 
-    fun refresh() = browser.open(scope)
+    fun refresh() = browser.refresh(scope)
+
+    /** a folder, from Places, the crumbs or the Storage view — leaving Storage or Apps if they're up. */
+    fun goTo(target: String) = browser.go(scope, target)
+
+    val appActions = remember(analyzer, scope) { AppActions(analyzer, scope) { apps.selection = TableSelection() } }
+    val selectedApps = remember(apps.selection, report) { report?.apps.orEmpty().filter { it.packageName in apps.selection.keys } }
+
+    fun emptyTrash() {
+        confirm = ConfirmRequest(trashTitle, trashMessage) {
+            scope.launch {
+                analyzer.emptyTrash(analyzer.found.value[Cleanup.TRASH].orEmpty())
+                analyzer.refreshSpace()
+            }
+        }
+    }
+
+    fun trimCaches() {
+        confirm = ConfirmRequest(cachesTitle, cachesMessage) {
+            scope.launch {
+                analyzer.trimCaches().onSuccess { analyzer.cachesTrimmed() }
+                analyzer.refreshSpace()
+            }
+        }
+    }
+
+    fun uninstall(targets: List<AppStorage>) {
+        if (targets.isEmpty()) return
+        val names = targets.joinToString("\n") { it.packageName }
+        val message = if (targets.any { it.system }) "$names\n\n$uninstallSystem" else names
+        confirm = ConfirmRequest(uninstallTitle, message) { appActions.uninstall(targets) }
+    }
+
+    fun clearData(app: AppStorage) {
+        confirm = ConfirmRequest(clearDataTitle, clearDataMessage.replace(APP_PLACEHOLDER, app.packageName)) { appActions.clearData(app) }
+    }
 
     fun openFolder(file: DeviceFile) {
         if (file.isDirectory || file.isSymlink) browser.open(scope, file.path)
@@ -148,57 +204,73 @@ fun ExploreScreen(
                 .padding(start = Dimens.gap, end = Dimens.gap, top = Dimens.gap, bottom = Dimens.gap),
             verticalArrangement = Arrangement.spacedBy(Dimens.gap),
         ) {
-            PathRow(
-                path = path,
-                loading = loading,
-                query = query,
-                showHidden = showHidden,
-                onOpen = { browser.open(scope, it) },
-                onUp = { browser.up(scope) },
-                onGoTo = { input = InputRequest(goToTitle, path) { target -> browser.open(scope, target) } },
-                onCopyPath = { copyToClipboard(path) },
-                onQuery = browser::setQuery,
-                filterFocus = filterFocus,
-                onHidden = { SettingsManager.setBoolean(AppPref.FILES_SHOW_HIDDEN, !showHidden) },
-                onRefresh = ::refresh,
-                onNewFolder = {
-                    input = InputRequest(newFolderTitle, "") { name ->
-                        if (name.isNotBlank()) scope.launch { browser.newFolder(name); refresh() }
-                    }
-                },
-                onUpload = { scope.launch { upload(pickLocalFiles(uploadTitle)) } },
-                bookmarked = path in bookmarks,
-                onBookmark = { FileBookmarks.toggle(path) },
-            )
+            when (view) {
+                FilesView.STORAGE -> StorageRow(analyzer, onRescan = { analyzer.rescan(scope) }, onFreeUp = { cleanup = Cleanup.entries.toSet() })
+                FilesView.APPS -> {
+                    AppsRow(analyzer, apps, onTrimCaches = ::trimCaches)
+                    AppsSelectionBar(selectedApps, canArchive, appActions, onUninstall = ::uninstall) { apps.selection = TableSelection() }
+                }
+                FilesView.FOLDER -> {
+                    PathRow(
+                        path = path,
+                        loading = loading,
+                        query = query,
+                        showHidden = showHidden,
+                        folderSizes = folderSizes,
+                        onFolderSizes = { browser.setFolderSizes(scope, !folderSizes) },
+                        onOpen = ::goTo,
+                        onUp = { browser.up(scope) },
+                        onGoTo = { input = InputRequest(goToTitle, path) { target -> browser.open(scope, target) } },
+                        onCopyPath = { copyToClipboard(path) },
+                        onQuery = browser::setQuery,
+                        filterFocus = filterFocus,
+                        onHidden = { SettingsManager.setBoolean(AppPref.FILES_SHOW_HIDDEN, !showHidden) },
+                        onRefresh = ::refresh,
+                        onNewFolder = {
+                            input = InputRequest(newFolderTitle, "") { name ->
+                                if (name.isNotBlank()) scope.launch { browser.newFolder(name); refresh() }
+                            }
+                        },
+                        onUpload = { scope.launch { upload(pickLocalFiles(uploadTitle)) } },
+                        bookmarked = path in bookmarks,
+                        onBookmark = { FileBookmarks.toggle(path) },
+                    )
 
-            val one = selected.singleOrNull()
-            val plain = selected.filterNot { it.isDirectory }
-            val apks = selected.filter { it.isApk }
-            SelectionBarFrame(
-                count = selected.size,
-                hint = stringResource(Res.string.files_hint),
-                onClear = { selection = TableSelection() },
-                // a folder's size is what `ls` says of the folder itself, not what's in it
-                label = stringResource(Res.string.files_selected_size, selected.size, Utils.bytesToDisplayString(plain.sumOf { it.size })),
-                outlined = false,
-                modifier = Modifier.height(Dimens.controlHeight + Dimens.hairline * 4),
-            ) {
-                BarAction(Res.drawable.download, stringResource(Res.string.files_download), selected.isNotEmpty()) {
-                    download(selected)
-                }
-                if (apks.isNotEmpty()) {
-                    // one after another: each is a copy and a `pm install` on the same device
-                    BarAction(Res.drawable.file_apk, stringResource(Res.string.files_install), true) {
-                        scope.launch { apks.forEach { browser.install(it) } }
+                    val one = selected.singleOrNull()
+                    val plain = selected.filterNot { it.isDirectory }
+                    val apks = selected.filter { it.isApk }
+                    SelectionBarFrame(
+                        count = selected.size,
+                        hint = stringResource(Res.string.files_hint),
+                        onClear = { selection = TableSelection() },
+                        // a folder counts only once Folder sizes has measured it — what `ls` says of
+                        // a folder is the folder itself, not what's in it
+                        label = stringResource(
+                            Res.string.files_selected_size,
+                            selected.size,
+                            Utils.bytesToDisplayString(plain.sumOf { it.size } + selected.sumOf { if (it.isDirectory) it.treeSize ?: 0 else 0 }),
+                        ),
+                        outlined = false,
+                        modifier = Modifier.height(Dimens.controlHeight + Dimens.hairline * 4),
+                    ) {
+                        BarAction(Res.drawable.download, stringResource(Res.string.files_download), selected.isNotEmpty()) {
+                            download(selected)
+                        }
+                        if (apks.isNotEmpty()) {
+                            // one after another: each is a copy and a `pm install` on the same device
+                            BarAction(Res.drawable.file_apk, stringResource(Res.string.files_install), true) {
+                                scope.launch { apks.forEach { browser.install(it) } }
+                            }
+                        }
+                        if (one != null) {
+                            BarAction(Res.drawable.edit, stringResource(Res.string.files_rename), true) { rename(one) }
+                        }
+                        BarAction(Res.drawable.copy, stringResource(Res.string.files_copy_path), true) {
+                            copyToClipboard(selected.joinToString("\n") { it.path })
+                        }
+                        BarAction(Res.drawable.delete, stringResource(Res.string.files_delete), true, danger = true) { delete(selected) }
                     }
                 }
-                if (one != null) {
-                    BarAction(Res.drawable.edit, stringResource(Res.string.files_rename), true) { rename(one) }
-                }
-                BarAction(Res.drawable.copy, stringResource(Res.string.files_copy_path), true) {
-                    copyToClipboard(selected.joinToString("\n") { it.path })
-                }
-                BarAction(Res.drawable.delete, stringResource(Res.string.files_delete), true, danger = true) { delete(selected) }
             }
         }
 
@@ -209,122 +281,173 @@ fun ExploreScreen(
             Places(
                 deviceId = deviceId,
                 path = path,
+                view = view,
                 bookmarks = bookmarks,
-                onOpen = { browser.open(scope, it) },
+                onOpen = ::goTo,
+                onView = browser::show,
                 onRemoveBookmark = FileBookmarks::toggle,
             )
 
-            val cardShape = RoundedCornerShape(Dimens.cardCorner)
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .clip(cardShape)
-                    .background(Colors.listBg)
-                    .border(Dimens.hairline, Colors.sidebarBorder, cardShape)
-                    // anything dropped here goes into the folder on screen — an APK included;
-                    // installing one is a button once it's there
-                    .fileDropTarget(
-                        enabled = error == null && !denied,
-                        onDragChanged = { dropping = it },
-                        onDrop = ::upload,
-                    )
-            ) {
-                when {
-                    error != null -> EmptyState(stringResource(Res.string.files_error), error.orEmpty())
-                    missing -> EmptyState(
-                        stringResource(Res.string.files_missing),
-                        stringResource(Res.string.files_missing_msg, path, deviceName),
-                        // the usual way here is a bookmark from another device, so offer to drop it
-                        action = if (path in bookmarks) ({
-                            OutlinedAction(
-                                stringResource(Res.string.files_bookmark_remove),
-                                icon = Res.drawable.bookmark,
-                                onClick = { FileBookmarks.toggle(path) },
-                            )
-                        }) else null,
-                    )
-                    denied -> EmptyState(
-                        stringResource(Res.string.files_denied),
-                        stringResource(Res.string.files_denied_msg, path, deviceName),
-                    )
-                    sorted.isEmpty() && !loading ->
-                        EmptyState(stringResource(Res.string.files_empty), stringResource(Res.string.files_empty_msg))
-                    else -> DataTable(
-                        // ⌘⌫ (Ctrl+Backspace) or Delete asks to delete the selection, as Finder does.
-                        // caught here as it bubbles up: the table lets command keys it doesn't claim
-                        // through, and Delete has no character for its type-ahead
-                        modifier = Modifier.onKeyEvent { event ->
-                            val meta = event.isMetaPressed || event.isCtrlPressed
-                            val asks = event.type == KeyEventType.KeyDown && selected.isNotEmpty() &&
-                                ((event.key == Key.Backspace && meta) || event.key == Key.Delete)
-                            if (asks) delete(selected)
-                            asks
-                        },
-                        rows = sorted,
-                        columns = FileColumn.entries,
-                        widths = FileColumn.entries.associateWith { widths[it] ?: it.defaultWidth.dp },
-                        sortedBy = sort.first,
-                        sortAscending = sort.second,
-                        selection = selection,
-                        rowKey = { it.path },
-                        header = { it.label },
-                        rowHeight = Dimens.tableRowHeight,
-                        // the columns always span the pane: a file list wider than its window hides
-                        // Size and Modified off to the right, behind a scroll nobody thinks to try
-                        fitColumns = true,
-                        typeAheadText = { it.name },
-                        onSelectionChange = { selection = it },
-                        onSort = { browser.sortBy(it) },
-                        onResize = { column, width -> FileTableState.resize(column, width) },
-                        // a folder is never downloaded by a double-click: it could be the whole of DCIM
-                        onActivate = ::activate,
-                        // a path is the value most likely not to fit here, and the only thing worth
-                        // saying about a cell that does fit is nothing
-                        tooltip = cellTooltip,
-                        rowMenu = { file, _ ->
-                            if (file.isDirectory) {
-                                Item(stringResource(Res.string.files_open)) { openFolder(file) }
-                                Item(stringResource(Res.string.files_download)) { download(listOf(file)) }
-                                Item(
-                                    stringResource(
-                                        if (file.path in bookmarks) Res.string.files_bookmark_remove else Res.string.files_bookmark
+            if (view == FilesView.STORAGE) {
+                StoragePane(
+                    analyzer = analyzer,
+                    onOpenFolder = ::goTo,
+                    onApps = { filter ->
+                        apps.filter = filter
+                        apps.selection = TableSelection()
+                        browser.show(FilesView.APPS)
+                    },
+                    onReview = { cleanup = it },
+                    onEmptyTrash = ::emptyTrash,
+                    onTrimCaches = ::trimCaches,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+            } else {
+                val cardShape = RoundedCornerShape(Dimens.cardCorner)
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(cardShape)
+                        .background(Colors.listBg)
+                        .border(Dimens.hairline, Colors.sidebarBorder, cardShape)
+                        // anything dropped here goes into the folder on screen — an APK included;
+                        // installing one is a button once it's there
+                        .fileDropTarget(
+                            enabled = view == FilesView.FOLDER && error == null && !denied,
+                            onDragChanged = { dropping = it },
+                            onDrop = ::upload,
+                        )
+                ) {
+                    if (view == FilesView.APPS) {
+                        AppsPane(
+                            analyzer = analyzer,
+                            state = apps,
+                            canArchive = canArchive,
+                            actions = appActions,
+                            onUninstall = ::uninstall,
+                            onClearData = ::clearData,
+                            onShowFiles = ::goTo,
+                        )
+                    } else {
+                        when {
+                            error != null -> EmptyState(stringResource(Res.string.files_error), error.orEmpty())
+                            missing -> EmptyState(
+                                stringResource(Res.string.files_missing),
+                                stringResource(Res.string.files_missing_msg, path, deviceName),
+                                // the usual way here is a bookmark from another device, so offer to drop it
+                                action = if (path in bookmarks) ({
+                                    OutlinedAction(
+                                        stringResource(Res.string.files_bookmark_remove),
+                                        icon = Res.drawable.bookmark,
+                                        onClick = { FileBookmarks.toggle(path) },
                                     )
-                                ) { FileBookmarks.toggle(file.path) }
-                                Separator()
-                            } else {
-                                Item(stringResource(Res.string.files_download)) {
-                                    scope.launch { browser.download(file) }
-                                }
-                                if (file.isApk) {
-                                    Item(stringResource(Res.string.files_install)) { scope.launch { browser.install(file) } }
-                                }
+                                }) else null,
+                            )
+                            denied -> EmptyState(
+                                stringResource(Res.string.files_denied),
+                                stringResource(Res.string.files_denied_msg, path, deviceName),
+                            )
+                            sorted.isEmpty() && !loading ->
+                                EmptyState(stringResource(Res.string.files_empty), stringResource(Res.string.files_empty_msg))
+                            else -> DataTable(
+                                // ⌘⌫ (Ctrl+Backspace) or Delete asks to delete the selection, as Finder does.
+                                // caught here as it bubbles up: the table lets command keys it doesn't claim
+                                // through, and Delete has no character for its type-ahead
+                                modifier = Modifier.onKeyEvent { event ->
+                                    val meta = event.isMetaPressed || event.isCtrlPressed
+                                    val asks = event.type == KeyEventType.KeyDown && selected.isNotEmpty() &&
+                                        ((event.key == Key.Backspace && meta) || event.key == Key.Delete)
+                                    if (asks) delete(selected)
+                                    asks
+                                },
+                                rows = sorted,
+                                columns = FileColumn.entries,
+                                widths = FileColumn.entries.associateWith { widths[it] ?: it.defaultWidth.dp },
+                                sortedBy = sort.first,
+                                sortAscending = sort.second,
+                                selection = selection,
+                                rowKey = { it.path },
+                                header = { it.label },
+                                rowHeight = Dimens.tableRowHeight,
+                                // the columns always span the pane: a file list wider than its window hides
+                                // Size and Modified off to the right, behind a scroll nobody thinks to try
+                                fitColumns = true,
+                                typeAheadText = { it.name },
+                                onSelectionChange = { selection = it },
+                                onSort = { browser.sortBy(it) },
+                                onResize = { column, width -> FileTableState.resize(column, width) },
+                                // a folder is never downloaded by a double-click: it could be the whole of DCIM
+                                onActivate = ::activate,
+                                // a path is the value most likely not to fit here, and the only thing worth
+                                // saying about a cell that does fit is nothing
+                                tooltip = cellTooltip,
+                                rowMenu = { file, _ ->
+                                    if (file.isDirectory) {
+                                        Item(stringResource(Res.string.files_open)) { openFolder(file) }
+                                        Item(stringResource(Res.string.files_download)) { download(listOf(file)) }
+                                        Item(
+                                            stringResource(
+                                                if (file.path in bookmarks) Res.string.files_bookmark_remove else Res.string.files_bookmark
+                                            )
+                                        ) { FileBookmarks.toggle(file.path) }
+                                        Separator()
+                                    } else {
+                                        Item(stringResource(Res.string.files_download)) {
+                                            scope.launch { browser.download(file) }
+                                        }
+                                        if (file.isApk) {
+                                            Item(stringResource(Res.string.files_install)) { scope.launch { browser.install(file) } }
+                                        }
+                                    }
+                                    Item(stringResource(Res.string.files_copy_name)) { copyToClipboard(file.name) }
+                                    Item(stringResource(Res.string.files_copy_path)) { copyToClipboard(file.path) }
+                                    Item(stringResource(Res.string.files_rename)) { rename(file) }
+                                    Separator()
+                                    Item(stringResource(Res.string.files_delete)) { delete(listOf(file)) }
+                                },
+                            ) { file, column ->
+                                FileCell(file, column, listable = browser.listable(file))
                             }
-                            Item(stringResource(Res.string.files_copy_name)) { copyToClipboard(file.name) }
-                            Item(stringResource(Res.string.files_copy_path)) { copyToClipboard(file.path) }
-                            Item(stringResource(Res.string.files_rename)) { rename(file) }
-                            Separator()
-                            Item(stringResource(Res.string.files_delete)) { delete(listOf(file)) }
-                        },
-                    ) { file, column ->
-                        FileCell(file, column, listable = browser.listable(file))
+                        }
+                        if (loading) {
+                            LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
+                        }
+                        if (dropping) {
+                            DropOverlay(path = path, device = deviceName, modifier = Modifier.matchParentSize())
+                        }
                     }
-                }
-                if (loading) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
-                }
-                if (dropping) {
-                    DropOverlay(path = path, device = deviceName, modifier = Modifier.matchParentSize())
                 }
             }
         }
 
-        ExploreStatusBar(total = sorted.size, selected = selected.size, device = deviceName)
+        val appRows = remember(report, apps.filter, apps.query) { apps.visible(analyzer, report).size }
+        val summary = when (view) {
+            FilesView.FOLDER -> {
+                val count = if (selected.isNotEmpty()) stringResource(Res.string.files_count_selected, sorted.size, selected.size)
+                else stringResource(Res.string.files_count, sorted.size)
+                val measuring = sizing?.let { (done, of) -> stringResource(Res.string.files_sizing, done, of) }
+                listOfNotNull(count, measuring).joinToString("  ·  ")
+            }
+            FilesView.APPS -> if (selectedApps.isNotEmpty()) stringResource(Res.string.apps_count_selected, appRows, selectedApps.size)
+            else stringResource(Res.string.apps_count, appRows)
+            FilesView.STORAGE -> ""
+        }
+        ExploreStatusBar(summary = summary, device = deviceName)
     }
 
     InputDialog(input) { input = null }
     ConfirmDialog(confirm) { confirm = null }
+    cleanup?.let { kinds ->
+        CleanupDialog(analyzer, kinds, deviceName, scope, onDismiss = { cleanup = null })
+    }
 }
+
+// `pm archive` arrived in Android 15
+private const val ARCHIVE_SDK = 35
+
+// the slot in a formatted string filled with a package name outside composition
+private const val APP_PLACEHOLDER = "\u0000app\u0000"
 
 private val DeviceFile.isApk: Boolean get() = !isDirectory && name.endsWith(".apk", ignoreCase = true)
 
@@ -382,6 +505,8 @@ private fun PathRow(
     loading: Boolean,
     query: String,
     showHidden: Boolean,
+    folderSizes: Boolean,
+    onFolderSizes: () -> Unit,
     onOpen: (String) -> Unit,
     onUp: () -> Unit,
     onGoTo: () -> Unit,
@@ -472,6 +597,7 @@ private fun PathRow(
         }
 
         AppSwitch(checked = showHidden, label = stringResource(Res.string.files_hidden)) { onHidden() }
+        AppSwitch(checked = folderSizes, label = stringResource(Res.string.files_folder_sizes)) { onFolderSizes() }
         // lit while the open folder is one — a second click takes it off again
         IconBox(
             Res.drawable.bookmark,
@@ -515,13 +641,15 @@ private val PLACES = listOf(
 private fun Places(
     deviceId: String,
     path: String,
+    view: FilesView,
     bookmarks: List<String>,
     onOpen: (String) -> Unit,
+    onView: (FilesView) -> Unit,
     onRemoveBookmark: (String) -> Unit,
 ) {
     val devices by DeviceManager.devices.collectAsState()
     val device = devices.firstOrNull { it.id == deviceId }
-    val here = PLACES
+    val here = if (view != FilesView.FOLDER) null else PLACES
         .filter { path == it.path || path.startsWith(it.path.trimEnd('/') + "/") }
         .maxByOrNull { it.path.length }
     val shape = RoundedCornerShape(Dimens.cardCorner)
@@ -543,28 +671,14 @@ private fun Places(
         )
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             PLACES.forEach { place ->
-                val on = place == here
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(Dimens.placeRowHeight)
-                        .clip(RoundedCornerShape(Dimens.navCorner))
-                        .background(if (on) Colors.navSelected else Color.Transparent)
-                        .clickable { onOpen(place.path) }
-                        .padding(horizontal = Dimens.liveDot),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AppIcon(place.icon, size = Dimens.icon, tint = if (on) Colors.tabAccent else Colors.toolbarIcon)
-                    Spacer(Modifier.width(Dimens.gap))
-                    Text(
-                        stringResource(place.label),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                        color = Colors.primaryText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                PlaceRow(place.icon, stringResource(place.label), on = place == here) { onOpen(place.path) }
+            }
+            Box(Modifier.padding(vertical = Dimens.liveDot).fillMaxWidth().height(Dimens.hairline).background(Colors.sidebarBorder))
+            PlaceRow(Res.drawable.chart_pie, stringResource(Res.string.files_place_storage), on = view == FilesView.STORAGE) {
+                onView(FilesView.STORAGE)
+            }
+            PlaceRow(Res.drawable.android, stringResource(Res.string.files_place_apps), on = view == FilesView.APPS) {
+                onView(FilesView.APPS)
             }
             if (bookmarks.isNotEmpty()) {
                 Text(
@@ -575,13 +689,39 @@ private fun Places(
                     modifier = Modifier.padding(start = Dimens.liveDot, top = Dimens.gap, bottom = Dimens.liveDot),
                 )
                 bookmarks.forEach { bookmark ->
-                    BookmarkRow(bookmark, on = bookmark == path, onOpen = onOpen, onRemove = onRemoveBookmark)
+                    BookmarkRow(bookmark, on = view == FilesView.FOLDER && bookmark == path, onOpen = onOpen, onRemove = onRemoveBookmark)
                 }
             }
         }
         if (device != null) {
             Box(Modifier.padding(Dimens.liveDot)) { StorageBar(device.freeSpace, device.totalSpace) }
         }
+    }
+}
+
+/** one row in Places: a folder, or the Storage and Apps views. */
+@Composable
+private fun PlaceRow(icon: DrawableResource, label: String, on: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(Dimens.placeRowHeight)
+            .clip(RoundedCornerShape(Dimens.navCorner))
+            .background(if (on) Colors.navSelected else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = Dimens.liveDot),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AppIcon(icon, size = Dimens.icon, tint = if (on) Colors.tabAccent else Colors.toolbarIcon)
+        Spacer(Modifier.width(Dimens.gap))
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+            color = Colors.primaryText,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -631,7 +771,7 @@ private fun BookmarkRow(path: String, on: Boolean, onOpen: (String) -> Unit, onR
  * downloads still say where they went here until the Transfers panel has a row to say it in.
  */
 @Composable
-private fun ExploreStatusBar(total: Int, selected: Int, device: String) {
+private fun ExploreStatusBar(summary: String, device: String) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -643,8 +783,7 @@ private fun ExploreStatusBar(total: Int, selected: Int, device: String) {
         // a toast takes the count's place while it's up
         StatusToastSlot(contentAlignment = Alignment.CenterStart) {
             Text(
-                text = if (selected > 0) stringResource(Res.string.files_count_selected, total, selected)
-                else stringResource(Res.string.files_count, total),
+                text = summary,
                 style = MaterialTheme.typography.labelSmall,
                 color = Colors.secondaryText,
             )

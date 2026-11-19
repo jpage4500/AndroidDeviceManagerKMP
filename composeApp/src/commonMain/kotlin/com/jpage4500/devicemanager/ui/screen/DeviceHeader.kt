@@ -255,7 +255,7 @@ fun DeviceHeader(
 }
 
 @Composable
-private fun FilterChip(
+internal fun FilterChip(
     label: String,
     leading: (@Composable () -> Unit)?,
     on: Boolean,
@@ -392,6 +392,30 @@ fun OutlinedAction(
             Spacer(Modifier.width(Dimens.liveDot))
         }
         Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium, color = Colors.primaryText)
+    }
+}
+
+/** [OutlinedAction] as a square with only its icon, the name in a tooltip — for a crowded toolbar. */
+@Composable
+fun OutlinedIconAction(
+    icon: DrawableResource,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(Dimens.navCorner)
+    CellTooltip(text = { label }) {
+        Box(
+            modifier
+                .size(Dimens.controlHeight)
+                .clip(shape)
+                .background(Colors.listBg)
+                .border(Dimens.hairline, Colors.divider, shape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            AppIcon(icon, size = Dimens.pillClose + Dimens.tabGap, tint = Colors.toolbarIcon, contentDescription = label)
+        }
     }
 }
 

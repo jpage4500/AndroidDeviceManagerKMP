@@ -338,3 +338,24 @@
 - Shortcuts: ⌘4, ⌘5 and ⌘6 show Input, Commands and Scripts
 - Menus: the separators between groups of items are drawn instead of left as blank gaps
 - Input, Commands: start with no devices chosen, with chips beside + for the recent ones
+
+11/13
+- Devices: fixed a crash when a device briefly showed up twice during a USB reconnect
+
+11/16
+- Logs: a Filter box beside Search hides the lines that don't match
+- Logs: click the Search or Filter box's icon to see the syntax it takes
+- Logs: the level buttons are one Level ≥ button with a menu, leaving more room to type
+- Logs: Pause and Save are icon buttons, with a floppy disk for Save
+- Files: a Storage view shows what is using space and offers ways to free it
+- Files: an Apps view lists apps by size, to clear their cache, archive or uninstall them
+- Files: a Folder sizes switch fills in each folder's size
+- Files: the Free up space list has a Select all box
+
+11/18
+- Devices: with several selected, the right-click menu copies all of them and hides the Edit items
+- Devices: ⌘C copies the selected devices' lines
+
+11/19
+- macOS: the Dock icon hides while the app is only in the menu bar
+- macOS: fixed the Dock and ⌘-Tab icon showing shrunk on a grey tile

@@ -244,8 +244,12 @@ object Dimens {
     val checkboxTick = 10.dp
     // the log tab's two rows of controls: search and the buttons, then the filters
     val filterBarHeight = 44.dp
-    // search takes what the row has left, but never less than room for "tag:OkHttp" and its count
+    // search and the typed filter split what the row has left, but never less than room for
+    // "tag:OkHttp" and its count
     val logSearchMinWidth = 220.dp
+    // the syntax panel each box's icon opens: examples down the left
+    val syntaxHelpWidth = 400.dp
+    val syntaxColumnWidth = 160.dp
     val searchArrow = 22.dp
     // the design's switch: a 28×16 track and a 12dp thumb
     val switchWidth = 28.dp
@@ -255,6 +259,25 @@ object Dimens {
     val placesWidth = 190.dp
     val placeRowHeight = 30.dp
     val folderFilterWidth = 180.dp
+    // Files › Storage: the used/free bar is the one thing on the view that has to be read at a glance
+    val storageBarHeight = 22.dp
+    val storageSwatch = 10.dp
+    // a category's bar beside its size: long enough to compare two rows, short enough to leave the name room
+    val storageTrackWidth = 120.dp
+    val storageTrackHeight = 6.dp
+    val storageSizeWidth = 72.dp
+    // the Where it is and Free up space cards side by side; under this they'd squeeze their names out
+    val storageColumnMin = 320.dp
+    val cleanupIcon = 32.dp
+    val cleanupRowHeight = 52.dp
+    val cleanupButtonWidth = 76.dp
+    // the review dialog's list: about twelve rows before it scrolls, so the buttons stay on screen
+    val cleanupListMaxHeight = 440.dp
+    val cleanupRowMinHeight = 34.dp
+    // Files › Apps: a package name is long, and it's the only name an app has over the shell
+    val appColumnName = 300.dp
+    val appColumnSize = 84.dp
+    val appColumnUsed = 120.dp
     // Scripts: the list down the left, and the results table's fixed columns
     val scriptListWidth = 260.dp
     // Commands: the saved and recent list down the left — wider than Scripts', a command is longer
@@ -707,6 +730,16 @@ object Colors {
     // amber for one that works but wants looking at
     val chipAlert = Color(0xFFE5484D)
     val chipWarn = Color(0xFFF5A524)
+
+    // Files › Storage: one colour per kind of data, the same in the bar, its legend and the rows.
+    // they differ in lightness as well as hue, so neighbours in the bar stay apart without colour
+    val storageApps = Color(0xFF1F9D55)
+    val storageImages = Color(0xFF2F6FBF)
+    val storageVideo = Color(0xFF7C5CD6)
+    val storageAudio = Color(0xFFD9811A)
+    val storageDownloads = Color(0xFFC2417A)
+    val storageOther = Color(0xFFA3ACB9)
+    val storageSystem = Color(0xFF5B6470)
 
     // --- chrome, from the palette in force ---
     val accent: Color @Composable get() = LocalPalette.current.accent

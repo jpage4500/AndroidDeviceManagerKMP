@@ -23,6 +23,8 @@ slf4jSimple = "2.0.18"
 # Google's own TLS stack, bundled on android for exactly one method — see PairingTls.android.kt
 conscrypt = "2.7.0"
 buildconfig = "6.0.10"
+# desktop only, for the two AppKit calls AWT has no API for — see MacDock.kt
+jna = "5.18.1"
 
 [libraries]
 # --- compose ---
@@ -84,6 +86,7 @@ conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = 
 # --- misc ---
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4jSimple" }
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

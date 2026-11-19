@@ -23,6 +23,7 @@ import com.jpage4500.devicemanager.manager.*
 import com.jpage4500.devicemanager.resources.*
 import com.jpage4500.devicemanager.ui.theme.*
 import org.jetbrains.compose.resources.DrawableResource
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** one filter that's on, as the filter bar shows it. */
@@ -45,8 +46,8 @@ class ActiveFilter(
  * + Add filter, and Clear filters.
  *
  * every pill must pass — the same AND the Swing app applies to a multi-selection in its filter
- * list, said out loud between the pills rather than left for the user to know. These and the level
- * buttons are the only things that take lines away; search only highlights.
+ * list, said out loud between the pills rather than left for the user to know. These, the level
+ * button and the typed filter box are what take lines away; search only highlights.
  *
  * [names] is pid -> process, so a filter on the App column reads as the app rather than a number.
  */
@@ -151,11 +152,17 @@ fun LogSearchField(
             .clip(shape)
             .background(Colors.listBg)
             .border(Dimens.hairline, Colors.divider, shape)
-            .padding(start = Dimens.gap + Dimens.hairline * 2, end = Dimens.tabGap),
+            .padding(start = Dimens.tabGap + Dimens.hairline * 2, end = Dimens.tabGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(Res.drawable.search, size = Dimens.icon - Dimens.hairline * 2, tint = Colors.secondaryText)
-        Spacer(Modifier.width(Dimens.gap))
+        SyntaxHelpButton(
+            icon = Res.drawable.search,
+            label = stringResource(Res.string.logs_search_help),
+            title = stringResource(Res.string.logs_search_help_title),
+            rows = SEARCH_HELP,
+            note = stringResource(Res.string.logs_search_help_note),
+        )
+        Spacer(Modifier.width(Dimens.tabGap))
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
@@ -205,27 +212,191 @@ fun LogSearchField(
             SearchArrow(Res.drawable.arrow_down, stringResource(Res.string.logs_search_next), enabled = hits != 0, onClick = onNext)
             SearchArrow(Res.drawable.close, stringResource(Res.string.logs_clear), enabled = true) { onValueChange("") }
             Spacer(Modifier.width(Dimens.tabGap))
-            val small = RoundedCornerShape(Dimens.corner)
+            SaveAsFilterButton(onSaveAsFilter)
+        }
+    }
+}
+
+/**
+ * the log tab's typed filter: a filter expression, in the syntax a saved filter uses, that **takes
+ * lines away** — ANDed with the level and the pills, the way search never is.
+ *
+ * this tab's alone and not saved; Save as filter turns it into a pill. A word on its own is a bare
+ * `*:*text*`, so it does the obvious thing without the syntax, and the funnel lists the rest.
+ */
+@Composable
+fun LogFilterField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onFieldFocus: (Boolean) -> Unit,
+    onSaveAsFilter: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(Dimens.navCorner)
+    Row(
+        modifier
+            .height(Dimens.chipHeight + Dimens.tabGap)
+            .clip(shape)
+            .background(Colors.listBg)
+            .border(Dimens.hairline, Colors.divider, shape)
+            .padding(start = Dimens.tabGap + Dimens.hairline * 2, end = Dimens.tabGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SyntaxHelpButton(
+            icon = Res.drawable.filter,
+            label = stringResource(Res.string.logs_filter_help),
+            title = stringResource(Res.string.logs_filter_help_title),
+            rows = FILTER_HELP,
+            note = stringResource(Res.string.logs_filter_help_note),
+        )
+        Spacer(Modifier.width(Dimens.tabGap))
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall.copy(color = Colors.primaryText),
+            cursorBrush = SolidColor(Colors.primaryText),
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { onFieldFocus(it.isFocused) },
+            decorationBox = { field ->
+                Box(contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) {
+                        Text(
+                            stringResource(Res.string.logs_filter_field),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Colors.secondaryText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    field()
+                }
+            },
+        )
+        if (value.isNotBlank()) {
+            SearchArrow(Res.drawable.close, stringResource(Res.string.logs_clear), enabled = true) { onValueChange("") }
+            Spacer(Modifier.width(Dimens.tabGap))
+            SaveAsFilterButton(onSaveAsFilter)
+        }
+    }
+}
+
+/** the small outlined Save as filter at the end of a box that has something typed in it. */
+@Composable
+private fun SaveAsFilterButton(onClick: () -> Unit) {
+    val small = RoundedCornerShape(Dimens.corner)
+    Box(
+        Modifier
+            .height(Dimens.searchArrow + Dimens.hairline * 2)
+            .clip(small)
+            .background(Colors.toolbarBg)
+            .border(Dimens.hairline, Colors.divider, small)
+            .clickable(onClick = onClick)
+            .padding(horizontal = Dimens.gap),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            stringResource(Res.string.logs_save_as_filter),
+            style = MaterialTheme.typography.labelSmall,
+            color = Colors.primaryText,
+            maxLines = 1,
+        )
+    }
+}
+
+/**
+ * a box's own icon at its start — the magnifier, the funnel — as a button: a panel of the syntax
+ * that box takes, an example beside what it does, then [note]. A panel rather than a tooltip so it
+ * stays up while the example is being typed in.
+ */
+@Composable
+private fun SyntaxHelpButton(
+    icon: DrawableResource,
+    label: String,
+    title: String,
+    rows: List<Pair<StringResource, StringResource>>,
+    note: String,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        CellTooltip(text = { label }) {
             Box(
                 Modifier
-                    .height(Dimens.searchArrow + Dimens.hairline * 2)
-                    .clip(small)
-                    .background(Colors.toolbarBg)
-                    .border(Dimens.hairline, Colors.divider, small)
-                    .clickable(onClick = onSaveAsFilter)
-                    .padding(horizontal = Dimens.gap),
+                    .size(Dimens.searchArrow)
+                    .clip(RoundedCornerShape(Dimens.corner))
+                    .clickable { open = !open },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    stringResource(Res.string.logs_save_as_filter),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Colors.primaryText,
-                    maxLines = 1,
-                )
+                AppIcon(icon, size = Dimens.icon - Dimens.hairline * 2, tint = Colors.secondaryText, contentDescription = label)
+            }
+        }
+        if (open) {
+            val density = LocalDensity.current
+            val position = remember(density) {
+                PointerPositionProvider(IntOffset(0, with(density) { (Dimens.searchArrow + Dimens.navGap).roundToPx() }))
+            }
+            Popup(
+                popupPositionProvider = position,
+                onDismissRequest = { open = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                SyntaxHelpPanel(title, rows, note)
             }
         }
     }
 }
+
+@Composable
+private fun SyntaxHelpPanel(title: String, rows: List<Pair<StringResource, StringResource>>, note: String) {
+    val shape = RoundedCornerShape(Dimens.cardCorner)
+    Column(
+        Modifier
+            .width(Dimens.syntaxHelpWidth)
+            .shadow(Dimens.menuShadow, shape)
+            .clip(shape)
+            .background(Colors.menuBg)
+            .border(Dimens.hairline, Colors.menuBorder, shape)
+            .padding(horizontal = Dimens.rowPadding + Dimens.hairline * 2, vertical = Dimens.navGap),
+        verticalArrangement = Arrangement.spacedBy(Dimens.tabGap),
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Colors.primaryText)
+        rows.forEach { (syntax, meaning) ->
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    stringResource(syntax),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontFamily = FontFamily.Monospace,
+                    color = Colors.primaryText,
+                    modifier = Modifier.width(Dimens.syntaxColumnWidth),
+                )
+                Text(stringResource(meaning), style = MaterialTheme.typography.labelMedium, color = Colors.secondaryText)
+            }
+        }
+        HorizontalDivider(color = Colors.divider, modifier = Modifier.padding(vertical = Dimens.tabGap))
+        Text(note, style = MaterialTheme.typography.labelMedium, color = Colors.secondaryText)
+    }
+}
+
+// each box's ? panel: an example, then what it does
+private val SEARCH_HELP = listOf(
+    Res.string.logs_help_text to Res.string.logs_search_help_text,
+    Res.string.logs_help_tag to Res.string.logs_search_help_tag,
+    Res.string.logs_help_app to Res.string.logs_search_help_app,
+)
+
+private val FILTER_HELP = listOf(
+    Res.string.logs_help_text to Res.string.logs_filter_help_text,
+    Res.string.logs_help_tag to Res.string.logs_filter_help_is,
+    Res.string.logs_help_starts to Res.string.logs_filter_help_starts,
+    Res.string.logs_help_ends to Res.string.logs_filter_help_ends,
+    Res.string.logs_help_contains to Res.string.logs_filter_help_contains,
+    Res.string.logs_help_not to Res.string.logs_filter_help_not,
+    Res.string.logs_help_level to Res.string.logs_filter_help_level,
+    Res.string.logs_help_quoted to Res.string.logs_filter_help_quoted,
+    Res.string.logs_help_and to Res.string.logs_filter_help_and,
+    Res.string.logs_help_or to Res.string.logs_filter_help_or,
+)
 
 @Composable
 private fun SearchArrow(icon: DrawableResource, label: String, enabled: Boolean, onClick: () -> Unit) {
@@ -523,51 +694,70 @@ fun Modifier.dashedOutline(color: Color, corner: Dp?): Modifier = drawBehind {
 }
 
 /**
- * the V D I W E buttons: the lowest level shown. Each letter is in its level's colour, as the rows
- * are; the one that's on is filled with it, and those below it are dimmed, since that's what's
- * being hidden.
+ * Level ≥ with the lowest level shown, as one button: its letter in a badge of the level's colour,
+ * the way the rows are coloured; a click opens a menu of all five. One button rather than five so the
+ * search and filter boxes have the row's width — the level is set once and left, they are typed in.
  */
 @Composable
-fun LevelFloorButtons(floor: LogLevelFloor, onFloor: (LogLevelFloor) -> Unit) {
-    val plain = Colors.primaryText
-    val plainOn = Colors.chipOn
-    val plainOnText = Colors.chipOnText
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Dimens.hairline * 2)) {
-        Text(
-            stringResource(Res.string.logs_level),
-            style = MaterialTheme.typography.labelMedium,
-            color = Colors.secondaryText,
-            modifier = Modifier.padding(end = Dimens.tabGap),
-        )
-        LogLevelFloor.entries.forEach { level ->
-            val on = level == floor
-            val below = level.ordinal < floor.ordinal
-            val label = stringResource(level.label())
-            // debug has no colour of its own — its rows are plain text — so its button is the chips'
-            val tone = logLevelColor(level.code.toString(), plain)
-            val coloured = level != LogLevelFloor.DEBUG
-            CellTooltip(text = { label }) {
-                Box(
-                    Modifier
-                        .size(Dimens.levelButton)
-                        .clip(RoundedCornerShape(Dimens.checkboxCorner + Dimens.hairline))
-                        .background(if (on) (if (coloured) tone else plainOn) else Color.Transparent)
-                        .clickable { onFloor(level) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        level.code.toString(),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = when {
-                            on -> if (coloured) Colors.onAccent else plainOnText
-                            below -> tone.copy(alpha = 0.35f)
-                            else -> tone
-                        },
-                    )
-                }
+fun LevelFloorButton(floor: LogLevelFloor, onFloor: (LogLevelFloor) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val shape = RoundedCornerShape(Dimens.navCorner)
+    val label = stringResource(floor.label())
+    Box {
+        CellTooltip(text = { label }) {
+            Row(
+                Modifier
+                    .height(Dimens.controlHeight)
+                    .clip(shape)
+                    .background(Colors.listBg)
+                    .border(Dimens.hairline, Colors.divider, shape)
+                    .clickable { open = !open }
+                    .padding(start = Dimens.gap + Dimens.hairline * 2, end = Dimens.tabGap),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    stringResource(Res.string.logs_level),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Colors.secondaryText,
+                )
+                Spacer(Modifier.width(Dimens.tabGap))
+                LevelBadge(floor, on = true)
             }
         }
+        AppPopupMenu(expanded = open, onDismissRequest = { open = false }, offset = DpOffset(0.dp, Dimens.controlHeight)) {
+            LogLevelFloor.entries.forEach { level ->
+                Item(stringResource(level.label()), leading = { LevelBadge(level, on = level == floor) }) { onFloor(level) }
+            }
+        }
+    }
+}
+
+/**
+ * a level's letter in its colour — filled with that colour when [on]. Debug has no colour of its
+ * own (its rows are plain text), so its badge is the chips'.
+ */
+@Composable
+private fun LevelBadge(level: LogLevelFloor, on: Boolean) {
+    val plain = Colors.primaryText
+    val tone = logLevelColor(level.code.toString(), plain)
+    val coloured = level != LogLevelFloor.DEBUG
+    Box(
+        Modifier
+            .size(Dimens.levelButton)
+            .clip(RoundedCornerShape(Dimens.checkboxCorner + Dimens.hairline))
+            .background(if (on) (if (coloured) tone else Colors.chipOn) else Color.Transparent),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            level.code.toString(),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = when {
+                !on -> tone
+                coloured -> Colors.onAccent
+                else -> Colors.chipOnText
+            },
+        )
     }
 }
 

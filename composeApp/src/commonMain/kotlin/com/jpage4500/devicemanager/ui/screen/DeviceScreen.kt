@@ -111,6 +111,10 @@ fun DeviceScreen(
     // act on in bulk
     val device = devices.firstOrNull { it.id == selection.lead }
     val selected = remember(devices, selection) { devices.filter { it.id in selection.keys } }
+    // what a right-click acts on: the whole selection when it landed inside one, in the order shown
+    val menuTargets: (Device) -> List<Device> = { row ->
+        if (selection.keys.size > 1 && row.id in selection.keys) sorted.filter { it.id in selection.keys } else listOf(row)
+    }
 
     // a file dragged in from another app: where it is, and the row under it
     var dropAt by remember { mutableStateOf<Offset?>(null) }
@@ -139,6 +143,10 @@ fun DeviceScreen(
                     meta && event.key == Key.F -> {
                         filter = filter.copy(selection = TextRange(0, filter.text.length))
                         runCatching { filterFocus.requestFocus() }
+                    }
+                    // ⌘C: the selected devices' lines, in the order shown — the search box keeps its own copy
+                    meta && event.key == Key.C && !event.isShiftPressed && !searchFocused && selected.isNotEmpty() -> {
+                        copyToClipboard(sorted.filter { it.id in selection.keys }.ifEmpty { selected }.joinToString("\n") { it.asLine() })
                     }
                     meta || event.isAltPressed || searchFocused -> return@onPreviewKeyEvent false
                     else -> {
@@ -234,6 +242,7 @@ fun DeviceScreen(
                             menu = { row ->
                                 DeviceMenu(
                                     device = row,
+                                    targets = menuTargets(row),
                                     column = null,
                                     onCopy = copyToClipboard,
                                     onEdit = { input = it },
@@ -277,6 +286,7 @@ fun DeviceScreen(
                             rowMenu = { row, column ->
                                 DeviceMenu(
                                     device = row,
+                                    targets = menuTargets(row),
                                     column = column,
                                     onCopy = copyToClipboard,
                                     onEdit = { input = it },
@@ -455,10 +465,14 @@ fun Device.stateColor(busy: Boolean): Color = when {
  *
  * [column] is the one the click landed on, which is what "Copy Field" means by *field* — the Swing
  * menu copies the cell you right-clicked, not the row's name.
+ *
+ * [targets] is the multi-selection the click landed in, or just [device]. With more than one, the
+ * Edit items go (they edit one device) and the copies take one line per device.
  */
 @Composable
 private fun AppMenuScope.DeviceMenu(
     device: Device,
+    targets: List<Device>,
     column: TableColumn?,
     onCopy: (String) -> Unit,
     onEdit: (InputRequest) -> Unit,
@@ -477,35 +491,40 @@ private fun AppMenuScope.DeviceMenu(
         return
     }
 
+    val many = targets.size > 1
     val editName = stringResource(Res.string.edit_name)
     val editPhone = stringResource(Res.string.edit_phone)
     val editCustom1 = stringResource(Res.string.edit_custom_1)
     val editCustom2 = stringResource(Res.string.edit_custom_2)
 
-    Item(editName) {
-        onEdit(InputRequest(editName, device.nickname.orEmpty()) { name ->
-            onAction { DeviceManager.setNickname(deviceId, name).toast() }
-        })
+    if (!many) {
+        Item(editName) {
+            onEdit(InputRequest(editName, device.nickname.orEmpty()) { name ->
+                onAction { DeviceManager.setNickname(deviceId, name).toast() }
+            })
+        }
+        Item(editPhone) {
+            onEdit(InputRequest(editPhone, device.customProperty(Device.CUST_PROP_PHONE).orEmpty()) { value ->
+                onAction { DeviceManager.setCustomProperty(deviceId, Device.CUST_PROP_PHONE, value).toast() }
+            })
+        }
+        Item(editCustom1) {
+            onEdit(InputRequest(editCustom1, device.customProperty(Device.CUST_PROP_1).orEmpty()) { value ->
+                onAction { DeviceManager.setCustomProperty(deviceId, Device.CUST_PROP_1, value).toast() }
+            })
+        }
+        Item(editCustom2) {
+            onEdit(InputRequest(editCustom2, device.customProperty(Device.CUST_PROP_2).orEmpty()) { value ->
+                onAction { DeviceManager.setCustomProperty(deviceId, Device.CUST_PROP_2, value).toast() }
+            })
+        }
+        Separator()
     }
-    Item(editPhone) {
-        onEdit(InputRequest(editPhone, device.customProperty(Device.CUST_PROP_PHONE).orEmpty()) { value ->
-            onAction { DeviceManager.setCustomProperty(deviceId, Device.CUST_PROP_PHONE, value).toast() }
-        })
-    }
-    Item(editCustom1) {
-        onEdit(InputRequest(editCustom1, device.customProperty(Device.CUST_PROP_1).orEmpty()) { value ->
-            onAction { DeviceManager.setCustomProperty(deviceId, Device.CUST_PROP_1, value).toast() }
-        })
-    }
-    Item(editCustom2) {
-        onEdit(InputRequest(editCustom2, device.customProperty(Device.CUST_PROP_2).orEmpty()) { value ->
-            onAction { DeviceManager.setCustomProperty(deviceId, Device.CUST_PROP_2, value).toast() }
-        })
-    }
-    Separator()
 
-    Item(stringResource(Res.string.copy_field)) { onCopy(column?.text(device) ?: device.displayName) }
-    Item(stringResource(Res.string.copy_line)) { onCopy(device.asLine()) }
+    Item(stringResource(Res.string.copy_field)) {
+        onCopy(targets.joinToString("\n") { column?.text(it) ?: it.displayName })
+    }
+    Item(stringResource(Res.string.copy_line), shortcut = "⌘C") { onCopy(targets.joinToString("\n") { it.asLine() }) }
     Separator()
 
     Item(stringResource(Res.string.device_details)) { PageManager.openDetails(deviceId) }

@@ -77,6 +77,11 @@ finds). Only at the start of a collection — launch, a refresh, a settings chan
 tracker's retry loop, so a server someone killed on purpose stays down until they ask for a refresh.
 The adb client in `adb/` still never starts anything.
 
+**One list can name a serial twice.** While a USB device re-enumerates, the server can carry the
+old transport as `offline` beside the new one as `device` for a frame. `DeviceManager` keeps one row
+per serial, preferring the online one, before anything reaches the table — whose rows are keyed by
+id and crash on a duplicate. Seen once on a 13-device hub overnight.
+
 Android *can* reach USB directly through `UsbManager` in host mode without root — the ADB interface
 is a standard bulk endpoint pair, and cgutman's AdbLib has done it for years — but OTG plus hub power
 makes it a poor fit for a 45-device bench. iOS has no USB host access at all, so it is network-only,

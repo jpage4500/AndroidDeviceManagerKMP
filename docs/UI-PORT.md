@@ -120,6 +120,11 @@ state; an unauthorized device says to accept the prompt instead of its model. **
 in Settings puts them back to one 28dp line, which is what the 45-device rig wants. Selection is the
 row's own tint — no tick boxes.
 
+**Right-click menu** (`DeviceMenu`, shared by List and Icons) — a right-click inside a multi-selection
+acts on the whole selection: the Edit items are left out, since they edit one device, and Copy field /
+Copy line put one line per selected device on the clipboard, in the order shown. ⌘C (Ctrl+C) is
+Copy line for the whole selection, unless the search box has focus.
+
 **Dropping files** from Finder or Explorer installs an APK and copies anything else (`InstallManager`).
 With several devices selected the drop goes to all of them, wherever it lands; with one or none it
 goes to the row under the pointer, or to the selected device when it's over no row. Whichever devices
@@ -634,7 +639,11 @@ white or black after skiko's `currentSystemTheme`, re-read every 5s since nothin
 
 The icon only appears while **Stay in the menu bar when closed** is on — a tray icon that can't be
 dismissed is one someone has to look at forever. With it on, closing the last window leaves the app
-running and the icon is how it comes back.
+running and the icon is how it comes back — and on macOS the Dock icon goes while no window is
+open, so the app isn't in the Dock or ⌘-Tab twice over. That is `MacDock.setVisible`, the Swing
+app's `setDockIconVisible` ported: `NSApplication.setActivationPolicy:` through JNA, since AWT only
+reads `apple.awt.UIElement` once at launch. The first window back restores the Dock icon and
+activates the app so the window lands in front.
 
 ---
 
@@ -685,8 +694,10 @@ Paste Connection, Edit and Remove. Adding connects first, so a bad token says so
 than leaving a dead row. No colour column and no name field: `SavedServer` has no colour, and the
 name is whatever `/api/info` says.
 
-**Logs** (`LogsScreen`) — two rows of controls over the table. The first: search, the level buttons
-(V D I W E, the lowest level shown, each in its level's colour), Pause and Save…, and ⋯ for Clear
+**Logs** (`LogsScreen`) — two rows of controls over the table. The first: search and the filter box
+side by side, each one's icon (magnifier, funnel) opening a panel of its syntax, Level ≥
+(one button showing the lowest level shown as a letter in its level's colour, clicked for a menu of the five —
+five buttons took the width the two boxes need), Pause and Save… as icons named in their tooltips, and ⋯ for Clear
 log, Horizontal scrolling and text size. **Save…** asks what first — Selected lines (only for more
 than one), Visible lines, or the Entire log buffer (`LogsSource.all`) — then the native save dialog
 (`pickSaveFile`, starting in the folder the last save went to, `AppPref.LOGS_SAVE_DIR`, else
@@ -721,8 +732,9 @@ Three things carry most of its usefulness:
   Done under them. It stays open while ticking, and ticking several combines them: the AND the Swing
   app applies to a multi-selection in its filter list, said out loud between the pills. Clicking a pill edits it; right-clicking a saved one
   offers edit, duplicate and delete. The Swing app's five built-ins ("All Messages", "Log Level …+")
-  are the level buttons now; `level:D+` is still the syntax under them.
-- **Everything is ANDed:** the level floor, each saved filter that's on, and each quick filter. A
+  are the level menu now; `level:D+` is still the syntax under them.
+- **Everything is ANDed:** the level floor, each saved filter that's on, each quick filter and the
+  filter box. A
   saved pill counts its rules, and a quick one reads as words (`tag is not "Choreographer"`, the app
   by name) rather than as its expression. Clear filters leaves the level alone.
 - **Pause stops showing, not reading.** `LogsSource.setPaused` stops publishing `entries` while the
@@ -754,12 +766,18 @@ Three things carry most of its usefulness:
   **⌘Enter** toggles Auto Scroll and **⌘G / ⇧⌘G** walk the search hits, all from the same handler.
 - **Search highlights, it doesn't filter** — yellow for every hit, orange for the one the cursor is
   on. A hit is only useful with the lines around it, and filtering down to the hits throws those
-  away; only the level and the pills filter. The box counts the hits (3 of 41) — off the UI thread,
+  away; only the level, the pills and the filter box filter. The box counts the hits (3 of 41) — off the UI thread,
   once per batch — and steps through them with ↑ ↓, Enter / ⇧Enter, ⌘G / ⇧⌘G. `tag:` and `app:`
   (the process name) look in one column. **Save as filter** opens the editor with the search as a
   rule; an `app:` search carries over as typed, since a filter on App tests the process name as
   well as the pid. That makes an App rule depend on the process table, so the tab's filter is
   re-run when the table changes — but only while a filter that's on has an App rule (`usesApp`).
+- **The filter box is an expression, typed.** The same syntax as a saved filter (below), applied
+  250ms after typing stops (`FILTER_SETTLE_MS`): each change re-walks the whole buffer on the UI
+  thread, and a half-typed `tag:` would otherwise blank the table between keystrokes. Clearing it
+  applies at once. It is the tab's own (`LogsView.filter`), counts as one of the filters on in the
+  status line, and its Save as filter opens the editor and empties the box once the pill exists.
+  Escape clears it while it has the keyboard, and only then.
 - **Typing anywhere searches.** Any printable key with no ⌘ appends to Search and moves focus there,
   and Escape clears it — scanning a log is a two-hand job and reaching for the box first is a step
   nobody should have to take. Both typed boxes report focus back up so this doesn't fire while one of
@@ -880,7 +898,8 @@ reason that component is generic. Directories always sort before files whichever
 no file manager does it any other way. Under the tab, a card joined to it (`Modifier.joinedCard`:
 outlined down the sides and round the bottom, never across the top, which is the tab strip's rule)
 holds two rows. First: Up, the path as clickable crumbs (the empty end of the bar types a path),
-copy path, filter this folder, a Hidden files switch (`AppPref.FILES_SHOW_HIDDEN`), a bookmark toggle
+copy path, filter this folder, a Hidden files switch (`AppPref.FILES_SHOW_HIDDEN`), a Folder sizes switch
+(`AppPref.FILES_FOLDER_SIZES`), a bookmark toggle
 for the open folder, refresh, New Folder, Upload…. Second, the selection bar: "N selected · size", then
 Download (a folder comes down whole, as a folder of the same name), Install (every APK
 in the selection, one after another), Rename (one item), Copy Path, Delete in red; with nothing
@@ -895,6 +914,35 @@ the selection, then names the device. Dragging files over the table covers it wi
 overlay naming the folder and the device. Dropped files go into the folder on screen — an APK too; Install is a button once it's there, and copies it to `/data/local/tmp` first,
 since `pm` can't read shared storage on recent Android. Rename is `mv` and New Folder `mkdir -p`,
 both through `DeviceManager.runCommand`.
+
+**Folder sizes** runs `du -sk` on each folder in the open one, one at a time on the listing's own
+job, so sizes fill in as they come and opening another folder stops it — one `du` of the whole
+folder would say nothing until its slowest child (DCIM, in `/sdcard`) was done. The status line
+counts them ("Measuring folders: 3 of 11"). Answers are kept for the session per path, so Up is
+instant; refresh measures the open folder again. Unmeasured folders sort as the smallest.
+
+**Storage and Apps** are two more rows in Places, which swap the table for a view of their own
+(`FilesView`, kept on the tab's `FileBrowser` with its `StorageAnalyzer`, so a tab switch doesn't
+rescan). Everything is read over the shell without root:
+
+| What | Command | Notes |
+|---|---|---|
+| used, free | `df /data` | the device list's read, `DeviceDetails.parseDiskSpace` |
+| kinds, per-app sizes | `dumpsys diskstats` | fast, but Android's daily measurement — stale up to a day, empty on a new device |
+| which apps are the user's | `pm list packages -3` | everything else diskstats lists is System |
+| last used | `dumpsys usagestats \| grep lastTimeUsed=` | filtered on the device; the whole dump is megabytes. Best effort |
+| trash | `find /sdcard/ -name '.trashed-*'` | MediaStore's 30-day bin |
+| large files, installers | `find /sdcard/ -size +100M` / `-iname '*.apk'` | |
+| adb temp | `find /data/local/tmp/ -maxdepth 1 -type f` | |
+
+The scans run side by side and each Free up space row fills in when its own finishes. App data is
+reported with its cache inside it, so Total is App size + Data. Because diskstats only measures
+once a day, an action writes its effect into the report by hand (`StorageAnalyzer.adjust`) and
+re-reads only `df`; Rescan reads everything again. The actions: `pm trim-caches` with a size no
+device has (every app's cache), `pm clear --cache-only` (Android 14 — older devices fall back to
+deleting the app's cache on shared storage), `pm archive` (Android 15), `pm uninstall` — with
+`--user 0` for a preinstalled app, which `cmd package install-existing` undoes — `pm clear`,
+`am force-stop`, and Download APK pulls the base APK `pm path` names.
 
 A Files tab opens on `/sdcard/Download` when the device has one (`[ -d … ]`, since a sync LIST of a
 missing folder answers with nothing rather than an error) and `/sdcard` when not; after that it

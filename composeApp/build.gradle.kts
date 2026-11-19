@@ -214,6 +214,9 @@ kotlin {
                 implementation(libs.desktop.jvm.windows.x64)
                 implementation(libs.kotlinx.coroutines.swing)
                 implementation(libs.slf4j.simple)
+                // hiding the Dock icon is an NSApplication call AWT doesn't expose, and Java 21's FFM
+                // is still preview — the Swing app ships the same jar for the same call
+                implementation(libs.jna)
             }
         }
 

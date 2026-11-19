@@ -153,13 +153,17 @@ would shrink under 120 dp, and none show while tabs are in "N more".
 
 ### Logs
 
-- **Search never filters; the pills do.** One search box, and it highlights: a hit is only useful
-  with the lines around it. Only the level buttons and the filter pills take lines away. (The
-  canvas's search box filters — that was decided against.)
+- **Search never filters; Filter does.** Two boxes side by side, half the space each. Search
+  highlights: a hit is only useful with the lines around it. Filter takes a filter expression and
+  hides what doesn't match, ANDed with the level and the pills. (Dropped on 10/30 in favour
+  of search alone; back on 11/16 because a pill is too many clicks for a filter you're still
+  shaping.)
 - Row 1: search this tab (`text`, `tag:`, `app:`) with its match count (3 of 41) and ↑ ↓ — Enter /
   ⇧Enter in the box, ⌘G / ⇧⌘G anywhere — and **Save as filter** inside it once something is typed,
-  which is how a search becomes a filter. Then Level ≥ V D I W E, each letter in its level's colour;
-  Pause (keeps reading, stops showing) and Save…; and ⋯ for Clear log, Horizontal scrolling and text
+  which is how a search becomes a filter. Beside it the filter box, with ✕ and its own Save as
+  filter, which turns it into a pill and empties the box. Clicking a box's own icon — the magnifier, the funnel — opens a panel of the
+  syntax it takes. Then Level ≥ as one button — the level's letter in its colour, clicked for a menu of V D I W E (five buttons until 11/16, when the boxes needed the width);
+  Pause (keeps reading, stops showing) and Save…, icons only with their names as tooltips; and ⋯ for Clear log, Horizontal scrolling and text
   size. The Tooltip and Auto-scroll switches are on the right of the status line.
 - The table clips rather than ellipsizes; Date and App lose their start, not their end, and Thread
   shows `-` for the main thread. Horizontal scrolling off makes the message column end at the edge.
@@ -178,9 +182,10 @@ would shrink under 120 dp, and none show while tabs are in "N more".
   several lines offers only Copy N lines and View N lines — the cell items are about one line.
 - ⌘C copies the selected lines, ⇧⌘V opens them in the message viewer (one line opens as its message;
   several as whole lines, date and tag included). Both stand aside while a text field has focus.
-- Search, level, which filters are on and the quick filters are per tab; saved filters are shared.
-  A new tab starts with the level and the filters last switched on in any tab, kept across launches
-  (`AppPref.LOGS_LEVEL_FLOOR`, `LOGS_SELECTED_FILTERS`); search and quick filters start empty.
+- Search, the filter box, level, which filters are on and the quick filters are per tab; saved
+  filters are shared. A new tab starts with the level and the filters last switched on in any tab,
+  kept across launches (`AppPref.LOGS_LEVEL_FLOOR`, `LOGS_SELECTED_FILTERS`); search, the filter box
+  and quick filters start empty.
 
 ### Files
 
@@ -201,6 +206,17 @@ would shrink under 120 dp, and none show while tabs are in "N more".
   and cancel or show-in-Finder.
 - Status line: the item count and selection, then the device and whether it's browsed as shell or
   root.
+- **Folder sizes** switch beside Hidden files: each folder's Size is its `du`, filled in one folder
+  at a time, and the Size column then sorts folders by it.
+- **Storage** and **Apps** in Places, under the folders — options A and C of the
+  [Files · Storage Analyzer canvas](https://claude.ai/artifact/A7BfTXnAqFb4zony6s2gKY). Storage:
+  used of total over a bar split by kind, then **Where it is** (a row per kind, opening its folder or
+  Apps) beside **Free up space** (Trash, App caches, Large files, Unused apps, Installers, adb temp
+  files — each with its size and Empty, Clear or Review). **Free up space…** opens one review list
+  of all of them: safe ones ticked, files and apps not, with Select all above. Apps: chips (All, Installed, System, Unused
+  90 days, Over 1 GB), a filter, Clear all app caches; the table is the package, App size, Data,
+  Cache, Total, Last used; the bar and a row's menu Clear cache, Archive (Android 15), Uninstall,
+  Download APK, and in the menu Clear data, Force stop, Show app files.
 
 ### Scripts
 
@@ -358,10 +374,11 @@ Types on (Pixel 9 ×) (S21 ×) +                 ┌ Saved ───────
 
 Matching the canvas — the gaps found on 10/30:
 
-- [x] **Search vs. filter** — one search box that highlights; the filter-this-tab box goes. Match
+- [x] **Search vs. filter** — one search box that highlights; the filter-this-tab box goes (back
+  on 11/16, beside search — see Logs above). Match
   count and ↑ ↓, Enter / ⇧Enter, ⌘G / ⇧⌘G; `tag:` and `app:` (by process name) in search; Save as
   filter inside the box.
-- [x] **Row 1** — Level ≥ in each level's colour; Pause / Resume and Save… as labelled buttons; ⋯
+- [x] **Row 1** — Level ≥ in each level's colour; Pause / Resume and Save… as labelled buttons (icons only since 11/16); ⋯
   for Clear log, Horizontal scrolling and text size; Tooltip and Auto-scroll as switches on the
   status line. Pause keeps the
   stream and the buffer running and stops publishing (`LogsSource.paused`); Stop is gone.
@@ -395,6 +412,9 @@ Matching the canvas — the gaps found on 10/30:
 - [x] Drag-and-drop upload into the open folder (`fileDropTarget`), Upload… picker — whole files in
   memory until the streaming item lands.
 - [ ] Transfers panel.
+- [x] Folder sizes switch (`AppPref.FILES_FOLDER_SIZES`).
+- [x] Storage view, its review dialog, and the Apps view (`StorageAnalyzer`, `StorageScreen.kt`).
+  Not yet run against a device.
 
 Matching the canvas — the gaps found on 10/30:
 
